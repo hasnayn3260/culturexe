@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { dimensions } from '../data/dimensions'
 
@@ -66,7 +66,8 @@ const audiences = [
 ]
 
 export default function Home() {
-  const [scrolled, setScrolled] = useState(false)
+  const [scrolled, setScrolled]           = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -74,11 +75,108 @@ export default function Home() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
+  // Close overlay on resize to desktop
+  useEffect(() => {
+    const onResize = () => { if (window.innerWidth > 768) setMobileMenuOpen(false) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", overflowX: 'hidden', background: 'white' }}>
 
+      {/* ── Responsive styles ── */}
+      <style>{`
+        .home-hamburger { display: none !important; }
+        .home-mob-logo  { display: none !important; }
+        @media (max-width: 1024px) {
+          .home-hamburger    { display: flex !important; }
+          .home-nav-links    { display: none !important; }
+          .home-hero-grid    { grid-template-columns: 1fr !important; padding: 60px 32px 80px !important; }
+          .home-hero-svg     { display: none !important; }
+          .home-hero-stats   { gap: 24px !important; flex-wrap: wrap; }
+          .home-steps-row    { flex-wrap: wrap; }
+          .home-step-arrow   { display: none !important; }
+          .home-dims-grid    { grid-template-columns: repeat(2, 1fr) !important; }
+          .home-audience-grid{ grid-template-columns: repeat(2, 1fr) !important; }
+          .home-aud-featured { transform: none !important; }
+          .home-footer-top   { grid-template-columns: 1fr !important; gap: 40px !important; text-align: center; }
+          .home-footer-right { text-align: center !important; align-items: center !important; }
+          .home-footer-links { align-items: center !important; }
+          .home-section      { padding: 80px 32px !important; }
+        }
+        @media (max-width: 768px) {
+          .home-hero-grid    { padding: 40px 20px 80px !important; gap: 0 !important; }
+          .home-hero-h1      { font-size: 28px !important; letter-spacing: -0.5px !important; }
+          .home-hero-ctas    { flex-direction: column !important; }
+          .home-hero-ctas > * { width: 100% !important; justify-content: center !important; text-align: center !important; box-sizing: border-box; }
+          .home-stats-grid   { grid-template-columns: repeat(2, 1fr) !important; }
+          .home-stat-sep     { display: none !important; }
+          .home-stat-item    { padding: 16px 12px !important; }
+          .home-features-grid{ grid-template-columns: 1fr !important; }
+          .home-steps-row    { flex-direction: column !important; gap: 20px !important; }
+          .home-audience-grid{ grid-template-columns: 1fr !important; }
+          .home-footer-bottom{ flex-direction: column !important; gap: 12px !important; text-align: center; }
+          .home-section      { padding: 60px 20px !important; }
+          .home-mob-logo     { display: flex !important; }
+        }
+      `}</style>
+
+      {/* ── Mobile overlay menu ── */}
+      {mobileMenuOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500,
+          background: '#0D1F3C',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          padding: '40px 24px',
+        }}>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            style={{
+              position: 'absolute', top: 20, right: 20,
+              background: 'none', border: 'none',
+              color: 'rgba(255,255,255,0.7)', fontSize: 28,
+              cursor: 'pointer', lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+          <div className="fluid-breathe home-mob-logo" style={{ marginBottom: 24 }}>
+            <FluidSVG size={72} id="mob-menu" />
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 22, color: 'white', marginBottom: 44 }}>
+            Culture<span style={{ color: '#1BBFB0' }}>Xe</span>
+          </div>
+          <nav style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 32, marginBottom: 44 }}>
+            {[
+              { href: '#how-it-works', label: 'How It Works' },
+              { href: '#the-model',    label: 'The Model' },
+              { href: '#who-its-for',  label: "Who It's For" },
+            ].map(link => (
+              <a
+                key={link.label}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                style={{ fontSize: 22, fontWeight: 600, color: 'rgba(255,255,255,0.8)', textDecoration: 'none' }}
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
+          <Link
+            to="/login"
+            onClick={() => setMobileMenuOpen(false)}
+            className="btn btn-teal"
+            style={{ padding: '14px 40px', fontSize: 15 }}
+          >
+            Login →
+          </Link>
+        </div>
+      )}
+
       {/* ── NAVBAR ─────────────────────────────────────────── */}
-      <nav style={{
+      <nav className="home-nav" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
         background: 'white',
         boxShadow: scrolled ? '0 2px 20px rgba(13,31,60,0.10)' : '0 1px 0 rgba(13,31,60,0.06)',
@@ -101,20 +199,27 @@ export default function Home() {
           </div>
         </Link>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          <a href="#how-it-works" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>
-            How It Works
-          </a>
-          <a href="#the-model" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>
-            The Model
-          </a>
-          <a href="#who-its-for" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>
-            Who It's For
-          </a>
-          <Link to="/login" className="btn btn-teal btn-sm">
-            Login →
-          </Link>
+        {/* Desktop nav links */}
+        <div className="home-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+          <a href="#how-it-works" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>How It Works</a>
+          <a href="#the-model"    style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>The Model</a>
+          <a href="#who-its-for"  style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>Who It's For</a>
+          <Link to="/login" className="btn btn-teal btn-sm">Login →</Link>
         </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="home-hamburger"
+          onClick={() => setMobileMenuOpen(true)}
+          style={{
+            alignItems: 'center', justifyContent: 'center',
+            width: 40, height: 40, background: 'none',
+            border: '1px solid rgba(13,31,60,0.12)', borderRadius: 8,
+            cursor: 'pointer', fontSize: 20, color: '#0D1F3C',
+          }}
+        >
+          ☰
+        </button>
       </nav>
 
       {/* ── HERO ───────────────────────────────────────────── */}
@@ -126,9 +231,8 @@ export default function Home() {
       }}>
         <div style={{ position: 'absolute', top: '8%', left: '3%', width: 360, height: 360, background: 'radial-gradient(circle, rgba(27,191,176,0.07) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: '12%', left: '18%', width: 240, height: 240, background: 'radial-gradient(circle, rgba(58,143,196,0.09) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', top: '30%', right: '8%', width: 180, height: 180, background: 'radial-gradient(circle, rgba(201,184,130,0.06) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 48px', display: 'grid', gridTemplateColumns: '1fr 480px', gap: 60, alignItems: 'center', width: '100%' }}>
+        <div className="home-hero-grid" style={{ maxWidth: 1200, margin: '0 auto', padding: '80px 48px', display: 'grid', gridTemplateColumns: '1fr 480px', gap: 60, alignItems: 'center', width: '100%' }}>
           <div>
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -141,7 +245,7 @@ export default function Home() {
               </span>
             </div>
 
-            <h1 style={{ fontSize: 54, fontWeight: 800, lineHeight: 1.08, color: 'white', marginBottom: 24, letterSpacing: '-1.5px' }}>
+            <h1 className="home-hero-h1" style={{ fontSize: 54, fontWeight: 800, lineHeight: 1.08, color: 'white', marginBottom: 24, letterSpacing: '-1.5px' }}>
               Understand your culture.<br />
               <span style={{ background: 'linear-gradient(90deg, #1BBFB0 0%, #5AADD4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 Transform your organisation.
@@ -153,7 +257,7 @@ export default function Home() {
               built for consultants, designed for impact.
             </p>
 
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div className="home-hero-ctas" style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <Link to="/login" className="btn btn-teal" style={{ padding: '14px 30px', fontSize: 15 }}>
                 Get Started →
               </Link>
@@ -162,7 +266,7 @@ export default function Home() {
               </a>
             </div>
 
-            <div style={{ marginTop: 52, display: 'flex', gap: 36 }}>
+            <div className="home-hero-stats" style={{ marginTop: 52, display: 'flex', gap: 36 }}>
               {[
                 { value: '14+', label: 'Active Clients' },
                 { value: '1,800+', label: 'Responses Collected' },
@@ -176,7 +280,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+          <div className="home-hero-svg" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
             <div style={{
               position: 'absolute', width: 380, height: 380,
               background: 'radial-gradient(circle, rgba(27,191,176,0.20) 0%, rgba(58,143,196,0.10) 45%, transparent 70%)',
@@ -196,14 +300,18 @@ export default function Home() {
 
       {/* ── STATS BAR ──────────────────────────────────────── */}
       <section style={{ background: 'white', borderBottom: '1px solid #E2E8F0', padding: '36px 48px' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        <div className="home-stats-grid" style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)' }}>
           {[
             { value: '14+', label: 'Client Organisations', icon: '🏢' },
             { value: '1,800+', label: 'Responses Collected', icon: '📊' },
             { value: '8', label: 'Culture Dimensions', icon: '⬡' },
             { value: '31', label: 'Reports Released', icon: '📋' },
           ].map((stat, i) => (
-            <div key={stat.label} style={{ textAlign: 'center', padding: '4px 24px', borderRight: i < 3 ? '1px solid #E2E8F0' : 'none' }}>
+            <div
+              key={stat.label}
+              className="home-stat-item"
+              style={{ textAlign: 'center', padding: '4px 24px', borderRight: i < 3 ? '1px solid #E2E8F0' : 'none' }}
+            >
               <div style={{ fontSize: 36, fontWeight: 800, color: '#0D1F3C', letterSpacing: '-1.5px', lineHeight: 1 }}>{stat.value}</div>
               <div style={{ fontSize: 12.5, color: '#8A9BB0', marginTop: 8, fontWeight: 500 }}>{stat.icon} {stat.label}</div>
             </div>
@@ -212,8 +320,8 @@ export default function Home() {
       </section>
 
       {/* ── WHAT IS CULTUREXE ──────────────────────────────── */}
-      <section style={{ background: '#EEF5F9', padding: '110px 48px' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
+      <section className="home-section" style={{ background: '#EEF5F9', padding: '110px 48px' }}>
+        <div className="home-features-grid" style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
           <div>
             <div style={{
               display: 'inline-block', background: 'rgba(27,191,176,0.10)',
@@ -267,7 +375,7 @@ export default function Home() {
       </section>
 
       {/* ── HOW IT WORKS ───────────────────────────────────── */}
-      <section id="how-it-works" style={{ background: 'white', padding: '110px 48px' }}>
+      <section id="how-it-works" className="home-section" style={{ background: 'white', padding: '110px 48px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 70 }}>
             <div style={{
@@ -286,7 +394,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+          <div className="home-steps-row" style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
             {steps.map((step, idx) => (
               <div key={step.num} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                 <div style={{
@@ -316,7 +424,7 @@ export default function Home() {
                 </div>
 
                 {idx < 2 && (
-                  <div style={{ flexShrink: 0, padding: '0 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div className="home-step-arrow" style={{ flexShrink: 0, padding: '0 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                     <div style={{ width: 36, height: 2, background: 'linear-gradient(90deg, #1BBFB0, #3A8FC4)', borderRadius: 2 }} />
                     <div style={{ width: 0, height: 0, borderLeft: '8px solid #3A8FC4', borderTop: '5px solid transparent', borderBottom: '5px solid transparent', marginLeft: 4 }} />
                   </div>
@@ -328,7 +436,7 @@ export default function Home() {
       </section>
 
       {/* ── THE 8 DIMENSIONS ───────────────────────────────── */}
-      <section id="the-model" style={{
+      <section id="the-model" className="home-section" style={{
         background: 'linear-gradient(145deg, #0D1F3C 0%, #122849 50%, #0E3462 100%)',
         padding: '110px 48px', position: 'relative', overflow: 'hidden',
       }}>
@@ -358,7 +466,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+          <div className="home-dims-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
             {dimensions.map((dim, idx) => (
               <DimCard key={dim.id} dim={dim} idx={idx} />
             ))}
@@ -367,7 +475,7 @@ export default function Home() {
       </section>
 
       {/* ── WHO IT'S FOR ───────────────────────────────────── */}
-      <section id="who-its-for" style={{ background: '#EEF5F9', padding: '110px 48px' }}>
+      <section id="who-its-for" className="home-section" style={{ background: '#EEF5F9', padding: '110px 48px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 64 }}>
             <div style={{
@@ -386,7 +494,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'start' }}>
+          <div className="home-audience-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, alignItems: 'start' }}>
             {audiences.map(card => (
               <AudienceCard key={card.role} card={card} />
             ))}
@@ -395,7 +503,7 @@ export default function Home() {
       </section>
 
       {/* ── CTA ────────────────────────────────────────────── */}
-      <section style={{
+      <section className="home-section" style={{
         background: 'linear-gradient(135deg, #1BBFB0 0%, #3A8FC4 55%, #1A6BAA 100%)',
         padding: '110px 48px', textAlign: 'center',
         position: 'relative', overflow: 'hidden',
@@ -428,7 +536,7 @@ export default function Home() {
       {/* ── FOOTER ─────────────────────────────────────────── */}
       <footer style={{ background: '#0D1F3C', padding: '64px 48px 32px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 60, marginBottom: 52, alignItems: 'start' }}>
+          <div className="home-footer-top" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 60, marginBottom: 52, alignItems: 'start' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                 <div className="fluid-breathe">
@@ -444,12 +552,12 @@ export default function Home() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4 }}>
+            <div className="home-footer-links" style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 4 }}>
               {[
                 { label: 'Home', to: '/' },
                 { label: 'How It Works', href: '#how-it-works' },
                 { label: 'The Model', href: '#the-model' },
-                { label: 'Who It\'s For', href: '#who-its-for' },
+                { label: "Who It's For", href: '#who-its-for' },
                 { label: 'Login', to: '/login' },
               ].map(link => (
                 link.to ? (
@@ -464,7 +572,7 @@ export default function Home() {
               ))}
             </div>
 
-            <div style={{ textAlign: 'right' }}>
+            <div className="home-footer-right" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 10,
                 background: 'rgba(27,191,176,0.10)', border: '1px solid rgba(27,191,176,0.22)',
@@ -480,7 +588,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 26, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="home-footer-bottom" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 26, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>
               © 2026 CultureXe · AIA Africa · All rights reserved.
             </div>
@@ -533,14 +641,17 @@ function DimCard({ dim, idx }) {
 
 function AudienceCard({ card }) {
   return (
-    <div style={{
-      background: card.bg, borderRadius: 22,
-      border: `1.5px solid ${card.color}28`,
-      padding: '38px 32px',
-      boxShadow: card.featured ? `0 12px 48px ${card.color}22` : '0 2px 16px rgba(13,31,60,0.05)',
-      transform: card.featured ? 'translateY(-10px)' : 'none',
-      position: 'relative',
-    }}>
+    <div
+      className={card.featured ? 'home-aud-featured' : ''}
+      style={{
+        background: card.bg, borderRadius: 22,
+        border: `1.5px solid ${card.color}28`,
+        padding: '38px 32px',
+        boxShadow: card.featured ? `0 12px 48px ${card.color}22` : '0 2px 16px rgba(13,31,60,0.05)',
+        transform: card.featured ? 'translateY(-10px)' : 'none',
+        position: 'relative',
+      }}
+    >
       {card.featured && (
         <div style={{
           position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',

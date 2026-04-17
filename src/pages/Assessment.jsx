@@ -82,8 +82,12 @@ function PageShell({ orgName, progress, children }) {
           .as-sidebar { display: none !important; }
           .as-mob-tabs { display: flex !important; }
           .as-scale-lbl { display: none !important; }
-          .as-scale-btn { min-width: 44px !important; flex: 1; }
+          .as-scale-row { justify-content: stretch !important; }
+          .as-scale-btn { min-width: 0 !important; width: auto !important; height: 48px !important; flex: 1 !important; font-size: 16px !important; }
           .as-q-panel { padding: 18px 16px !important; }
+          .as-q-text { font-size: 15px !important; }
+          .as-nav-btns { flex-direction: column-reverse !important; gap: 10px !important; }
+          .as-nav-btns button { width: 100% !important; padding: 14px !important; font-size: 15px !important; }
         }
       `}</style>
 
@@ -347,7 +351,7 @@ export default function Assessment() {
           return (
             <button
               key={dim.id}
-              onClick={() => setActiveDimIdx(idx)}
+              onClick={() => { setActiveDimIdx(idx); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
               style={{
                 flexShrink: 0, padding: '8px 13px', borderRadius: 20,
                 border: `1.5px solid ${activeDimIdx === idx ? '#1BBFB0' : '#E2E7EF'}`,
@@ -387,7 +391,7 @@ export default function Assessment() {
             return (
               <button
                 key={dim.id}
-                onClick={() => setActiveDimIdx(idx)}
+                onClick={() => { setActiveDimIdx(idx); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 9,
                   width: '100%', textAlign: 'left', border: 'none',
@@ -457,10 +461,10 @@ export default function Assessment() {
                 borderBottom: qi < dimQs.length - 1 ? '1px solid #E2E7EF' : 'none',
               }}
             >
-              <div style={{ fontSize: 14, color: '#0B1D3E', marginBottom: 12, lineHeight: 1.65 }}>
+              <div className="as-q-text" style={{ fontSize: 14, color: '#0B1D3E', marginBottom: 12, lineHeight: 1.65 }}>
                 {qi + 1}. {q.text}
               </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <div className="as-scale-row" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {SCALE.map(v => (
                   <button
                     key={v}
@@ -482,10 +486,10 @@ export default function Assessment() {
             </div>
           ))}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 12 }}>
+          <div className="as-nav-btns" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 12 }}>
             <button
               disabled={activeDimIdx === 0}
-              onClick={() => setActiveDimIdx(i => i - 1)}
+              onClick={() => { setActiveDimIdx(i => i - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
               style={{
                 padding: '10px 20px', borderRadius: 9, border: '1.5px solid #D1D9E6',
                 background: 'white', color: '#637082', fontSize: 14, cursor: 'pointer',
@@ -497,7 +501,7 @@ export default function Assessment() {
 
             {activeDimIdx < dimensions.length - 1 ? (
               <button
-                onClick={() => setActiveDimIdx(i => i + 1)}
+                onClick={() => { setActiveDimIdx(i => i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 style={{
                   padding: '10px 22px', borderRadius: 9, border: 'none',
                   background: '#1BBFB0', color: 'white', fontSize: 14,

@@ -96,9 +96,17 @@ export default function Login() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 768px) {
+          .login-left  { display: none !important; }
+          .login-right { width: 100% !important; padding: 32px 24px !important; }
+          .login-mob-logo { display: flex !important; }
+        }
+      `}</style>
 
       {/* ── LEFT PANEL ─────────────────────────────────────── */}
-      <div style={{
+      <div className="login-left" style={{
         width: '55%', flexShrink: 0,
         background: 'linear-gradient(145deg, #0D1F3C 0%, #112444 35%, #0E3462 70%, #0A2A52 100%)',
         display: 'flex', flexDirection: 'column',
@@ -157,13 +165,24 @@ export default function Login() {
       </div>
 
       {/* ── RIGHT PANEL ────────────────────────────────────── */}
-      <div style={{
+      <div className="login-right" style={{
         flex: 1, background: 'white',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflowY: 'auto', padding: '40px 24px',
       }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
-          {/* Small logo */}
+          {/* Mobile-only logo — hidden on desktop */}
+          <div className="login-mob-logo" style={{ display: 'none', flexDirection: 'column', alignItems: 'center', marginBottom: 36 }}>
+            <div className="fluid-breathe" style={{ marginBottom: 12 }}>
+              <FluidSVG size={80} id="lp-mob" />
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: '#0D1F3C', letterSpacing: '-0.3px' }}>
+              Culture<span style={{ color: '#1BBFB0' }}>Xe</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#8A9BB0', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 4 }}>by AIA Africa</div>
+          </div>
+
+          {/* Small logo — visible on desktop */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 40 }}>
             <div className="fluid-breathe">
               <FluidSVG size={32} id="lp-sm" />
@@ -347,7 +366,6 @@ export default function Login() {
         </div>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

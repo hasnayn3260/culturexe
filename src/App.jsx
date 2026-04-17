@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 
 // Auth
@@ -51,14 +52,48 @@ const LogoMark = () => (
 
 const navItem = ({ isActive }) => 'nav-item' + (isActive ? ' active' : '')
 
+const MOB_NAV = [
+  { to: '/app/dashboard',   icon: '◉',  label: 'Home'     },
+  { to: '/app/clients',     icon: '🏢', label: 'Clients'  },
+  { to: '/app/assessments', icon: '📋', label: 'Assess'   },
+  { to: '/app/preview',     icon: '👁️', label: 'Preview'  },
+  { to: '/app/report',      icon: '📊', label: 'Reports'  },
+  { to: '/app/model',       icon: '⬡',  label: 'Model'    },
+  { to: '/app/invite',      icon: '✉️', label: 'Invite'   },
+  { to: '/app/settings',    icon: '⚙',  label: 'Settings' },
+]
+
 // ── CONSULTANT SIDEBAR ──────────────────────────────────
 const Sidebar = () => {
   const { profile, signOut } = useAuth()
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : ''
   const displayName = profile?.full_name?.split(' ')[0] || ''
 
+  // ── Mobile: bottom navigation bar ──
+  if (isMobile) {
+    return (
+      <aside className="sidebar">
+        {MOB_NAV.map(item => (
+          <NavLink key={item.to} to={item.to} className={navItem}>
+            <span className="nav-icon">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
+      </aside>
+    )
+  }
+
+  // ── Desktop: left sidebar ──
   return (
     <aside className="sidebar">
       <div className="logo-wrap">
