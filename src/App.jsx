@@ -53,8 +53,8 @@ const Sidebar = () => {
   const { profile, signOut } = useAuth()
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'AZ'
-  const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
+    : ''
+  const displayName = profile?.full_name?.split(' ')[0] || ''
 
   return (
     <aside className="sidebar">
@@ -112,8 +112,8 @@ const Topbar = () => {
   const title = titles[location.pathname] || 'CultureXe'
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'AZ'
-  const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
+    : ''
+  const displayName = profile?.full_name?.split(' ')[0] || ''
 
   return (
     <div className="topbar">

@@ -4,7 +4,16 @@ import { dimensions } from '../data/dimensions'
 import { useOrganisations } from '../hooks/useOrganisations'
 import { useAssessments } from '../hooks/useAssessments'
 import { useReports } from '../hooks/useReports'
+import { useAuth } from '../hooks/useAuth'
 import supabase from '../lib/supabaseClient'
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h >= 5  && h < 12) return 'Good morning'
+  if (h >= 12 && h < 17) return 'Good afternoon'
+  if (h >= 17 && h < 21) return 'Good evening'
+  return 'Good night'
+}
 
 // ── Demo scores kept for Dimension Overview until real aggregation is available
 const sampleScores = {
@@ -54,6 +63,7 @@ function StatSkeleton() {
 }
 
 export default function Dashboard() {
+  const { profile, loading: authLoading }               = useAuth()
   const { organisations, loading: orgsLoading }         = useOrganisations()
   const { assessments, loading: assessLoading }         = useAssessments()
   const { reports, loading: reportsLoading }            = useReports()
@@ -88,7 +98,11 @@ export default function Dashboard() {
   return (
     <div className="content">
       <div className="page-hero">
-        <div className="hero-title">Dashboard ✦</div>
+        <div className="hero-title">
+          {authLoading || !profile?.full_name
+            ? 'Welcome back ✦'
+            : `${getGreeting()}, ${profile.full_name.split(' ')[0]} ✦`}
+        </div>
         <div className="hero-sub">Here's the CultureXe pulse across your active clients — updated now.</div>
       </div>
 
