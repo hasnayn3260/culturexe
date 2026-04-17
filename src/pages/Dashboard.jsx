@@ -1,64 +1,136 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { dimensions } from '../data/dimensions'
+import { useOrganisations } from '../hooks/useOrganisations'
+import { useAssessments } from '../hooks/useAssessments'
+import { useReports } from '../hooks/useReports'
+import supabase from '../lib/supabaseClient'
 
+// ── Demo scores kept for Dimension Overview until real aggregation is available
 const sampleScores = {
   purpose: 78, leadership: 65, innovation: 71, collaboration: 83,
   accountability: 59, inclusion: 74, learning: 68, customer: 77,
 }
 
-const recentAssessments = [
-  { id: 1, org: 'Stanbic Bank Ghana', name: 'Q1 Culture Pulse', responses: 184, total: 210, status: 'live' },
-  { id: 2, org: 'MTN Nigeria', name: 'Annual Culture Survey', responses: 412, total: 500, status: 'live' },
-  { id: 3, org: 'Ecobank Group', name: 'Leadership Effectiveness', responses: 97, total: 97, status: 'complete' },
-  { id: 4, org: 'Safaricom Kenya', name: 'DEI Pulse Check', responses: 240, total: 260, status: 'complete' },
-  { id: 5, org: 'Access Bank PLC', name: 'Onboarding Culture Fit', responses: 12, total: 80, status: 'pending' },
-]
-
-const avgScore = Math.round(
-  Object.values(sampleScores).reduce((a, b) => a + b, 0) / Object.values(sampleScores).length
-)
-
-function scoreColor(score) {
-  if (score >= 75) return 'var(--teal)'
-  if (score >= 60) return 'var(--blue)'
-  if (score >= 45) return 'var(--gold2)'
+function scoreColor(s) {
+  if (s >= 75) return 'var(--teal)'
+  if (s >= 60) return 'var(--blue)'
+  if (s >= 45) return 'var(--gold2)'
   return 'var(--coral)'
 }
 
+function fmtDate(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function Spinner() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid rgba(27,191,176,0.18)', borderTopColor: 'var(--teal)', animation: 'db-spin 0.8s linear infinite' }} />
+      <style>{`@keyframes db-spin { to { transform:rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+function EmptyRow({ cols, icon, msg }) {
+  return (
+    <tr>
+      <td colSpan={cols} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text3)', fontSize: 13 }}>
+        {icon} {msg}
+      </td>
+    </tr>
+  )
+}
+
+function StatSkeleton() {
+  return (
+    <div className="stat-card">
+      <div style={{ height: 11, width: '50%', background: 'var(--border)', borderRadius: 6, marginBottom: 12 }} />
+      <div style={{ height: 34, width: '40%', background: 'var(--border)', borderRadius: 6, marginBottom: 8 }} />
+      <div style={{ height: 11, width: '65%', background: 'var(--border)', borderRadius: 6 }} />
+    </div>
+  )
+}
+
 export default function Dashboard() {
+  const { organisations, loading: orgsLoading }         = useOrganisations()
+  const { assessments, loading: assessLoading }         = useAssessments()
+  const { reports, loading: reportsLoading }            = useReports()
+  const [responseCount, setResponseCount]               = useState(null)
+  const [responseCountLoading, setResponseCountLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('responses')
+      .select('*', { count: 'exact', head: true })
+      .then(({ count }) => {
+        setResponseCount(count ?? 0)
+        setResponseCountLoading(false)
+      })
+      .catch(() => {
+        setResponseCount(0)
+        setResponseCountLoading(false)
+      })
+  }, [])
+
+  const statsLoading = orgsLoading || assessLoading || reportsLoading || responseCountLoading
+
+  const activeAssessments  = assessments.filter(a => a.status === 'active')
+  const releasedReports    = reports.filter(r => r.status === 'released')
+  const reviewAssessments  = assessments.filter(a => a.status === 'review')
+  const recentAssessments  = assessments.slice(0, 8)
+
+  const avgScore = Math.round(
+    Object.values(sampleScores).reduce((a, b) => a + b, 0) / Object.values(sampleScores).length
+  )
+
   return (
     <div className="content">
       <div className="page-hero">
-        <div className="hero-title">Good morning, Azra ✦</div>
-        <div className="hero-sub">Here's the CultureXe pulse across your active clients — updated today.</div>
+        <div className="hero-title">Dashboard ✦</div>
+        <div className="hero-sub">Here's the CultureXe pulse across your active clients — updated now.</div>
       </div>
 
+      {/* ── KPI STATS ─────────────────────────────────────── */}
       <div className="grid-4 mb-28">
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--teal)' }} />
-          <div className="stat-label">Active Clients</div>
-          <div className="stat-value">12</div>
-          <div className="stat-trend trend-up">↑ 2 added this month</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--blue)' }} />
-          <div className="stat-label">Live Assessments</div>
-          <div className="stat-value">7</div>
-          <div className="stat-sub">3 closing this week</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--gold)' }} />
-          <div className="stat-label">Avg Culture Score</div>
-          <div className="stat-value" style={{ color: scoreColor(avgScore) }}>{avgScore}</div>
-          <div className="stat-trend trend-up">↑ +4 pts vs last quarter</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--coral)' }} />
-          <div className="stat-label">Responses This Week</div>
-          <div className="stat-value">248</div>
-          <div className="stat-sub">Across 4 active surveys</div>
-        </div>
+        {statsLoading ? (
+          [1,2,3,4].map(i => <StatSkeleton key={i} />)
+        ) : (
+          <>
+            <div className="stat-card">
+              <div className="stat-accent" style={{ background: 'var(--teal)' }} />
+              <div className="stat-label">Active Clients</div>
+              <div className="stat-value">{organisations.length}</div>
+              <div className="stat-sub">Organisations onboarded</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-accent" style={{ background: 'var(--blue)' }} />
+              <div className="stat-label">Assessments Running</div>
+              <div className="stat-value" style={{ color: 'var(--teal)' }}>{activeAssessments.length}</div>
+              <div className="stat-sub">
+                {reviewAssessments.length > 0
+                  ? `${reviewAssessments.length} pending review`
+                  : 'None pending review'}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-accent" style={{ background: 'var(--coral)' }} />
+              <div className="stat-label">Responses Collected</div>
+              <div className="stat-value">{responseCount?.toLocaleString()}</div>
+              <div className="stat-sub">Total across all surveys</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-accent" style={{ background: 'var(--gold)' }} />
+              <div className="stat-label">Reports Released</div>
+              <div className="stat-value">{releasedReports.length}</div>
+              <div className="stat-sub">Delivered to clients</div>
+            </div>
+          </>
+        )}
       </div>
 
+      {/* ── AI PANEL ──────────────────────────────────────── */}
       <div className="ai-panel mb-24">
         <div className="ai-panel-brain fluid-think">
           <svg width="44" height="44" viewBox="0 0 100 100" fill="none">
@@ -79,19 +151,20 @@ export default function Dashboard() {
         <div className="ai-panel-text">
           <div className="ai-panel-title">AI Culture Summary</div>
           <div className="ai-panel-desc">
-            Across your active clients, <strong>Collaboration & Ubuntu</strong> scores highest at 83 — a strong foundation.
-            Watch <strong>Accountability & Performance</strong> (59) and <strong>Leadership & Trust</strong> (65) — both signal
-            potential retention risk if left unaddressed before Q2 closes.
+            {activeAssessments.length > 0
+              ? `You have ${activeAssessments.length} active assessment${activeAssessments.length !== 1 ? 's' : ''} running across ${organisations.length} client${organisations.length !== 1 ? 's' : ''}. ${reviewAssessments.length > 0 ? `${reviewAssessments.length} assessment${reviewAssessments.length !== 1 ? 's are' : ' is'} ready for consultant review.` : 'No assessments are currently pending review.'}`
+              : 'No active assessments at this time. Create a new assessment to start collecting culture data from your clients.'}
           </div>
         </div>
-        <button className="btn btn-ghost btn-sm">Full Analysis →</button>
+        <Link to="/app/assessments" className="btn btn-ghost btn-sm">View All →</Link>
       </div>
 
       <div className="grid-2">
+        {/* ── DIMENSION OVERVIEW ─── */}
         <div className="card">
           <div className="flex-between mb-16">
             <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Dimension Overview</div>
-            <span className="badge badge-teal">All Clients · Avg</span>
+            <span className="badge badge-slate">Sample data</span>
           </div>
           {dimensions.map(dim => (
             <div key={dim.id} className="dim-item">
@@ -108,45 +181,88 @@ export default function Dashboard() {
           ))}
         </div>
 
+        {/* ── RECENT ASSESSMENTS ─── */}
         <div className="card">
           <div className="flex-between mb-16">
             <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Recent Assessments</div>
-            <a href="/assessments" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 500 }}>
+            <Link to="/app/assessments" style={{ fontSize: 12, color: 'var(--teal)', textDecoration: 'none', fontWeight: 500 }}>
               View all →
-            </a>
+            </Link>
+          </div>
+
+          {assessLoading ? (
+            <Spinner />
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Organisation</th>
+                  <th>Launched</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentAssessments.length === 0 ? (
+                  <EmptyRow cols={3} icon="📋" msg="No assessments yet. Create one to get started." />
+                ) : recentAssessments.map(a => (
+                  <tr key={a.id}>
+                    <td>
+                      <div style={{ fontWeight: 500, fontSize: 13 }}>{a.org_name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>{a.name}</div>
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--text2)' }}>{fmtDate(a.launch_date)}</td>
+                    <td>
+                      <span className={`tag ${
+                        a.status === 'active'   ? 'tag-active'   :
+                        a.status === 'complete' ? 'tag-complete' :
+                        a.status === 'review'   ? 'tag-review'   :
+                        'tag-pending'
+                      }`}>
+                        {a.status === 'active'   ? '● Live'     :
+                         a.status === 'complete' ? '✓ Done'     :
+                         a.status === 'review'   ? '⟳ Review'  :
+                         '○ Pending'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ── PENDING REVIEW ────────────────────────────────── */}
+      {reviewAssessments.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="flex-between mb-16">
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Pending Consultant Review</div>
+            <span className="badge badge-gold">{reviewAssessments.length} awaiting review</span>
           </div>
           <table>
             <thead>
               <tr>
+                <th>Assessment</th>
                 <th>Organisation</th>
-                <th>Responses</th>
-                <th>Status</th>
+                <th>Closed</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {recentAssessments.map(a => (
+              {reviewAssessments.map(a => (
                 <tr key={a.id}>
+                  <td style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</td>
+                  <td style={{ fontSize: 13 }}>{a.org_name}</td>
+                  <td style={{ fontSize: 12, color: 'var(--text2)' }}>{fmtDate(a.close_date)}</td>
                   <td>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{a.org}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)' }}>{a.name}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontSize: 13 }}>{a.responses}/{a.total}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      {Math.round((a.responses / a.total) * 100)}% rate
-                    </div>
-                  </td>
-                  <td>
-                    <span className={`tag tag-${a.status === 'live' ? 'active' : a.status === 'complete' ? 'complete' : 'pending'}`}>
-                      {a.status === 'live' ? '● Live' : a.status === 'complete' ? '✓ Done' : '○ Pending'}
-                    </span>
+                    <Link to="/app/report" className="btn btn-teal btn-sm">Open Report →</Link>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   )
 }
