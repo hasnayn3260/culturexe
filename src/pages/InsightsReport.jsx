@@ -11,6 +11,13 @@ const DEMO_SCORES = {
 }
 const BENCHMARK_AVG = 70
 
+const QUADRANTS = [
+  { id: 'agility',   label: 'Agility & Innovation',  icon: '⚡', dims: ['innovation', 'collaboration'],   color: 'var(--gold)'  },
+  { id: 'alignment', label: 'Alignment & Execution',  icon: '◆', dims: ['accountability', 'purpose'],     color: 'var(--blue)'  },
+  { id: 'people',    label: 'People & Learning',      icon: '★', dims: ['leadership', 'learning'],        color: 'var(--teal)'  },
+  { id: 'culture',   label: 'Culture & Inclusion',    icon: '❋', dims: ['inclusion', 'customer'],         color: 'var(--navy)'  },
+]
+
 function scoreColor(s) {
   if (s >= 75) return 'var(--teal)'
   if (s >= 60) return 'var(--blue)'
@@ -108,6 +115,11 @@ export default function InsightsReport() {
   const sortedDims = [...dimensions].sort((a, b) => (scores[b.id] || 0) - (scores[a.id] || 0))
   const topStrengths = sortedDims.slice(0, 3)
   const topRisks     = sortedDims.slice(-2)
+
+  const quadrantScores = QUADRANTS.map(q => {
+    const vals = q.dims.map(d => scores[d]).filter(v => v != null)
+    return { ...q, score: vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b) / vals.length) : null }
+  })
 
   async function handleNoteBlur() {
     if (!report?.id || notes === (report.consultant_notes || '')) return
@@ -254,6 +266,21 @@ export default function InsightsReport() {
                 }
               </div>
             </div>
+          </div>
+
+          <div className="grid-4 mb-28">
+            {quadrantScores.map(q => (
+              <div className="stat-card" key={q.id}>
+                <div className="stat-accent" style={{ background: q.color }} />
+                <div className="stat-label">{q.icon} {q.label}</div>
+                <div className="stat-value" style={{ color: q.score != null ? scoreColor(q.score) : 'var(--text3)' }}>
+                  {q.score ?? '—'}
+                </div>
+                <div className="stat-sub">
+                  {q.dims.map(d => dimensions.find(dim => dim.id === d)?.name).join(' · ')}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="grid-2 mb-28">

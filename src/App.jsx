@@ -21,6 +21,9 @@ import Settings       from './pages/Settings'
 // Client portal pages
 import ClientDashboard from './pages/ClientDashboard'
 
+// Public assessment page
+import Assessment from './pages/Assessment'
+
 // ── SIDEBAR LOGO ────────────────────────────────────────
 const LogoMark = () => (
   <div className="fluid-breathe">
@@ -185,6 +188,9 @@ export default function App() {
             <ClientShell />
           </ProtectedRoute>
         } />
+
+        {/* Public employee assessment — no auth required */}
+        <Route path="/assess/:token" element={<Assessment />} />
       </Routes>
     </BrowserRouter>
   )
