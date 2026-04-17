@@ -1,19 +1,27 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 
-// Public pages
-import Home from './pages/Home'
-import Login from './pages/Login'
+// Auth
+import ProtectedRoute from './components/ProtectedRoute'
+import { useAuth } from './hooks/useAuth'
 
-// Portal pages
-import Dashboard from './pages/Dashboard'
-import ClientOrgs from './pages/ClientOrgs'
-import Assessments from './pages/Assessments'
+// Public pages
+import Home          from './pages/Home'
+import Login         from './pages/Login'
+
+// Consultant portal pages
+import Dashboard      from './pages/Dashboard'
+import ClientOrgs     from './pages/ClientOrgs'
+import Assessments    from './pages/Assessments'
 import EmployeePreview from './pages/EmployeePreview'
 import InsightsReport from './pages/InsightsReport'
 import CultureXeModel from './pages/CultureXeModel'
 import InviteEmployees from './pages/InviteEmployees'
-import Settings from './pages/Settings'
+import Settings       from './pages/Settings'
 
+// Client portal pages
+import ClientDashboard from './pages/ClientDashboard'
+
+// ── SIDEBAR LOGO ────────────────────────────────────────
 const LogoMark = () => (
   <div className="fluid-breathe">
     <svg width="38" height="38" viewBox="0 0 100 100" fill="none">
@@ -40,46 +48,57 @@ const LogoMark = () => (
 
 const navItem = ({ isActive }) => 'nav-item' + (isActive ? ' active' : '')
 
-const Sidebar = () => (
-  <aside className="sidebar">
-    <div className="logo-wrap">
-      <LogoMark />
-      <div>
-        <div className="logo-wordmark">
-          <span className="logo-cx">Culture</span>
-          <span className="logo-xe">Xe</span>
+// ── CONSULTANT SIDEBAR ──────────────────────────────────
+const Sidebar = () => {
+  const { profile, signOut } = useAuth()
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'AZ'
+  const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
+
+  return (
+    <aside className="sidebar">
+      <div className="logo-wrap">
+        <LogoMark />
+        <div>
+          <div className="logo-wordmark">
+            <span className="logo-cx">Culture</span>
+            <span className="logo-xe">Xe</span>
+          </div>
+          <div className="logo-sub">by AIA Africa</div>
         </div>
-        <div className="logo-sub">by AIA Africa</div>
       </div>
-    </div>
 
-    <nav className="nav">
-      <div className="nav-section">Platform</div>
-      <NavLink to="/app/dashboard" className={navItem}><span className="nav-icon">◉</span> Dashboard</NavLink>
-      <NavLink to="/app/clients"   className={navItem}><span className="nav-icon">🏢</span> Client Orgs</NavLink>
-      <NavLink to="/app/assessments" className={navItem}><span className="nav-icon">📋</span> Assessments</NavLink>
+      <nav className="nav">
+        <div className="nav-section">Platform</div>
+        <NavLink to="/app/dashboard"    className={navItem}><span className="nav-icon">◉</span> Dashboard</NavLink>
+        <NavLink to="/app/clients"      className={navItem}><span className="nav-icon">🏢</span> Client Orgs</NavLink>
+        <NavLink to="/app/assessments"  className={navItem}><span className="nav-icon">📋</span> Assessments</NavLink>
 
-      <div className="nav-section">Tools</div>
-      <NavLink to="/app/preview" className={navItem}><span className="nav-icon">👁️</span> Employee Preview</NavLink>
-      <NavLink to="/app/report"  className={navItem}><span className="nav-icon">📊</span> Insights Report</NavLink>
-      <NavLink to="/app/model"   className={navItem}><span className="nav-icon">⬡</span> CultureXe Model</NavLink>
+        <div className="nav-section">Tools</div>
+        <NavLink to="/app/preview"  className={navItem}><span className="nav-icon">👁️</span> Employee Preview</NavLink>
+        <NavLink to="/app/report"   className={navItem}><span className="nav-icon">📊</span> Insights Report</NavLink>
+        <NavLink to="/app/model"    className={navItem}><span className="nav-icon">⬡</span> CultureXe Model</NavLink>
 
-      <div className="nav-section">Admin</div>
-      <NavLink to="/app/invite"   className={navItem}><span className="nav-icon">✉️</span> Invite Employees</NavLink>
-      <NavLink to="/app/settings" className={navItem}><span className="nav-icon">⚙</span> Settings</NavLink>
-    </nav>
+        <div className="nav-section">Admin</div>
+        <NavLink to="/app/invite"   className={navItem}><span className="nav-icon">✉️</span> Invite Employees</NavLink>
+        <NavLink to="/app/settings" className={navItem}><span className="nav-icon">⚙</span> Settings</NavLink>
+      </nav>
 
-    <div className="sidebar-footer">
-      <div className="aia-badge">
-        <div className="aia-badge-name">AIA Africa</div>
-        <div className="aia-badge-role">Consultant Portal · Admin</div>
+      <div className="sidebar-footer">
+        <div className="aia-badge">
+          <div className="aia-badge-name">AIA Africa</div>
+          <div className="aia-badge-role">Consultant Portal · Admin</div>
+        </div>
       </div>
-    </div>
-  </aside>
-)
+    </aside>
+  )
+}
 
+// ── CONSULTANT TOPBAR ───────────────────────────────────
 const Topbar = () => {
   const location = useLocation()
+  const { profile, signOut } = useAuth()
   const titles = {
     '/app/dashboard':   'Dashboard',
     '/app/clients':     'Client Orgs',
@@ -91,46 +110,81 @@ const Topbar = () => {
     '/app/settings':    'Settings',
   }
   const title = titles[location.pathname] || 'CultureXe'
+  const initials = profile?.full_name
+    ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'AZ'
+  const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
 
   return (
     <div className="topbar">
       <div className="page-title">{title}</div>
       <div className="topbar-right">
         <span className="badge badge-teal">● Platform Live</span>
-        <div style={{ fontSize: '13px', color: 'var(--text2)', fontWeight: 500 }}>Azra</div>
-        <div className="avatar">AZ</div>
+        <div style={{ fontSize: '13px', color: 'var(--text2)', fontWeight: 500 }}>{displayName}</div>
+        <div
+          className="avatar"
+          title="Sign out"
+          onClick={signOut}
+          style={{ cursor: 'pointer' }}
+        >
+          {initials}
+        </div>
       </div>
     </div>
   )
 }
 
+// ── CONSULTANT PORTAL SHELL ─────────────────────────────
 const PortalShell = () => (
   <div className="app">
     <Sidebar />
     <div className="main">
       <Topbar />
       <Routes>
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard"   element={<Dashboard />} />
-        <Route path="clients"     element={<ClientOrgs />} />
-        <Route path="assessments" element={<Assessments />} />
-        <Route path="preview"     element={<EmployeePreview />} />
-        <Route path="report"      element={<InsightsReport />} />
-        <Route path="model"       element={<CultureXeModel />} />
-        <Route path="invite"      element={<InviteEmployees />} />
-        <Route path="settings"    element={<Settings />} />
+        <Route index                  element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard"       element={<Dashboard />} />
+        <Route path="clients"         element={<ClientOrgs />} />
+        <Route path="assessments"     element={<Assessments />} />
+        <Route path="preview"         element={<EmployeePreview />} />
+        <Route path="report"          element={<InsightsReport />} />
+        <Route path="model"           element={<CultureXeModel />} />
+        <Route path="invite"          element={<InviteEmployees />} />
+        <Route path="settings"        element={<Settings />} />
       </Routes>
     </div>
   </div>
 )
 
+// ── CLIENT PORTAL SHELL (placeholder) ──────────────────
+const ClientShell = () => (
+  <Routes>
+    <Route index               element={<Navigate to="dashboard" replace />} />
+    <Route path="dashboard"    element={<ClientDashboard />} />
+  </Routes>
+)
+
+// ── APP ─────────────────────────────────────────────────
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"       element={<Home />} />
-        <Route path="/login"  element={<Login />} />
-        <Route path="/app/*"  element={<PortalShell />} />
+        {/* Public */}
+        <Route path="/"      element={<Home />} />
+        <Route path="/login" element={<Login />} />
+
+        {/* Consultant portal — requires consultant role */}
+        <Route path="/app/*" element={
+          <ProtectedRoute requiredRole="consultant">
+            <PortalShell />
+          </ProtectedRoute>
+        } />
+
+        {/* Client portal — requires client role */}
+        <Route path="/client/*" element={
+          <ProtectedRoute requiredRole="client">
+            <ClientShell />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   )

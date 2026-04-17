@@ -1,5 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../hooks/useAuth'
+
+const ROLE_REDIRECTS = {
+  consultant: '/app/dashboard',
+  client:     '/client/dashboard',
+  employee:   '/assess',
+}
 
 function FluidSVG({ size = 100, id = 'fl' }) {
   return (
@@ -27,157 +34,320 @@ function FluidSVG({ size = 100, id = 'fl' }) {
 
 export default function Login() {
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const { user, role, loading: authLoading, signIn, signInWithMagicLink } = useAuth()
 
-  function handleSubmit(e) {
+  const [tab, setTab]                 = useState('password')
+  const [email, setEmail]             = useState('')
+  const [password, setPassword]       = useState('')
+  const [submitting, setSubmitting]   = useState(false)
+  const [error, setError]             = useState('')
+  const [magicSent, setMagicSent]     = useState(false)
+
+  // Redirect once role is known (handles both fresh login and returning sessions)
+  useEffect(() => {
+    if (!authLoading && user && role) {
+      navigate(ROLE_REDIRECTS[role] || '/login', { replace: true })
+    }
+  }, [authLoading, user, role, navigate])
+
+  // Clear error when switching tabs
+  function switchTab(t) {
+    setTab(t)
+    setError('')
+    setMagicSent(false)
+  }
+
+  async function handleSignIn(e) {
     e.preventDefault()
     setError('')
-    if (!email || !password) {
-      setError('Please enter your email and password.')
-      return
+    setSubmitting(true)
+    try {
+      await signIn(email, password)
+      // redirect fires via the useEffect above once role is resolved
+    } catch (err) {
+      setError(err.message || 'Invalid email or password. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
-    setLoading(true)
-    setTimeout(() => {
-      setLoading(false)
-      navigate('/app/dashboard')
-    }, 1200)
+  }
+
+  async function handleMagicLink(e) {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      await signInWithMagicLink(email)
+      setMagicSent(true)
+    } catch (err) {
+      setError(err.message || 'Failed to send magic link. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0D1F3C' }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', border: '3px solid rgba(27,191,176,0.2)', borderTopColor: '#1BBFB0', animation: 'spin 0.8s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
   }
 
   return (
-    <div style={{
-      minHeight: '100vh', fontFamily: "'Plus Jakarta Sans', sans-serif",
-      background: 'linear-gradient(145deg, #0D1F3C 0%, #112444 40%, #0E3462 75%, #0A2A52 100%)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      position: 'relative', overflow: 'hidden',
-    }}>
-      <div style={{ position: 'absolute', top: '10%', left: '5%', width: 320, height: 320, background: 'radial-gradient(circle, rgba(27,191,176,0.07) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '10%', right: '5%', width: 280, height: 280, background: 'radial-gradient(circle, rgba(58,143,196,0.08) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
 
-      <div style={{ width: '100%', maxWidth: 460, padding: '0 24px', position: 'relative', zIndex: 1 }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <Link to="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
-            <div className="fluid-breathe">
-              <FluidSVG size={44} id="login" />
-            </div>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 20, letterSpacing: '-0.3px', lineHeight: 1 }}>
-                <span style={{ color: 'white' }}>Culture</span>
-                <span style={{ color: '#1BBFB0' }}>Xe</span>
-              </div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.32)', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 3 }}>
-                by AIA Africa
-              </div>
-            </div>
-          </Link>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: 'white', letterSpacing: '-0.5px', marginBottom: 8 }}>
-            Consultant Portal
-          </h1>
-          <p style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.48)', lineHeight: 1.6 }}>
-            Sign in to access your CultureXe dashboard.
-          </p>
-        </div>
+      {/* ── LEFT PANEL ─────────────────────────────────────── */}
+      <div style={{
+        width: '55%', flexShrink: 0,
+        background: 'linear-gradient(145deg, #0D1F3C 0%, #112444 35%, #0E3462 70%, #0A2A52 100%)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        {/* Background orbs */}
+        <div style={{ position: 'absolute', top: '5%',  left: '5%',  width: 280, height: 280, background: 'radial-gradient(circle, rgba(27,191,176,0.08) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '8%', right: '8%', width: 220, height: 220, background: 'radial-gradient(circle, rgba(58,143,196,0.09) 0%, transparent 68%)', borderRadius: '50%', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 460, height: 460, background: 'radial-gradient(circle, rgba(27,191,176,0.06) 0%, transparent 65%)', borderRadius: '50%', pointerEvents: 'none' }} />
 
-        <div style={{
-          background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 24, padding: '40px 38px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.30)',
-        }}>
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@organisation.com"
-                style={{
-                  width: '100%', padding: '13px 16px',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 11, fontSize: 14, color: 'white',
-                  outline: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif",
-                  transition: 'border-color 0.15s',
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(27,191,176,0.6)'}
-                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
-              />
-            </div>
+        <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', padding: '0 60px' }}>
+          {/* Animated logo */}
+          <div className="fluid-spin" style={{ display: 'inline-block', marginBottom: 36 }}>
+            <FluidSVG size={260} id="lp-hero" />
+          </div>
 
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <label style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.65)' }}>
-                  Password
-                </label>
-                <span style={{ fontSize: 12, color: '#1BBFB0', cursor: 'pointer', fontWeight: 500 }}>
-                  Forgot password?
-                </span>
-              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                style={{
-                  width: '100%', padding: '13px 16px',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 11, fontSize: 14, color: 'white',
-                  outline: 'none', fontFamily: "'Plus Jakarta Sans', sans-serif",
-                  transition: 'border-color 0.15s',
-                }}
-                onFocus={e => e.target.style.borderColor = 'rgba(27,191,176,0.6)'}
-                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
-              />
-            </div>
+          {/* Wordmark */}
+          <div style={{ fontWeight: 800, fontSize: 32, letterSpacing: '-0.5px', marginBottom: 8 }}>
+            <span style={{ color: 'white' }}>Culture</span>
+            <span style={{ color: '#1BBFB0' }}>Xe</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 32 }}>
+            by AIA Africa
+          </div>
 
-            {error && (
-              <div style={{
-                background: 'rgba(232,86,58,0.15)', border: '1px solid rgba(232,86,58,0.3)',
-                borderRadius: 9, padding: '11px 14px', marginBottom: 18,
-                fontSize: 13, color: '#F47A65',
+          <div style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.52)', lineHeight: 1.8, maxWidth: 340, margin: '0 auto', marginBottom: 44 }}>
+            Africa's most advanced organisational culture intelligence platform.
+          </div>
+
+          {/* Credential pills */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
+            {[
+              { icon: '◉', text: 'Consultant Portal' },
+              { icon: '🏢', text: 'Client Access' },
+              { icon: '◎', text: 'Employee Assessments' },
+            ].map(item => (
+              <div key={item.text} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 20, padding: '7px 16px',
               }}>
-                {error}
+                <span style={{ fontSize: 13 }}>{item.icon}</span>
+                <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', fontWeight: 500 }}>{item.text}</span>
               </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: '100%', padding: '14px',
-                background: loading ? 'rgba(27,191,176,0.5)' : 'linear-gradient(135deg, #1BBFB0, #3A8FC4)',
-                border: 'none', borderRadius: 11,
-                color: 'white', fontWeight: 700, fontSize: 15,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                fontFamily: "'Plus Jakarta Sans', sans-serif",
-                transition: 'opacity 0.15s',
-                boxShadow: '0 4px 20px rgba(27,191,176,0.28)',
-              }}
-            >
-              {loading ? 'Signing in…' : 'Sign In →'}
-            </button>
-          </form>
-
-          <div style={{ marginTop: 28, paddingTop: 24, borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center' }}>
-            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.28)', lineHeight: 1.7 }}>
-              Access is restricted to AIA Africa consultants.<br />
-              Contact <span style={{ color: '#1BBFB0' }}>support@africaia.com</span> to request access.
-            </div>
+            ))}
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 28 }}>
-          <Link to="/" style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', textDecoration: 'none', fontWeight: 500 }}>
-            ← Back to CultureXe
+        {/* Back link */}
+        <div style={{ position: 'absolute', bottom: 28, left: 0, right: 0, textAlign: 'center' }}>
+          <Link to="/" style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.28)', textDecoration: 'none', fontWeight: 500 }}>
+            ← Back to CultureXe.com
           </Link>
         </div>
       </div>
+
+      {/* ── RIGHT PANEL ────────────────────────────────────── */}
+      <div style={{
+        flex: 1, background: 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflowY: 'auto', padding: '40px 24px',
+      }}>
+        <div style={{ width: '100%', maxWidth: 420 }}>
+          {/* Small logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 40 }}>
+            <div className="fluid-breathe">
+              <FluidSVG size={32} id="lp-sm" />
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#0D1F3C' }}>
+              Culture<span style={{ color: '#1BBFB0' }}>Xe</span>
+            </div>
+          </div>
+
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: '#0D1F3C', letterSpacing: '-0.5px', marginBottom: 6 }}>
+            Welcome back
+          </h1>
+          <p style={{ fontSize: 14, color: '#4A6380', marginBottom: 32, lineHeight: 1.6 }}>
+            Sign in to your CultureXe account.
+          </p>
+
+          {/* Tab switcher */}
+          <div style={{
+            display: 'flex', background: '#EEF5F9',
+            borderRadius: 11, padding: 4, marginBottom: 32, gap: 4,
+          }}>
+            {[
+              { key: 'password', label: 'Email & Password' },
+              { key: 'magic',    label: 'Magic Link' },
+            ].map(t => (
+              <button
+                key={t.key}
+                onClick={() => switchTab(t.key)}
+                style={{
+                  flex: 1, padding: '10px 12px',
+                  border: 'none', borderRadius: 8, cursor: 'pointer',
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  fontSize: 13, fontWeight: 600, transition: 'all 0.15s',
+                  background: tab === t.key ? 'white' : 'transparent',
+                  color: tab === t.key ? '#0D1F3C' : '#8A9BB0',
+                  boxShadow: tab === t.key ? '0 1px 8px rgba(13,31,60,0.10)' : 'none',
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: '#FDE8E3', border: '1px solid rgba(232,86,58,0.25)',
+              borderRadius: 9, padding: '12px 15px', marginBottom: 20,
+              fontSize: 13.5, color: '#C0392B', display: 'flex', gap: 8, alignItems: 'flex-start',
+            }}>
+              <span style={{ flexShrink: 0, marginTop: 1 }}>⚠</span>
+              {error}
+            </div>
+          )}
+
+          {/* ── EMAIL & PASSWORD FORM ── */}
+          {tab === 'password' && (
+            <form onSubmit={handleSignIn}>
+              <div className="form-group">
+                <label className="form-label">Email Address</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  placeholder="you@organisation.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label className="form-label" style={{ margin: 0 }}>Password</label>
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', fontSize: 12.5, color: '#1BBFB0', cursor: 'pointer', fontWeight: 500, padding: 0, fontFamily: 'inherit' }}
+                    onClick={() => switchTab('magic')}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn btn-teal"
+                disabled={submitting}
+                style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}
+              >
+                {submitting ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Signing in…
+                  </span>
+                ) : 'Sign In →'}
+              </button>
+            </form>
+          )}
+
+          {/* ── MAGIC LINK FORM ── */}
+          {tab === 'magic' && !magicSent && (
+            <form onSubmit={handleMagicLink}>
+              <div className="form-group">
+                <label className="form-label">Email Address</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  placeholder="you@organisation.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+              <p style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.65, marginBottom: 20 }}>
+                We'll send a secure, one-click sign-in link to your email. No password needed.
+              </p>
+              <button
+                type="submit"
+                className="btn btn-teal"
+                disabled={submitting}
+                style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
+              >
+                {submitting ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Sending…
+                  </span>
+                ) : 'Send Magic Link →'}
+              </button>
+            </form>
+          )}
+
+          {/* Magic link success */}
+          {tab === 'magic' && magicSent && (
+            <div>
+              <div style={{
+                background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)',
+                borderRadius: 12, padding: '20px 20px', marginBottom: 20, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>✉️</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>
+                  Check your inbox
+                </div>
+                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>
+                  A sign-in link has been sent to<br />
+                  <strong style={{ color: '#0D1F3C' }}>{email}</strong>.<br />
+                  Click the link to continue.
+                </div>
+              </div>
+              <button
+                className="btn btn-outline"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => { setMagicSent(false); setEmail('') }}
+              >
+                Use a different email
+              </button>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid #E2E8F0', textAlign: 'center' }}>
+            <div style={{ fontSize: 12.5, color: '#8A9BB0', lineHeight: 1.75 }}>
+              Need access? Contact{' '}
+              <a href="mailto:support@africaia.com" style={{ color: '#1BBFB0', textDecoration: 'none', fontWeight: 500 }}>
+                AIA Africa
+              </a>
+              .<br />
+              Accounts are created by your administrator.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
