@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import AdminLayout from './AdminLayout'
 import { useAdminData } from '../../hooks/useAdminData'
 import { useToast } from '../../components/Toast'
@@ -45,10 +46,11 @@ function Modal({ onClose, children }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal">{children}</div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

@@ -11,7 +11,7 @@ export function useAdminData() {
     try {
       const { data, error: err } = await supabase
         .from('profiles')
-        .select('*, organisations ( id, name )')
+        .select('*, organisations(id, name)')
         .order('created_at', { ascending: false })
       if (err) throw err
       setUsers(
