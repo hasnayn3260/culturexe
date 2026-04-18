@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth'
 
 const ROLE_REDIRECTS = {
   consultant: '/app/dashboard',
+  superadmin: '/app/dashboard',
   client:     '/client/dashboard',
   employee:   '/assess',
 }
@@ -28,16 +29,26 @@ function LoadingScreen() {
   )
 }
 
+// requiredRole accepts a string or an array of strings.
+// superadmin implicitly satisfies any 'consultant' requirement.
 export default function ProtectedRoute({ children, requiredRole }) {
   const { user, role, loading } = useAuth()
 
   if (loading) return <LoadingScreen />
+  if (!user)   return <Navigate to="/login" replace />
 
-  if (!user) return <Navigate to="/login" replace />
+  if (requiredRole) {
+    const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
 
-  if (requiredRole && role !== requiredRole) {
-    const redirect = role ? (ROLE_REDIRECTS[role] || '/login') : '/login'
-    return <Navigate to={redirect} replace />
+    // superadmin can access all consultant routes
+    const effective = role === 'superadmin' && allowed.includes('consultant')
+      ? [...allowed, 'superadmin']
+      : allowed
+
+    if (!effective.includes(role)) {
+      const redirect = role ? (ROLE_REDIRECTS[role] || '/login') : '/login'
+      return <Navigate to={redirect} replace />
+    }
   }
 
   return children

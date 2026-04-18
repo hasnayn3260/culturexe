@@ -5,6 +5,12 @@ import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 're
 import ProtectedRoute from './components/ProtectedRoute'
 import { useAuth } from './hooks/useAuth'
 
+// Toast
+import { ToastProvider } from './components/Toast'
+
+// Admin pages
+import UserManagement from './pages/admin/UserManagement'
+
 // Public pages
 import Home          from './pages/Home'
 import Login         from './pages/Login'
@@ -124,6 +130,13 @@ const Sidebar = () => {
         <div className="nav-section">Admin</div>
         <NavLink to="/app/invite"   className={navItem}><span className="nav-icon">✉️</span> Invite Employees</NavLink>
         <NavLink to="/app/settings" className={navItem}><span className="nav-icon">⚙</span> Settings</NavLink>
+
+        {profile?.role === 'superadmin' && (
+          <>
+            <div className="nav-section">Super Admin</div>
+            <NavLink to="/app/admin/users" className={navItem}><span className="nav-icon">👥</span> User Management</NavLink>
+          </>
+        )}
       </nav>
 
       <div className="sidebar-footer">
@@ -141,16 +154,18 @@ const Topbar = () => {
   const location = useLocation()
   const { profile, signOut } = useAuth()
   const titles = {
-    '/app/dashboard':   'Dashboard',
-    '/app/clients':     'Client Orgs',
-    '/app/assessments': 'Assessments',
-    '/app/preview':     'Employee Preview',
-    '/app/report':      'Insights Report',
-    '/app/model':       'CultureXe Model',
-    '/app/invite':      'Invite Employees',
-    '/app/settings':    'Settings',
+    '/app/dashboard':      'Dashboard',
+    '/app/clients':        'Client Orgs',
+    '/app/assessments':    'Assessments',
+    '/app/preview':        'Employee Preview',
+    '/app/report':         'Insights Report',
+    '/app/model':          'CultureXe Model',
+    '/app/invite':         'Invite Employees',
+    '/app/settings':       'Settings',
+    '/app/admin/users':    'User Management',
   }
-  const title = titles[location.pathname] || 'CultureXe'
+  const title   = titles[location.pathname] || 'CultureXe'
+  const isAdmin = location.pathname.startsWith('/app/admin')
   const initials = profile?.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : ''
@@ -160,6 +175,11 @@ const Topbar = () => {
     <div className="topbar">
       <div className="page-title">{title}</div>
       <div className="topbar-right">
+        {isAdmin && (
+          <span className="badge" style={{ background: 'var(--coral-light)', color: 'var(--coral)', fontWeight: 600 }}>
+            ⬡ Admin Panel
+          </span>
+        )}
         <span className="badge badge-teal">● Platform Live</span>
         <div style={{ fontSize: '13px', color: 'var(--text2)', fontWeight: 500 }}>{displayName}</div>
         <div
@@ -191,6 +211,11 @@ const PortalShell = () => (
         <Route path="model"           element={<CultureXeModel />} />
         <Route path="invite"          element={<InviteEmployees />} />
         <Route path="settings"        element={<Settings />} />
+        <Route path="admin/users"     element={
+          <ProtectedRoute requiredRole="superadmin">
+            <UserManagement />
+          </ProtectedRoute>
+        } />
       </Routes>
     </div>
   </div>
@@ -211,15 +236,16 @@ const ClientPortalShell = () => (
 // ── APP ─────────────────────────────────────────────────
 export default function App() {
   return (
+    <ToastProvider>
     <BrowserRouter>
       <Routes>
         {/* Public */}
         <Route path="/"      element={<Home />} />
         <Route path="/login" element={<Login />} />
 
-        {/* Consultant portal — requires consultant role */}
+        {/* Consultant portal — consultants and superadmins */}
         <Route path="/app/*" element={
-          <ProtectedRoute requiredRole="consultant">
+          <ProtectedRoute requiredRole={['consultant', 'superadmin']}>
             <PortalShell />
           </ProtectedRoute>
         } />
@@ -235,5 +261,6 @@ export default function App() {
         <Route path="/assess/:token" element={<Assessment />} />
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   )
 }
