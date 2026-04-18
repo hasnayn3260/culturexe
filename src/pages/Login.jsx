@@ -130,7 +130,7 @@ export default function Login() {
             <span style={{ color: '#1BBFB0' }}>Xe</span>
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: '3px', textTransform: 'uppercase', marginBottom: 32 }}>
-            by AIA Africa
+            by Africa International Advisors
           </div>
 
           <div style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.52)', lineHeight: 1.8, maxWidth: 340, margin: '0 auto', marginBottom: 44 }}>
@@ -179,7 +179,7 @@ export default function Login() {
             <div style={{ fontWeight: 800, fontSize: 20, color: '#0D1F3C', letterSpacing: '-0.3px' }}>
               Culture<span style={{ color: '#1BBFB0' }}>Xe</span>
             </div>
-            <div style={{ fontSize: 11, color: '#8A9BB0', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 4 }}>by AIA Africa</div>
+            <div style={{ fontSize: 11, color: '#8A9BB0', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 4 }}>by Africa International Advisors</div>
           </div>
 
           {/* Small logo — visible on desktop */}
@@ -357,7 +357,7 @@ export default function Login() {
             <div style={{ fontSize: 12.5, color: '#8A9BB0', lineHeight: 1.75 }}>
               Need access? Contact{' '}
               <a href="mailto:support@africaia.com" style={{ color: '#1BBFB0', textDecoration: 'none', fontWeight: 500 }}>
-                AIA Africa
+                Africa International Advisors
               </a>
               .<br />
               Accounts are created by your administrator.

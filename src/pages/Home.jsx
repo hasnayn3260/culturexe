@@ -34,12 +34,12 @@ const steps = [
   },
   {
     num: '02', icon: '◎', title: 'Analyse',
-    desc: 'The CultureXe Intelligence Engine scores all 8 dimensions, surfaces patterns, and benchmarks results against the AIA Africa peer group.',
+    desc: 'The CultureXe Intelligence Engine scores all 8 dimensions, surfaces patterns, and benchmarks results against the Africa International Advisors peer group.',
     color: '#3A8FC4', bg: 'linear-gradient(135deg, #EAF4FB 0%, #EEF7FC 100%)',
   },
   {
     num: '03', icon: '★', title: 'Act',
-    desc: 'AIA Africa consultants deliver a full Insights Report with narrative analysis, risk flags, and a prioritised intervention roadmap.',
+    desc: 'Africa International Advisors consultants deliver a full Insights Report with narrative analysis, risk flags, and a prioritised intervention roadmap.',
     color: '#C9B882', bg: 'linear-gradient(135deg, #FAF6EC 0%, #FEFBF2 100%)',
   },
 ]
@@ -194,7 +194,7 @@ export default function Home() {
               <span style={{ color: '#1BBFB0' }}>Xe</span>
             </div>
             <div style={{ fontSize: 9, color: 'rgba(13,31,60,0.35)', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 3 }}>
-              by AIA Africa
+              by Africa International Advisors
             </div>
           </div>
         </Link>
@@ -340,7 +340,7 @@ export default function Home() {
               organisation truly operates — beyond the org chart.
             </p>
             <p style={{ fontSize: 15.5, color: '#4A6380', lineHeight: 1.82 }}>
-              Built by AIA Africa's organisational psychologists and culture practitioners, CultureXe
+              Built by Africa International Advisors' organisational psychologists and culture practitioners, CultureXe
               is contextualised for the African corporate environment — where culture complexity and
               stakeholder diversity are unique and often underserved by global tools.
             </p>
@@ -350,7 +350,7 @@ export default function Home() {
             {[
               { icon: '⬡', title: '8-Dimension Framework', color: '#1BBFB0', desc: 'A proprietary culture model covering Purpose, Leadership, Innovation, Collaboration, Accountability, Inclusion, Learning, and Customer orientation.' },
               { icon: '◎', title: 'AI-Powered Insights', color: '#3A8FC4', desc: 'Pattern recognition across hundreds of responses surfaces trends, risks, and opportunities your team might otherwise miss.' },
-              { icon: '★', title: 'Consultant-Led', color: '#C9B882', desc: "AIA Africa's expertise is baked into every report — from interpretation frameworks to intervention recommendations." },
+              { icon: '★', title: 'Consultant-Led', color: '#C9B882', desc: "Africa International Advisors' expertise is baked into every report — from interpretation frameworks to intervention recommendations." },
             ].map(f => (
               <div key={f.title} style={{
                 background: 'white', borderRadius: 16, border: '1px solid #E2E8F0',
@@ -548,7 +548,7 @@ export default function Home() {
               </div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.36)', lineHeight: 1.75, maxWidth: 250 }}>
                 Culture intelligence for Africa.<br />
-                Built by AIA Africa — empowering consultants and organisations to understand and shape their culture.
+                Built by Africa International Advisors — empowering consultants and organisations to understand and shape their culture.
               </div>
             </div>
 
@@ -578,7 +578,7 @@ export default function Home() {
                 background: 'rgba(27,191,176,0.10)', border: '1px solid rgba(27,191,176,0.22)',
                 borderRadius: 12, padding: '12px 16px', marginBottom: 16,
               }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#1BBFB0' }}>AIA Africa</span>
+                <span style={{ fontWeight: 700, fontSize: 13, color: '#1BBFB0' }}>Africa International Advisors</span>
                 <span style={{ width: 1, height: 14, background: 'rgba(27,191,176,0.3)', display: 'inline-block' }} />
                 <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>Consultant Portal</span>
               </div>
@@ -590,7 +590,7 @@ export default function Home() {
 
           <div className="home-footer-bottom" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 26, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>
-              © 2026 CultureXe · AIA Africa · All rights reserved.
+              © 2026 CultureXe · Africa International Advisors · All rights reserved.
             </div>
             <div style={{ display: 'flex', gap: 20 }}>
               {['Privacy Policy', 'Terms of Service'].map(l => (

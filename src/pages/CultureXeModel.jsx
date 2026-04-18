@@ -14,7 +14,7 @@ export default function CultureXeModel() {
         <div className="hero-title">The CultureXe Model</div>
         <div className="hero-sub">
           Eight evidence-based culture dimensions that together paint a complete picture of organisational health.
-          Developed by AIA Africa for the African corporate context.
+          Developed by Africa International Advisors for the African corporate context.
         </div>
       </div>
 

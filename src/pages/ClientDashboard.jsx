@@ -66,7 +66,7 @@ export default function ClientDashboard() {
           </div>
           <div style={{ fontSize: 14, color: '#8A9BB0', lineHeight: 1.75, maxWidth: 400, margin: '0 auto' }}>
             Your organisation's culture insights, dimension scores, and historical reports
-            will be accessible here. Contact your AIA Africa consultant to get started.
+            will be accessible here. Contact your Africa International Advisors consultant to get started.
           </div>
         </div>
       </div>

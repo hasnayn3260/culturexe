@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 const initialOrg = {
-  name: 'AIA Africa',
+  name: 'Africa International Advisors',
   website: 'https://africaia.com',
   country: 'South Africa',
   timezone: 'Africa/Johannesburg',
@@ -52,7 +52,7 @@ export default function Settings() {
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>Your consulting organisation details displayed on reports.</div>
             </div>
             <div className="aia-badge" style={{ background: 'var(--teal-light)', border: '1px solid var(--teal)', padding: '8px 14px' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#0A8A7E' }}>AIA Africa</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#0A8A7E' }}>Africa International Advisors</div>
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>Consultant Portal</div>
             </div>
           </div>

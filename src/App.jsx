@@ -103,7 +103,7 @@ const Sidebar = () => {
             <span className="logo-cx">Culture</span>
             <span className="logo-xe">Xe</span>
           </div>
-          <div className="logo-sub">by AIA Africa</div>
+          <div className="logo-sub">by Africa International Advisors</div>
         </div>
       </div>
 
@@ -125,7 +125,7 @@ const Sidebar = () => {
 
       <div className="sidebar-footer">
         <div className="aia-badge">
-          <div className="aia-badge-name">AIA Africa</div>
+          <div className="aia-badge-name">Africa International Advisors</div>
           <div className="aia-badge-role">Consultant Portal · Admin</div>
         </div>
       </div>
