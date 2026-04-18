@@ -1,23 +1,4 @@
-/**
- * Supabase Edge Function: create-user
- *
- * DEPLOYMENT INSTRUCTIONS:
- * ─────────────────────────────────────────────────────────────
- * 1. Install Supabase CLI:   brew install supabase/tap/supabase
- * 2. Login:                  supabase login
- * 3. Link project:           supabase link --project-ref <your-project-ref>
- * 4. Deploy this function:   supabase functions deploy create-user
- * 5. Set env var (already available in edge functions):
- *    SUPABASE_SERVICE_ROLE_KEY is automatically injected by Supabase.
- *    SUPABASE_URL and SUPABASE_ANON_KEY are also auto-injected.
- *
- * SQL TO RUN IN SUPABASE SQL EDITOR (one-time setup):
- * ─────────────────────────────────────────────────────────────
- * alter table public.profiles
- *   add column if not exists active boolean default true;
- * ─────────────────────────────────────────────────────────────
- */
-
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
@@ -25,86 +6,108 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-Deno.serve(async (req: Request) => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader) throw new Error('No authorization header')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'No authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
-    // Caller-scoped client — verifies the JWT of the requesting user
-    const callerClient = createClient(
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SERVICE_ROLE_KEY') ?? '',
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    )
+
+    const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } }
     )
 
-    const { data: { user: caller }, error: authError } = await callerClient.auth.getUser()
-    if (authError || !caller) throw new Error('Unauthorized')
+    const { data: { user: requestingUser } } = 
+      await supabaseClient.auth.getUser()
+    
+    if (!requestingUser) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
-    // Verify caller is superadmin
-    const { data: callerProfile } = await callerClient
+    const { data: requestingProfile } = await supabaseAdmin
       .from('profiles')
       .select('role')
-      .eq('id', caller.id)
+      .eq('id', requestingUser.id)
       .single()
 
-    if (callerProfile?.role !== 'superadmin') {
+    if (requestingProfile?.role !== 'superadmin') {
       return new Response(
-        JSON.stringify({ error: 'Forbidden: superadmin access required' }),
+        JSON.stringify({ error: 'Forbidden - superadmin only' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     const { email, full_name, role, org_id } = await req.json()
+
     if (!email || !full_name || !role) {
-      throw new Error('Missing required fields: email, full_name, role')
+      return new Response(
+        JSON.stringify({ error: 'email, full_name and role are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Service-role client — has admin privileges to create auth users
-    const adminClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
-
-    // Invite sends a magic-link email so the new user can set their password
-    const { data: { user: newUser }, error: inviteError } =
-      await adminClient.auth.admin.inviteUserByEmail(email, {
-        data: { full_name, role },
+    const { data: newUser, error: createError } = 
+      await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: 'https://culture-xe.com/login',
+        data: { full_name, role }
       })
 
-    if (inviteError) throw inviteError
-    if (!newUser) throw new Error('User creation failed')
+    if (createError) {
+      return new Response(
+        JSON.stringify({ error: createError.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
-    // Create the profile row linked to the new auth user
-    const { error: profileError } = await adminClient
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
-        id:       newUser.id,
+        id: newUser.user.id,
         email,
         full_name,
         role,
-        org_id:   org_id || null,
-        active:   true,
+        org_id: org_id || null,
+        active: true
       })
 
     if (profileError) {
-      // Clean up the auth user if profile insert fails
-      await adminClient.auth.admin.deleteUser(newUser.id)
-      throw profileError
+      return new Response(
+        JSON.stringify({ error: profileError.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     return new Response(
-      JSON.stringify({ user: newUser }),
+      JSON.stringify({ 
+        success: true, 
+        user: newUser.user,
+        message: `Invite sent to ${email}`
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
-  } catch (err) {
+
+  } catch (error) {
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
 })
