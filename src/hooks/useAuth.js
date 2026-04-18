@@ -8,13 +8,22 @@ export function useAuth() {
 
   async function fetchProfile(userId) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single()
+
+      if (error) {
+        console.error('[useAuth] profile fetch error:', error.message, error)
+        setProfile(null)
+        return
+      }
+
+      console.log('[useAuth] profile fetched:', data)
       setProfile(data ?? null)
-    } catch {
+    } catch (e) {
+      console.error('[useAuth] profile fetch exception:', e)
       setProfile(null)
     }
   }
@@ -22,27 +31,23 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true
 
-    async function init() {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!mounted) return
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
-      if (currentUser) await fetchProfile(currentUser.id)
-      if (mounted) setLoading(false)
-    }
-
-    init()
-
+    // onAuthStateChange fires INITIAL_SESSION immediately on setup —
+    // no need for a separate getSession() call which would race with it.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return
+
+        console.log('[useAuth] auth event:', event, '|', session?.user?.email ?? 'no user')
+
         const currentUser = session?.user ?? null
         setUser(currentUser)
+
         if (currentUser) {
           await fetchProfile(currentUser.id)
         } else {
           setProfile(null)
         }
+
         if (mounted) setLoading(false)
       }
     )
@@ -55,16 +60,26 @@ export function useAuth() {
 
   async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    if (error) {
+      console.error('[useAuth] signIn error:', error.message, error)
+      throw error
+    }
+    console.log('[useAuth] signed in, user:', data.user?.email)
     return data
   }
 
   async function signInWithMagicLink(email) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: `${window.location.origin}/login` },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/login`,
+      },
     })
-    if (error) throw error
+    if (error) {
+      console.error('[useAuth] magic link error:', error.message, error)
+      throw error
+    }
   }
 
   async function signOut() {
