@@ -4,67 +4,47 @@ import supabase from '../lib/supabaseClient'
 export function useAuth() {
   const [user, setUser]       = useState(null)
   const [profile, setProfile] = useState(null)
+  const [role, setRole]       = useState(null)
   const [loading, setLoading] = useState(true)
 
-  async function fetchProfile(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (error) {
-        console.error('[useAuth] profile fetch error:', error.message, error)
-        setProfile(null)
-        return
-      }
-
-      console.log('[useAuth] profile fetched:', data)
-      setProfile(data ?? null)
-    } catch (e) {
-      console.error('[useAuth] profile fetch exception:', e)
-      setProfile(null)
-    }
-  }
-
   useEffect(() => {
-    let mounted = true
+    // If there is no session, stop loading immediately
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) setLoading(false)
+    })
 
-    // onAuthStateChange fires INITIAL_SESSION immediately on setup —
-    // no need for a separate getSession() call which would race with it.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return
+        console.log('Auth event:', event, session)
 
-        console.log('[useAuth] auth event:', event, '|', session?.user?.email ?? 'no user')
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
 
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
+          console.log('Profile fetched:', profile)
 
-        if (currentUser) {
-          await fetchProfile(currentUser.id)
+          setUser(session.user)
+          setProfile(profile)
+          setRole(profile?.role || null)
         } else {
+          setUser(null)
           setProfile(null)
+          setRole(null)
         }
 
-        if (mounted) setLoading(false)
+        setLoading(false)
       }
     )
 
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
   async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      console.error('[useAuth] signIn error:', error.message, error)
-      throw error
-    }
-    console.log('[useAuth] signed in, user:', data.user?.email)
+    if (error) throw error
     return data
   }
 
@@ -73,25 +53,23 @@ export function useAuth() {
       email,
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: `${window.location.origin}/login`,
+        emailRedirectTo: window.location.origin,
       },
     })
-    if (error) {
-      console.error('[useAuth] magic link error:', error.message, error)
-      throw error
-    }
+    if (error) throw error
   }
 
   async function signOut() {
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
+    setRole(null)
   }
 
   return {
     user,
     profile,
-    role: profile?.role ?? null,
+    role,
     loading,
     signIn,
     signInWithMagicLink,
