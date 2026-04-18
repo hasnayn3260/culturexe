@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const ROLE_REDIRECTS = {
+  superadmin: '/app/dashboard',
   consultant: '/app/dashboard',
   client:     '/client/dashboard',
   employee:   '/assess',
@@ -46,7 +47,8 @@ export default function Login() {
   // Redirect once role is known (handles both fresh login and returning sessions)
   useEffect(() => {
     if (!authLoading && user && role) {
-      navigate(ROLE_REDIRECTS[role] || '/login', { replace: true })
+      const destination = ROLE_REDIRECTS[role] || '/app/dashboard'
+      navigate(destination, { replace: true })
     }
   }, [authLoading, user, role, navigate])
 

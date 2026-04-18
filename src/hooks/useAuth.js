@@ -15,16 +15,12 @@ export function useAuth() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth event:', event, session)
-
         if (session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .single()
-
-          console.log('Profile fetched:', profile)
 
           setUser(session.user)
           setProfile(profile)
