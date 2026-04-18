@@ -19,8 +19,11 @@ import CultureXeModel from './pages/CultureXeModel'
 import InviteEmployees from './pages/InviteEmployees'
 import Settings       from './pages/Settings'
 
-// Client portal pages
-import ClientDashboard from './pages/ClientDashboard'
+// Client portal layout + pages
+import ClientShell       from './layouts/ClientShell'
+import ClientDashboard   from './pages/client/ClientDashboard'
+import ClientAssessments from './pages/client/ClientAssessments'
+import ClientReports     from './pages/client/ClientReports'
 
 // Public assessment page
 import Assessment from './pages/Assessment'
@@ -193,12 +196,16 @@ const PortalShell = () => (
   </div>
 )
 
-// ── CLIENT PORTAL SHELL (placeholder) ──────────────────
-const ClientShell = () => (
-  <Routes>
-    <Route index               element={<Navigate to="dashboard" replace />} />
-    <Route path="dashboard"    element={<ClientDashboard />} />
-  </Routes>
+// ── CLIENT PORTAL SHELL ────────────────────────────────
+const ClientPortalShell = () => (
+  <ClientShell>
+    <Routes>
+      <Route index                  element={<Navigate to="dashboard" replace />} />
+      <Route path="dashboard"       element={<ClientDashboard />} />
+      <Route path="assessments"     element={<ClientAssessments />} />
+      <Route path="reports"         element={<ClientReports />} />
+    </Routes>
+  </ClientShell>
 )
 
 // ── APP ─────────────────────────────────────────────────
@@ -220,7 +227,7 @@ export default function App() {
         {/* Client portal — requires client role */}
         <Route path="/client/*" element={
           <ProtectedRoute requiredRole="client">
-            <ClientShell />
+            <ClientPortalShell />
           </ProtectedRoute>
         } />
 
