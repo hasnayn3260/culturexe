@@ -2,45 +2,55 @@ import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
 
 export function useAdminData() {
-  const [users, setUsers]               = useState([])
-  const [organisations, setOrgs]         = useState([])
-  const [loading, setLoading]            = useState(true)
-  const [error, setError]                = useState(null)
+  const [users, setUsers]       = useState([])
+  const [organisations, setOrgs] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
 
   const fetchUsers = useCallback(async () => {
-    try {
-      const { data, error: err } = await supabase
+    // Try with org join first; fall back to plain select if join fails
+    const { data, error: err } = await supabase
+      .from('profiles')
+      .select('*, organisations(id, name)')
+      .order('created_at', { ascending: false })
+
+    if (err) {
+      const { data: plain, error: err2 } = await supabase
         .from('profiles')
-        .select('*, organisations(id, name)')
+        .select('*')
         .order('created_at', { ascending: false })
-      if (err) throw err
-      setUsers(
-        (data || []).map(u => ({
-          ...u,
-          org_name: u.organisations?.name || null,
-        }))
-      )
-    } catch (e) {
-      setError(e.message)
+      if (err2) throw new Error(err2.message)
+      setUsers(plain || [])
+      return
     }
+
+    setUsers(
+      (data || []).map(u => ({
+        ...u,
+        org_name: u.organisations?.name || null,
+      }))
+    )
   }, [])
 
   const fetchOrgs = useCallback(async () => {
-    try {
-      const { data, error: err } = await supabase
-        .from('organisations')
-        .select('id, name')
-        .order('name')
-      if (err) throw err
-      setOrgs(data || [])
-    } catch (e) {
-      setError(e.message)
-    }
+    const { data, error: err } = await supabase
+      .from('organisations')
+      .select('id, name')
+      .order('name')
+    if (err) throw new Error(err.message)
+    setOrgs(data || [])
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
-    Promise.all([fetchUsers(), fetchOrgs()]).finally(() => setLoading(false))
+    setError(null)
+
+    Promise.all([fetchUsers(), fetchOrgs()])
+      .catch(e => { if (!cancelled) setError(e.message) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
   }, [fetchUsers, fetchOrgs])
 
   async function createUser(userData) {
@@ -69,7 +79,7 @@ export function useAdminData() {
       .from('profiles')
       .update(updates)
       .eq('id', id)
-    if (err) throw err
+    if (err) throw new Error(err.message)
     await fetchUsers()
   }
 
