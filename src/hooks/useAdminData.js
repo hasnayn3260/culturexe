@@ -43,14 +43,25 @@ export function useAdminData() {
     Promise.all([fetchUsers(), fetchOrgs()]).finally(() => setLoading(false))
   }, [fetchUsers, fetchOrgs])
 
-  async function createUser({ email, full_name, role, org_id }) {
-    const { data, error: err } = await supabase.functions.invoke('create-user', {
-      body: { email, full_name, role, org_id: org_id || null },
-    })
-    if (err) throw err
-    if (data?.error) throw new Error(data.error)
+  async function createUser(userData) {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    const response = await fetch(
+      import.meta.env.VITE_SUPABASE_URL + '/functions/v1/create-user',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + session.access_token,
+        },
+        body: JSON.stringify(userData),
+      }
+    )
+
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error)
     await fetchUsers()
-    return data
+    return result
   }
 
   async function updateUser(id, updates) {
