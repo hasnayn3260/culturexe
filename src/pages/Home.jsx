@@ -246,7 +246,7 @@ export default function Home() {
             </div>
 
             <h1 className="home-hero-h1" style={{ fontSize: 54, fontWeight: 800, lineHeight: 1.08, color: 'white', marginBottom: 24, letterSpacing: '-1.5px' }}>
-              Understand your culture.<br />
+              Test Brandon<br />
               <span style={{ background: 'linear-gradient(90deg, #1BBFB0 0%, #5AADD4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
                 Transform your organisation.
               </span>
