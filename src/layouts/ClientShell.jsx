@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import supabase from '../lib/supabaseClient'
 
@@ -89,6 +89,7 @@ function ClientSidebar({ orgName }) {
 
 function ClientTopbar({ orgName }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { profile, signOut } = useAuth()
 
   const titles = {
@@ -107,6 +108,15 @@ function ClientTopbar({ orgName }) {
     <div className="topbar">
       <div className="page-title">{title}</div>
       <div className="topbar-right">
+        {profile?.role === 'superadmin' && (
+          <button
+            onClick={() => navigate('/app/dashboard')}
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 12, padding: '5px 12px' }}
+          >
+            ← Consultant View
+          </button>
+        )}
         {orgName && <span className="badge badge-teal">{orgName}</span>}
         <div style={{ fontSize: '13px', color: 'var(--text2)', fontWeight: 500 }}>{displayName}</div>
         <div

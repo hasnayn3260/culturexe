@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useClientData } from '../../hooks/useClientData'
+import { dimensions } from '../../data/dimensions'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -8,6 +9,10 @@ function getGreeting() {
   if (h >= 12 && h < 17) return 'Good afternoon'
   if (h >= 17 && h < 21) return 'Good evening'
   return 'Good night'
+}
+
+function todayStr() {
+  return new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function fmtDate(d) {
@@ -20,17 +25,11 @@ function daysRemaining(closeDate) {
   return Math.ceil((new Date(closeDate) - new Date()) / 86400000)
 }
 
-function completionColor(rate) {
-  if (rate >= 70) return 'var(--teal)'
-  if (rate >= 40) return 'var(--gold2)'
-  return 'var(--coral)'
-}
-
 function scoreColor(s) {
-  if (s >= 75) return 'var(--teal)'
-  if (s >= 60) return 'var(--blue)'
-  if (s >= 45) return 'var(--gold2)'
-  return 'var(--coral)'
+  if (s >= 75) return '#1BBFB0'
+  if (s >= 60) return '#3A8FC4'
+  if (s >= 45) return '#C9B882'
+  return '#E8563A'
 }
 
 function scoreLabel(s) {
@@ -40,10 +39,16 @@ function scoreLabel(s) {
   return 'At Risk'
 }
 
+function completionColor(rate) {
+  if (rate >= 70) return '#1BBFB0'
+  if (rate >= 40) return '#C9B882'
+  return '#E8563A'
+}
+
 function Spinner() {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-      <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid rgba(27,191,176,0.18)', borderTopColor: 'var(--teal)', animation: 'cd-spin 0.8s linear infinite' }} />
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid rgba(27,191,176,0.18)', borderTopColor: '#1BBFB0', animation: 'cd-spin 0.8s linear infinite' }} />
       <style>{`@keyframes cd-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
@@ -56,82 +61,95 @@ export default function ClientDashboard() {
   if (authLoading || loading) return <div className="content"><Spinner /></div>
 
   const firstName        = profile?.full_name?.split(' ')[0] || ''
-  const orgName          = org?.name || ''
-  const totalAssessments = assessments.length
-  const activeList       = assessments.filter(a => a.status === 'active')
-  const totalResponses   = assessments.reduce((s, a) => s + (a.total_responses || 0), 0)
-  const activeAssessment = activeList[0] || null
+  const orgName          = org?.name || 'Your Organisation'
+  const activeAssessment = assessments.find(a => a.status === 'active') || null
   const latestReport     = reports[0] || null
-  const latestReportAssessment = latestReport
-    ? assessments.find(a => a.id === latestReport.assessment_id)
-    : null
-  const days = activeAssessment ? daysRemaining(activeAssessment.close_date) : null
+  const latestAssessment = latestReport ? assessments.find(a => a.id === latestReport.assessment_id) : null
+  const days             = activeAssessment ? daysRemaining(activeAssessment.close_date) : null
+  const reportScores     = latestReport?.scores && typeof latestReport.scores === 'object' ? latestReport.scores : null
 
-  const avgScore = latestReport?.scores
-    ? Math.round(Object.values(latestReport.scores).reduce((a, b) => a + b, 0) / Object.values(latestReport.scores).length)
+  const avgScore = reportScores
+    ? Math.round(Object.values(reportScores).filter(v => typeof v === 'number').reduce((a, b) => a + b, 0) / Object.values(reportScores).filter(v => typeof v === 'number').length)
     : null
 
   return (
     <div className="content">
-      {/* Hero */}
-      <div className="page-hero" style={{ marginBottom: 28 }}>
-        <div className="hero-title">
-          {authLoading || !profile?.full_name
-            ? 'Welcome ✦'
-            : `${getGreeting()}, ${firstName} ✦`}
-        </div>
-        <div className="hero-sub">
-          {orgName ? `${orgName} Culture Intelligence Portal` : 'Culture Intelligence Portal'}
-        </div>
-        <div className="hero-fluid-pos">
-          <svg width="90" height="90" viewBox="0 0 100 100" fill="none" opacity="0.18">
-            <path d="M50 50 C50 50 20 35 18 20 C16 5 30 2 40 10 C50 18 50 50 50 50Z" fill="#1BBFB0"/>
-            <path d="M50 50 C50 50 15 55 12 70 C9 85 22 92 35 85 C48 78 50 50 50 50Z" fill="#3A8FC4"/>
-            <path d="M50 50 C50 50 80 35 82 20 C84 5 70 2 60 10 C50 18 50 50 50 50Z" fill="#C9B882"/>
-            <path d="M50 50 C50 50 85 55 88 70 C91 85 78 92 65 85 C52 78 50 50 50 50Z" fill="#1BBFB0"/>
-          </svg>
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="grid-4 mb-28">
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--blue)' }} />
-          <div className="stat-label">Total Assessments</div>
-          <div className="stat-value">{totalAssessments}</div>
-          <div className="stat-sub">All time</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--teal)' }} />
-          <div className="stat-label">Active Now</div>
-          <div className="stat-value" style={{ color: activeList.length > 0 ? 'var(--teal)' : 'var(--navy)' }}>
-            {activeList.length}
+      {/* ── ORG BANNER ───────────────────────────────────── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0D1F3C 0%, #1B3A6B 50%, #0E4A7A 100%)',
+        borderRadius: 16, padding: '36px 36px 32px', marginBottom: 24,
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', top: -50, right: -30, width: 220, height: 220, background: 'radial-gradient(circle, rgba(27,191,176,0.14) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: -40, left: 60, width: 160, height: 160, background: 'radial-gradient(circle, rgba(90,176,208,0.09) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, letterSpacing: '2.5px', textTransform: 'uppercase', marginBottom: 10 }}>
+            Culture Intelligence Portal
           </div>
-          <div className="stat-sub">{activeList.length > 0 ? 'In progress' : 'None running'}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--gold)' }} />
-          <div className="stat-label">Total Responses</div>
-          <div className="stat-value">{totalResponses}</div>
-          <div className="stat-sub">Across all assessments</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-accent" style={{ background: 'var(--navy)' }} />
-          <div className="stat-label">Reports Available</div>
-          <div className="stat-value">{reports.length}</div>
-          <div className="stat-sub">{reports.length > 0 ? 'Ready to view' : 'None released yet'}</div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: 'white', letterSpacing: '-0.5px', marginBottom: 8 }}>
+            {orgName}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+            {getGreeting()}, {firstName} · {todayStr()}
+          </div>
         </div>
       </div>
 
+      {/* ── CULTURE HEALTH + ACTIVE ASSESSMENT ──────────── */}
       <div className="grid-2 mb-28">
+
+        {/* Culture health score */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '36px 24px', textAlign: 'center', minHeight: 260 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 22 }}>
+            Culture Health Score
+          </div>
+          {avgScore != null ? (
+            <>
+              <div style={{
+                width: 130, height: 130, borderRadius: '50%',
+                border: `6px solid ${scoreColor(avgScore)}`,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 18,
+                boxShadow: `0 0 40px ${scoreColor(avgScore)}28, inset 0 0 0 1px ${scoreColor(avgScore)}20`,
+              }}>
+                <div style={{ fontSize: 42, fontWeight: 800, color: scoreColor(avgScore), lineHeight: 1 }}>{avgScore}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '1px', marginTop: 3 }}>/ 100</div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 17, color: scoreColor(avgScore), marginBottom: 6 }}>
+                {scoreLabel(avgScore)} Culture
+              </div>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.65 }}>
+                Average across all 8 dimensions<br />
+                <span style={{ color: 'var(--text3)', fontSize: 12 }}>
+                  {latestAssessment?.name || 'Latest assessment'}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{
+                width: 100, height: 100, borderRadius: '50%',
+                border: '4px dashed rgba(27,191,176,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18,
+              }}>
+                <span style={{ fontSize: 30, opacity: 0.5 }}>📊</span>
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--navy)', marginBottom: 8 }}>Score pending</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.65 }}>
+                Your culture score appears here<br />once a report has been released.
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Active assessment */}
         <div className="card">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', marginBottom: 16 }}>
-            Active Assessment
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', marginBottom: 16 }}>Active Assessment</div>
           {activeAssessment ? (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--navy)', marginBottom: 4 }}>
                     {activeAssessment.name}
@@ -139,12 +157,12 @@ export default function ClientDashboard() {
                   <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                     Closes {fmtDate(activeAssessment.close_date)}
                     {days != null && days > 0 && (
-                      <span style={{ marginLeft: 8, color: days <= 7 ? 'var(--coral)' : 'var(--text3)' }}>
-                        · {days} day{days !== 1 ? 's' : ''} remaining
+                      <span style={{ marginLeft: 7, color: days <= 7 ? 'var(--coral)' : 'var(--text3)' }}>
+                        · {days} day{days !== 1 ? 's' : ''} left
                       </span>
                     )}
                     {days != null && days <= 0 && (
-                      <span style={{ marginLeft: 8, color: 'var(--coral)' }}>· Closing today</span>
+                      <span style={{ marginLeft: 7, color: 'var(--coral)' }}>· Closing today</span>
                     )}
                   </div>
                 </div>
@@ -152,135 +170,127 @@ export default function ClientDashboard() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', marginBottom: 7 }}>
-                  <span>{activeAssessment.total_responses} of {activeAssessment.total_invited} employees responded</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text2)', marginBottom: 8 }}>
+                  <span>{activeAssessment.total_responses} of {activeAssessment.total_invited} responded</span>
                   <span style={{ fontWeight: 700, color: completionColor(activeAssessment.completion_rate) }}>
                     {activeAssessment.completion_rate}%
                   </span>
                 </div>
                 <div style={{ height: 10, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden' }}>
                   <div style={{
-                    height: '100%',
+                    height: '100%', borderRadius: 99, transition: 'width 0.6s ease',
                     width: `${activeAssessment.completion_rate}%`,
                     background: completionColor(activeAssessment.completion_rate),
-                    borderRadius: 99, transition: 'width 0.6s ease',
                   }} />
                 </div>
               </div>
 
-              <div style={{ fontSize: 12.5, color: 'var(--text2)', background: 'var(--bg)', borderRadius: 8, padding: '10px 13px' }}>
+              <div style={{ fontSize: 12.5, color: 'var(--text2)', background: 'var(--bg)', borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
                 {activeAssessment.total_invited === 0
                   ? 'No employees have been invited yet.'
                   : activeAssessment.completion_rate >= 70
-                  ? '✓ Great response rate — on track for a statistically reliable report.'
+                  ? '✓ Great response rate — on track for a reliable report.'
                   : activeAssessment.completion_rate >= 40
                   ? 'Moderate response rate. A reminder to employees may help.'
                   : 'Low response rate. Consider sending a reminder to improve data quality.'}
               </div>
             </>
           ) : (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text3)' }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
-              <div style={{ fontSize: 13 }}>No active assessment at the moment.</div>
-              <div style={{ fontSize: 12, marginTop: 6 }}>Contact Africa International Advisors to launch one.</div>
-            </div>
-          )}
-        </div>
-
-        {/* Latest report */}
-        <div className="card">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', marginBottom: 16 }}>
-            Latest Report
-          </div>
-          {latestReport ? (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)', marginBottom: 3 }}>
-                  {latestReportAssessment?.name || 'Culture Assessment'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-                  Released {fmtDate(latestReport.released_at || latestReport.created_at)}
-                </div>
-              </div>
-              {avgScore != null && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '20px 0' }}>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: '50%',
-                    border: `4px solid ${scoreColor(avgScore)}`,
-                    display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <div style={{ fontSize: 26, fontWeight: 800, color: scoreColor(avgScore), lineHeight: 1 }}>{avgScore}</div>
-                    <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '1px' }}>score</div>
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: scoreColor(avgScore) }}>{scoreLabel(avgScore)} Culture</div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4, lineHeight: 1.5 }}>
-                      Overall score across<br />all 8 dimensions
-                    </div>
-                  </div>
-                </div>
-              )}
-              <Link to="/client/reports" style={{ textDecoration: 'none' }}>
-                <button className="btn btn-teal btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
-                  View Full Report →
-                </button>
-              </Link>
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '28px 16px' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: '50%',
-                border: '2px dashed rgba(27,191,176,0.3)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}>
-                <span style={{ fontSize: 22 }}>📊</span>
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)', marginBottom: 8 }}>
-                Report in preparation
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65 }}>
-                Your report is being prepared by<br />
-                Africa International Advisors.<br />
-                You'll be notified when it's ready.
+            <div style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--text3)' }}>
+              <div style={{ fontSize: 36, marginBottom: 14 }}>📋</div>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--navy)', marginBottom: 6 }}>No active assessment</div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.65 }}>
+                Contact Africa International Advisors<br />to launch your next assessment.
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Participation breakdown */}
-      {assessments.length > 0 && (
-        <div className="card">
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', marginBottom: 20 }}>
-            Participation by Assessment
+      {/* ── DIMENSION BREAKDOWN ──────────────────────────── */}
+      {reportScores ? (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="flex-between mb-16">
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)' }}>Culture Dimensions</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="badge badge-teal">Latest report</span>
+              {latestAssessment && (
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>{latestAssessment.name}</span>
+              )}
+            </div>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: 12 }}>
+            {dimensions.map(dim => {
+              const score = reportScores[dim.id]
+              if (score == null) return null
+              return (
+                <div key={dim.id} style={{
+                  padding: '14px 16px', background: 'var(--bg)', borderRadius: 10,
+                  borderLeft: `3px solid ${dim.accentColor}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>{dim.icon} {dim.name}</span>
+                    <span style={{ fontSize: 16, fontWeight: 800, color: scoreColor(score) }}>{score}</span>
+                  </div>
+                  <div style={{ height: 6, background: 'rgba(0,0,0,0.07)', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${score}%`, background: dim.accentColor, borderRadius: 99, transition: 'width 0.6s ease' }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : assessments.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--navy)', marginBottom: 20 }}>Assessment History</div>
           {assessments.map(a => (
-            <div key={a.id} style={{ marginBottom: 18 }}>
+            <div key={a.id} style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--navy)' }}>{a.name}</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: completionColor(a.completion_rate) }}>
                   {a.total_responses}/{a.total_invited} · {a.completion_rate}%
                 </span>
               </div>
-              <div style={{ height: 8, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${a.completion_rate}%`,
-                  background: completionColor(a.completion_rate),
-                  borderRadius: 99, transition: 'width 0.6s ease',
-                }} />
+              <div style={{ height: 7, background: 'var(--bg)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${a.completion_rate}%`, background: completionColor(a.completion_rate), borderRadius: 99, transition: 'width 0.6s ease' }} />
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* ── REPORT ACCESS ────────────────────────────────── */}
+      {latestReport && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0D1F3C 0%, #0E3462 100%)',
+          borderRadius: 14, padding: '24px 28px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 16,
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', marginBottom: 6 }}>
+              Latest Report Available
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 4 }}>
+              {latestAssessment?.name || 'Culture Assessment Report'}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)' }}>
+              Released {fmtDate(latestReport.released_at || latestReport.created_at)}
+            </div>
+          </div>
+          <Link to="/client/reports">
+            <button className="btn btn-teal" style={{ whiteSpace: 'nowrap' }}>
+              View Full Report →
+            </button>
+          </Link>
+        </div>
+      )}
+
+      {/* Empty state — no assessments at all */}
       {assessments.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: '48px 32px' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '52px 32px' }}>
           <div style={{ fontSize: 44, marginBottom: 16 }}>📋</div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--navy)', marginBottom: 8 }}>No assessments yet</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--navy)', marginBottom: 10 }}>No assessments yet</div>
           <div style={{ fontSize: 13.5, color: 'var(--text2)', maxWidth: 380, margin: '0 auto', lineHeight: 1.7 }}>
             No culture assessments have been launched for your organisation yet.
             Contact Africa International Advisors to get started.

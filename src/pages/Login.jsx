@@ -3,9 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const ROLE_REDIRECTS = {
-  superadmin: '/app/dashboard',
-  consultant: '/app/dashboard',
-  client:     '/client/dashboard',
+  superadmin: '/app',
+  consultant: '/app',
+  client:     '/client',
   employee:   '/assess',
 }
 
@@ -35,19 +35,22 @@ function FluidSVG({ size = 100, id = 'fl' }) {
 
 export default function Login() {
   const navigate = useNavigate()
-  const { user, role, loading: authLoading, signIn, signInWithMagicLink } = useAuth()
+  const { user, role, loading: authLoading, signIn, signInWithMagicLink, signUp } = useAuth()
 
   const [tab, setTab]                 = useState('password')
   const [email, setEmail]             = useState('')
   const [password, setPassword]       = useState('')
+  const [fullName, setFullName]       = useState('')
+  const [confirmPw, setConfirmPw]     = useState('')
   const [submitting, setSubmitting]   = useState(false)
   const [error, setError]             = useState('')
   const [magicSent, setMagicSent]     = useState(false)
+  const [signUpDone, setSignUpDone]   = useState(false)
 
   // Redirect once role is known (handles both fresh login and returning sessions)
   useEffect(() => {
     if (!authLoading && user && role) {
-      const destination = ROLE_REDIRECTS[role] || '/app/dashboard'
+      const destination = ROLE_REDIRECTS[role] || '/app'
       navigate(destination, { replace: true })
     }
   }, [authLoading, user, role, navigate])
@@ -57,6 +60,7 @@ export default function Login() {
     setTab(t)
     setError('')
     setMagicSent(false)
+    setSignUpDone(false)
   }
 
   async function handleSignIn(e) {
@@ -65,7 +69,6 @@ export default function Login() {
     setSubmitting(true)
     try {
       await signIn(email, password)
-      // redirect fires via the useEffect above once role is resolved
     } catch (err) {
       setError(err.message || 'Invalid email or password. Please try again.')
     } finally {
@@ -82,6 +85,27 @@ export default function Login() {
       setMagicSent(true)
     } catch (err) {
       setError(err.message || 'Failed to send magic link. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleSignUp(e) {
+    e.preventDefault()
+    setError('')
+    if (!fullName.trim()) { setError('Please enter your full name.'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (password !== confirmPw) { setError('Passwords do not match.'); return }
+    setSubmitting(true)
+    try {
+      const { data } = await signUp(email, password, fullName.trim())
+      // If Supabase requires email confirmation, user is not auto-logged in
+      if (!data?.session) {
+        setSignUpDone(true)
+      }
+      // If auto-confirmed, useEffect above handles redirect
+    } catch (err) {
+      setError(err.message || 'Could not create account. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -195,10 +219,10 @@ export default function Login() {
           </div>
 
           <h1 style={{ fontSize: 28, fontWeight: 800, color: '#0D1F3C', letterSpacing: '-0.5px', marginBottom: 6 }}>
-            Welcome back
+            {tab === 'signup' ? 'Create account' : 'Welcome back'}
           </h1>
           <p style={{ fontSize: 14, color: '#4A6380', marginBottom: 32, lineHeight: 1.6 }}>
-            Sign in to your CultureXe account.
+            {tab === 'signup' ? 'Join CultureXe — fill in your details below.' : 'Sign in to your CultureXe account.'}
           </p>
 
           {/* Tab switcher */}
@@ -207,8 +231,9 @@ export default function Login() {
             borderRadius: 11, padding: 4, marginBottom: 32, gap: 4,
           }}>
             {[
-              { key: 'password', label: 'Email & Password' },
+              { key: 'password', label: 'Sign In' },
               { key: 'magic',    label: 'Magic Link' },
+              { key: 'signup',   label: 'Sign Up' },
             ].map(t => (
               <button
                 key={t.key}
@@ -354,15 +379,112 @@ export default function Login() {
             </div>
           )}
 
+          {/* ── SIGN UP FORM ── */}
+          {tab === 'signup' && !signUpDone && (
+            <form onSubmit={handleSignUp}>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Your full name"
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Email Address</label>
+                <input
+                  className="form-input"
+                  type="email"
+                  placeholder="you@organisation.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Min. 8 characters"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm Password</label>
+                <input
+                  className="form-input"
+                  type="password"
+                  placeholder="Repeat your password"
+                  value={confirmPw}
+                  onChange={e => setConfirmPw(e.target.value)}
+                  required
+                />
+              </div>
+
+              <p style={{ fontSize: 12.5, color: '#8A9BB0', lineHeight: 1.65, marginBottom: 20 }}>
+                By signing up you agree to CultureXe's terms. Your account starts as an employee account — an administrator can change your role.
+              </p>
+
+              <button
+                type="submit"
+                className="btn btn-teal"
+                disabled={submitting}
+                style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}
+              >
+                {submitting ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Creating account…
+                  </span>
+                ) : 'Create Account →'}
+              </button>
+            </form>
+          )}
+
+          {/* Sign-up success (email confirmation required) */}
+          {tab === 'signup' && signUpDone && (
+            <div>
+              <div style={{
+                background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)',
+                borderRadius: 12, padding: '24px 20px', marginBottom: 20, textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>✉️</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>
+                  Check your inbox
+                </div>
+                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>
+                  A confirmation link has been sent to<br />
+                  <strong style={{ color: '#0D1F3C' }}>{email}</strong>.<br />
+                  Click the link to activate your account.
+                </div>
+              </div>
+              <button
+                className="btn btn-outline"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => switchTab('password')}
+              >
+                Back to Sign In
+              </button>
+            </div>
+          )}
+
           {/* Footer */}
           <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid #E2E8F0', textAlign: 'center' }}>
             <div style={{ fontSize: 12.5, color: '#8A9BB0', lineHeight: 1.75 }}>
-              Need access? Contact{' '}
-              <a href="mailto:support@africaia.com" style={{ color: '#1BBFB0', textDecoration: 'none', fontWeight: 500 }}>
-                Africa International Advisors
-              </a>
-              .<br />
-              Accounts are created by your administrator.
+              {tab === 'signup'
+                ? <>Already have an account?{' '}<button onClick={() => switchTab('password')} style={{ background: 'none', border: 'none', color: '#1BBFB0', cursor: 'pointer', fontWeight: 500, fontSize: 12.5, padding: 0, fontFamily: 'inherit' }}>Sign in →</button></>
+                : <>Need access? Contact{' '}<a href="mailto:support@africaia.com" style={{ color: '#1BBFB0', textDecoration: 'none', fontWeight: 500 }}>Africa International Advisors</a>.</>
+              }
             </div>
           </div>
         </div>

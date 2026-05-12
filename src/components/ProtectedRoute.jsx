@@ -2,9 +2,9 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const ROLE_REDIRECTS = {
-  consultant: '/app/dashboard',
-  superadmin: '/app/dashboard',
-  client:     '/client/dashboard',
+  consultant: '/app',
+  superadmin: '/app',
+  client:     '/client',
   employee:   '/assess',
 }
 
@@ -40,12 +40,8 @@ export default function ProtectedRoute({ children, requiredRole }) {
   if (requiredRole) {
     const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
 
-    // superadmin can access all consultant routes
-    const effective = role === 'superadmin' && allowed.includes('consultant')
-      ? [...allowed, 'superadmin']
-      : allowed
-
-    if (!effective.includes(role)) {
+    // superadmin can access every protected route
+    if (role !== 'superadmin' && !allowed.includes(role)) {
       const redirect = role ? (ROLE_REDIRECTS[role] || '/login') : '/login'
       return <Navigate to={redirect} replace />
     }

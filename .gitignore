@@ -25,3 +25,6 @@ dist-ssr
 node_modules
 .env
 dist
+consultant.html
+client.html
+database.sql
