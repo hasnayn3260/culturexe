@@ -4,7 +4,11 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Code Projects\\\\culturexe\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
-      "Bash(node -e \"const esbuild = require\\('esbuild'\\); esbuild.buildSync\\({ entryPoints: ['src/hooks/usePulse.js', 'src/hooks/useYSWH.js'], bundle: false, platform: 'browser', format: 'esm', write: false }\\); console.log\\('Hooks OK'\\)\")"
+      "Bash(node -e \"const esbuild = require\\('esbuild'\\); esbuild.buildSync\\({ entryPoints: ['src/hooks/usePulse.js', 'src/hooks/useYSWH.js'], bundle: false, platform: 'browser', format: 'esm', write: false }\\); console.log\\('Hooks OK'\\)\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Code Projects\\\\culturexe\" -Recurse -Filter \"*.sql\")",
+      "Bash(New-Item -ItemType Directory -Path \"C:\\\\Code Projects\\\\culturexe\\\\supabase\\\\functions\\\\send-invitations\" -Force)",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"created\")"
     ]
   }
 }

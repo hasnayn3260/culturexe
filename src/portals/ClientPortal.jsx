@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useClientData } from '../hooks/useClientData'
+import { useOrganisations } from '../hooks/useOrganisations'
 import { usePulse } from '../hooks/usePulse'
 import UserMenu from '../components/UserMenu'
 import { useYSWH } from '../hooks/useYSWH'
+import supabase from '../lib/supabaseClient'
 import './client.css'
 
 const ROLES_DEF = {
@@ -66,7 +68,11 @@ export default function ClientPortal() {
   const navigate = useNavigate()
   const { profile, role: authRole, signOut } = useAuth()
 
-  const orgId = profile?.org_id || null
+  const isSuperAdmin = authRole === 'superadmin'
+  const { organisations } = useOrganisations()
+  const [previewOrgId, setPreviewOrgId] = useState(null)
+
+  const orgId = isSuperAdmin ? (previewOrgId || organisations[0]?.id || null) : (profile?.org_id || null)
   const { org, assessments: clientAssessments, reports: clientReports, loading: clientLoading } = useClientData(orgId)
   const { entries: pulseEntries, stats: pulseStats, createEntry, loading: pulseLoading } = usePulse(orgId)
   const { items: ywshItems, loading: ywshLoading } = useYSWH(orgId)
@@ -76,6 +82,13 @@ export default function ClientPortal() {
   const [pulseText, setPulseText] = useState('')
   const [selectedDims, setSelectedDims] = useState([])
   const [deptFilter, setDeptFilter] = useState('all')
+  const [userTokens, setUserTokens] = useState({})
+
+  // Initialise demoRole from real auth role on first load
+  useEffect(() => {
+    if (authRole === 'employee') setDemoRole('staff')
+    else if (authRole === 'client') setDemoRole('exec')
+  }, [authRole])
 
   const availableTabs = ROLES_DEF[demoRole]?.tabs || ROLES_DEF.staff.tabs
 
@@ -103,9 +116,28 @@ export default function ClientPortal() {
       })()
     : '—'
 
-  // Active assessments count
-  const activeAssessments = clientAssessments.filter(a => a.status === 'active')
-  const activeCount = activeAssessments.length
+  // Surveys visible to the client: active (open for responses) + pending (coming soon)
+  const activeAssessments = clientAssessments.filter(a => a.status === 'active' || a.status === 'pending')
+  const activeCount = clientAssessments.filter(a => a.status === 'active').length
+
+  // Load the user's survey tokens for active assessments
+  useEffect(() => {
+    if (!profile?.email || !activeAssessments.length) return
+    const ids = activeAssessments.map(a => a.id)
+    supabase
+      .from('response_tokens')
+      .select('assessment_id, token, used')
+      .eq('email', profile.email)
+      .in('assessment_id', ids)
+      .eq('used', false)
+      .then(({ data }) => {
+        if (!data) return
+        const map = {}
+        data.forEach(t => { map[t.assessment_id] = t.token })
+        setUserTokens(map)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.email, activeAssessments.length])
 
   // Latest released report
   const latestReport = clientReports[0] || null
@@ -146,6 +178,23 @@ export default function ClientPortal() {
     return 'var(--text3)'
   }
 
+  async function handleStartSurvey(assessmentId) {
+    let token = userTokens[assessmentId]
+    if (!token) {
+      const newToken = crypto.randomUUID()
+      const { error } = await supabase.from('response_tokens').insert({
+        assessment_id: assessmentId,
+        token: newToken,
+        email: profile?.email ?? null,
+        used: false,
+      })
+      if (error) { alert('Could not start survey: ' + error.message); return }
+      token = newToken
+      setUserTokens(prev => ({ ...prev, [assessmentId]: newToken }))
+    }
+    navigate(`/assess/${token}`)
+  }
+
   async function handlePulseSubmit() {
     if (!pulseText.trim() || !orgId) return
     await createEntry(pulseText.trim(), selectedDims, orgId)
@@ -163,14 +212,23 @@ export default function ClientPortal() {
             <span className="xe">Xe</span>
           </div>
           <div className="brand-org">{org?.name || '…'}</div>
-          {(authRole === 'superadmin') && (
-            <button
-              className="btn btn-outline btn-sm"
-              style={{ marginLeft: 10, fontSize: 11 }}
-              onClick={() => navigate('/app')}
-            >
-              ← Consultant Portal
-            </button>
+          {isSuperAdmin && (
+            <>
+              <select
+                value={previewOrgId || organisations[0]?.id || ''}
+                onChange={e => setPreviewOrgId(e.target.value)}
+                style={{ marginLeft: 10, fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--navy)', cursor: 'pointer' }}
+              >
+                {organisations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <button
+                className="btn btn-outline btn-sm"
+                style={{ marginLeft: 8, fontSize: 11 }}
+                onClick={() => navigate('/app')}
+              >
+                ← Consultant Portal
+              </button>
+            </>
           )}
         </div>
 
@@ -188,7 +246,6 @@ export default function ClientPortal() {
 
         <div className="top-right">
           <div className="role-switcher">
-            <label>DEMO</label>
             <select value={demoRole} onChange={e => { setDemoRole(e.target.value); setView('today') }}>
               <option value="staff">Staff</option>
               <option value="manager">Manager</option>
@@ -221,14 +278,17 @@ export default function ClientPortal() {
                   {activeCount > 0 && <span className="badge badge-teal">{activeCount} open</span>}
                 </div>
                 {activeAssessments.length > 0 ? activeAssessments.map(s => (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 10, marginBottom: 8, background: 'var(--teal-light)', border: '1px solid rgba(27,191,176,0.22)' }}>
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 10, marginBottom: 8, background: s.status === 'pending' ? '#f9f9f9' : 'var(--teal-light)', border: `1px solid ${s.status === 'pending' ? 'var(--border)' : 'rgba(27,191,176,0.22)'}` }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)' }}>{s.name}</div>
                       <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                        {s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}` : 'Open'}
+                        {s.status === 'pending' ? 'Coming soon' : s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}` : 'Open'}
                       </div>
                     </div>
-                    <button className="btn btn-sm" style={{ background: 'var(--teal)', color: 'white', border: 'none' }}>Start →</button>
+                    {s.status === 'pending'
+                      ? <span style={{ fontSize: 11, color: 'var(--text3)', background: '#eee', borderRadius: 6, padding: '3px 10px' }}>Coming soon</span>
+                      : <button className="btn btn-sm" style={{ background: 'var(--teal)', color: 'white', border: 'none' }} onClick={() => handleStartSurvey(s.id)}>Start →</button>
+                    }
                   </div>
                 )) : (
                   <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No active surveys right now.</div>
@@ -330,7 +390,7 @@ export default function ClientPortal() {
                     <div className="flex-between" style={{ marginBottom: 6 }}>
                       <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)' }}>{s.name}</span>
                       <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        {s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Open'}
+                        {s.status === 'pending' ? 'Coming soon' : s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Open'}
                       </span>
                     </div>
                     <div className="dim-bar-bg">
@@ -338,7 +398,10 @@ export default function ClientPortal() {
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11.5 }}>
                       <span style={{ color: 'var(--text3)' }}>Not started</span>
-                      <button className="btn btn-sm btn-teal">Start →</button>
+                      {s.status === 'pending'
+                        ? <span style={{ fontSize: 11, color: 'var(--text3)', background: '#eee', borderRadius: 6, padding: '3px 10px' }}>Coming soon</span>
+                        : <button className="btn btn-sm btn-teal" onClick={() => handleStartSurvey(s.id)}>Start →</button>
+                      }
                     </div>
                   </div>
                 )) : (

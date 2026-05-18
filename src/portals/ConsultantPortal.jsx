@@ -218,6 +218,7 @@ export default function ConsultantPortal() {
   const [inviteAssessments, setInviteAssessments] = useState([])
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteSent, setInviteSent] = useState(null)
+  const [inviteLinks, setInviteLinks] = useState([])
 
   // Fetch total response count
   useEffect(() => {
@@ -392,26 +393,70 @@ export default function ConsultantPortal() {
     const emailList = inviteForm.emails.split(/[\n,]+/).map(e => e.trim()).filter(Boolean)
     if (!emailList.length) return
     setInviteSending(true)
+    setInviteLinks([])
     try {
-      const tokens = emailList.map(() => ({
+      // Create one token per email (store email in the record for later lookup)
+      const tokenRows = emailList.map(email => ({
         assessment_id: inviteForm.assessment_id,
         token: crypto.randomUUID(),
+        email,
         used: false,
       }))
-      const { data, error } = await supabase.from('response_tokens').insert(tokens).select()
-      if (error) throw error
+      const { data: tokenData, error: tokenError } = await supabase
+        .from('response_tokens')
+        .insert(tokenRows)
+        .select()
+      if (tokenError) throw tokenError
+
+      // Upsert invitation records
       await supabase.from('invitations').upsert(
         emailList.map((email, i) => ({
           assessment_id: inviteForm.assessment_id,
           org_id: inviteForm.org_id,
           email,
-          token_id: data[i]?.id,
+          token_id: tokenData[i]?.id,
           status: 'pending',
         })),
         { onConflict: 'assessment_id,email' }
       )
-      setInviteSent({ count: emailList.length })
-      setInviteForm(p => ({ ...p, emails: '' }))
+
+      // Auto-activate assessment if still pending
+      const { data: assessment } = await supabase
+        .from('assessments')
+        .select('status, name, organisations(name)')
+        .eq('id', inviteForm.assessment_id)
+        .single()
+
+      if (assessment?.status === 'pending') {
+        await updateAssessment(inviteForm.assessment_id, { status: 'active' })
+      }
+
+      // Build survey links
+      const baseUrl = window.location.origin
+      const links = tokenData.map((t, i) => ({
+        email: emailList[i],
+        url: `${baseUrl}/assess/${t.token}`,
+      }))
+      setInviteLinks(links)
+
+      // Try to send emails via edge function (non-blocking — we still show links on failure)
+      let emailSent = false
+      try {
+        const { data: session } = await supabase.auth.getSession()
+        const { data: fnResult, error: fnError } = await supabase.functions.invoke('send-invitations', {
+          body: {
+            invitations: links,
+            assessmentName: assessment?.name ?? 'Culture Survey',
+            orgName: assessment?.organisations?.name ?? '',
+            message: inviteForm.message || undefined,
+          },
+          headers: { Authorization: `Bearer ${session?.session?.access_token}` },
+        })
+        if (!fnError && fnResult?.sent?.length > 0) emailSent = true
+      } catch (_) { /* edge function optional – links are shown regardless */ }
+
+      setInviteSent({ count: emailList.length, emailSent })
+      setInviteForm(p => ({ ...p, emails: '', message: '' }))
       await refetchAssessments()
     } catch (e) { alert('Error: ' + e.message) }
     finally { setInviteSending(false) }
@@ -785,6 +830,12 @@ export default function ConsultantPortal() {
                           <td>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               {statusTag}
+                              {a.status === 'pending' && (
+                                <button className="btn btn-outline btn-sm" style={{ fontSize: 11, borderColor: 'var(--teal)', color: 'var(--teal)' }}
+                                  onClick={() => updateAssessment(a.id, { status: 'active' })}>
+                                  Launch →
+                                </button>
+                              )}
                               {(a.status === 'active' || a.status === 'live') && (
                                 <button className="btn btn-outline btn-sm" style={{ fontSize: 11 }}
                                   onClick={() => updateAssessment(a.id, { status: 'review' })}>
@@ -1521,8 +1572,24 @@ export default function ConsultantPortal() {
                     <div className="section-title mb-16">Send Invitations</div>
                     {inviteSent && (
                       <div className="insight" style={{ marginBottom: 16 }}>
-                        <div className="insight-title">Invitations Sent</div>
-                        <div className="insight-text">{inviteSent.count} invitation tokens created successfully.</div>
+                        <div className="insight-title">
+                          {inviteSent.emailSent ? '✓ Invitations sent by email' : '✓ Tokens created'}
+                        </div>
+                        <div className="insight-text">
+                          {inviteSent.emailSent
+                            ? `${inviteSent.count} invitation email${inviteSent.count !== 1 ? 's' : ''} sent successfully.`
+                            : `${inviteSent.count} survey link${inviteSent.count !== 1 ? 's' : ''} generated. Share them manually below (email delivery unavailable).`}
+                        </div>
+                        {inviteLinks.length > 0 && (
+                          <div style={{ marginTop: 12 }}>
+                            {inviteLinks.map(({ email, url }) => (
+                              <div key={email} style={{ marginBottom: 8, fontSize: 13 }}>
+                                <span style={{ fontWeight: 600, marginRight: 8 }}>{email}</span>
+                                <a href={url} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)', wordBreak: 'break-all' }}>{url}</a>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="form-group">
