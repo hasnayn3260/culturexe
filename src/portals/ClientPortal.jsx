@@ -71,7 +71,7 @@ export default function ClientPortal() {
   const { entries: pulseEntries, stats: pulseStats, createEntry, loading: pulseLoading } = usePulse(orgId)
   const { items: ywshItems, loading: ywshLoading } = useYSWH(orgId)
 
-  const [demoRole, setDemoRole] = useState('hc')
+  const [demoRole, setDemoRole] = useState('exec')
   const [view, setView] = useState('today')
   const [pulseText, setPulseText] = useState('')
   const [selectedDims, setSelectedDims] = useState([])
