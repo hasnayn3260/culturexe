@@ -1,136 +1,356 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { dimensions } from '../data/dimensions'
 import supabase from '../lib/supabaseClient'
 
 const SCALE = [1, 2, 3, 4, 5]
-const SCALE_LABELS = {
-  1: 'Strongly Disagree',
-  2: 'Disagree',
-  3: 'Neutral',
-  4: 'Agree',
-  5: 'Strongly Agree',
-}
+const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
 
-function scoreColor(s) {
-  if (s >= 75) return 'var(--teal)'
-  if (s >= 60) return 'var(--blue)'
-  if (s >= 45) return 'var(--gold2)'
-  return 'var(--coral)'
-}
-
-function calcPersonalScores(answers, questions) {
-  const scores = {}
-  for (const dim of dimensions) {
-    const dimQs = questions.filter(q => q.dimension === dim.id)
-    if (!dimQs.length) { scores[dim.id] = null; continue }
-    const scored = dimQs.filter(q => answers[q.id] != null)
-    if (!scored.length) { scores[dim.id] = null; continue }
-    const avg = scored.reduce((s, q) => s + Number(answers[q.id]), 0) / scored.length
-    scores[dim.id] = Math.round((avg / 5) * 100)
+function calcTiming(submittedAt, liveStart, liveEnd) {
+  const sub = new Date(submittedAt).getTime()
+  if (liveEnd && sub > new Date(liveEnd).getTime()) return 'late'
+  if (liveStart && liveEnd) {
+    const mid = new Date(liveStart).getTime() + (new Date(liveEnd).getTime() - new Date(liveStart).getTime()) / 2
+    return sub < mid ? 'early' : 'on_time'
   }
-  return scores
+  return 'on_time'
 }
 
-async function aggregateAndUpsertReport(assessmentId, questions) {
-  const { data: allResponses } = await supabase
-    .from('responses')
-    .select('answers')
-    .eq('assessment_id', assessmentId)
+function isAnswered(q, val) {
+  if (val == null) return false
+  if (Array.isArray(val)) return val.length > 0
+  if (typeof val === 'object') return Object.keys(val).length > 0
+  return val !== ''
+}
 
-  const scores = {}
-  for (const dim of dimensions) {
-    const dimQIds = questions.filter(q => q.dimension === dim.id).map(q => q.id)
-    const allVals = []
-    for (const resp of allResponses || []) {
-      for (const qId of dimQIds) {
-        const v = resp.answers?.[qId]
-        if (v != null) allVals.push(Number(v))
-      }
+function inputStyle(answered) {
+  return {
+    width: '100%', padding: '10px 14px', borderRadius: 9,
+    border: `1.5px solid ${answered ? '#1BBFB0' : '#D1D9E6'}`,
+    fontSize: 14, fontFamily: 'inherit', color: '#0B1D3E', outline: 'none',
+    transition: 'border-color 0.12s', background: 'white', boxSizing: 'border-box',
+  }
+}
+
+// ── Question renderers ─────────────────────────────────────
+
+function QuestionRenderer({ q, value, onChange, respondentId }) {
+  const type = q.question_type
+  const answered = isAnswered(q, value)
+
+  // FILE upload state lives here
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const fileRef = useRef(null)
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true); setUploadErr('')
+    try {
+      const path = `${respondentId}/${q.id}/${Date.now()}_${file.name}`
+      const { data, error } = await supabase.storage.from('survey-files').upload(path, file)
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('survey-files').getPublicUrl(data.path)
+      onChange(publicUrl)
+    } catch (err) {
+      setUploadErr(err.message || 'Upload failed')
+    } finally {
+      setUploading(false)
     }
-    scores[dim.id] = allVals.length > 0
-      ? Math.round(allVals.reduce((a, b) => a + b, 0) / allVals.length / 5 * 100)
-      : 0
   }
 
-  const { data: existing } = await supabase
-    .from('reports')
-    .select('id')
-    .eq('assessment_id', assessmentId)
-    .maybeSingle()
-
-  if (existing) {
-    await supabase
-      .from('reports')
-      .update({ scores, updated_at: new Date().toISOString() })
-      .eq('id', existing.id)
-  } else {
-    await supabase
-      .from('reports')
-      .insert({ assessment_id: assessmentId, scores, status: 'review' })
+  // SHORT_TEXT
+  if (type === 'SHORT_TEXT') {
+    return (
+      <input
+        type="text"
+        style={inputStyle(answered)}
+        placeholder="Your answer…"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      />
+    )
   }
+
+  // LONG_TEXT or legacy 'text'
+  if (type === 'LONG_TEXT' || type === 'text') {
+    return (
+      <textarea
+        style={{ ...inputStyle(answered), resize: 'vertical', minHeight: 90 }}
+        placeholder="Type your response here…"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      />
+    )
+  }
+
+  // SINGLE_CHOICE
+  if (type === 'SINGLE_CHOICE') {
+    const choices = q.options?.choices || []
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+        {choices.map(c => (
+          <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 9, border: `1.5px solid ${value === c ? '#1BBFB0' : '#D1D9E6'}`, background: value === c ? 'rgba(27,191,176,0.07)' : 'white', cursor: 'pointer', transition: 'all 0.12s' }}>
+            <input type="radio" name={`q-${q.id}`} value={c} checked={value === c} onChange={() => onChange(c)} style={{ accentColor: '#1BBFB0', width: 16, height: 16, flexShrink: 0 }} />
+            <span style={{ fontSize: 14, color: '#0B1D3E', lineHeight: 1.5 }}>{c}</span>
+          </label>
+        ))}
+      </div>
+    )
+  }
+
+  // MULTI_CHOICE
+  if (type === 'MULTI_CHOICE') {
+    const choices = q.options?.choices || []
+    const selected = Array.isArray(value) ? value : []
+    function toggle(c) {
+      onChange(selected.includes(c) ? selected.filter(x => x !== c) : [...selected, c])
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+        {choices.map(c => {
+          const checked = selected.includes(c)
+          return (
+            <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 9, border: `1.5px solid ${checked ? '#1BBFB0' : '#D1D9E6'}`, background: checked ? 'rgba(27,191,176,0.07)' : 'white', cursor: 'pointer', transition: 'all 0.12s' }}>
+              <input type="checkbox" checked={checked} onChange={() => toggle(c)} style={{ accentColor: '#1BBFB0', width: 16, height: 16, flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: '#0B1D3E', lineHeight: 1.5 }}>{c}</span>
+            </label>
+          )
+        })}
+        {selected.length > 0 && <div style={{ fontSize: 12, color: '#8898AA', marginTop: 2 }}>{selected.length} selected</div>}
+      </div>
+    )
+  }
+
+  // DROPDOWN
+  if (type === 'DROPDOWN') {
+    const choices = q.options?.choices || []
+    return (
+      <select
+        style={{ ...inputStyle(answered), appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%238898AA\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: 18, paddingRight: 40 }}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      >
+        <option value="">— Select an option —</option>
+        {choices.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
+    )
+  }
+
+  // RATING_SCALE
+  if (type === 'RATING_SCALE') {
+    const { min = 1, max = 10, min_label = '', max_label = '' } = q.options || {}
+    const scale = Array.from({ length: Number(max) - Number(min) + 1 }, (_, i) => Number(min) + i)
+    return (
+      <div>
+        {(min_label || max_label) && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: '#8898AA', marginBottom: 8 }}>
+            <span>{min_label}</span><span>{max_label}</span>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {scale.map(v => (
+            <button
+              key={v}
+              onClick={() => onChange(v)}
+              style={{
+                width: 44, height: 44, borderRadius: 9, cursor: 'pointer',
+                border: `1.5px solid ${value === v ? '#1BBFB0' : '#D1D9E6'}`,
+                background: value === v ? 'rgba(27,191,176,0.1)' : 'white',
+                color: value === v ? '#0A8A7E' : '#637082',
+                fontWeight: value === v ? 700 : 400,
+                fontSize: 14, transition: 'all 0.12s', fontFamily: 'inherit',
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        {value != null && (
+          <div style={{ fontSize: 12, color: '#0A8A7E', marginTop: 8, fontWeight: 500 }}>Selected: {value}</div>
+        )}
+      </div>
+    )
+  }
+
+  // MATRIX
+  if (type === 'MATRIX') {
+    const { rows = [], cols = [] } = q.options || {}
+    const rowAnswers = (typeof value === 'object' && !Array.isArray(value)) ? value : {}
+    function pickCell(row, col) { onChange({ ...rowAnswers, [row]: col }) }
+    const allRowsAnswered = rows.every(r => rowAnswers[r] != null)
+    return (
+      <div style={{ overflowX: 'auto', marginTop: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: '#8898AA', fontWeight: 500, fontSize: 12, borderBottom: '1px solid #E2E7EF', minWidth: 130 }}></th>
+              {cols.map(c => (
+                <th key={c} style={{ textAlign: 'center', padding: '8px 10px', color: '#637082', fontWeight: 500, fontSize: 12, borderBottom: '1px solid #E2E7EF', whiteSpace: 'nowrap' }}>{c}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={row} style={{ background: ri % 2 === 0 ? 'white' : '#FAFBFD' }}>
+                <td style={{ padding: '12px', color: '#0B1D3E', fontWeight: 500, lineHeight: 1.45, borderBottom: ri < rows.length - 1 ? '1px solid #F0F3F8' : 'none' }}>{row}</td>
+                {cols.map(col => (
+                  <td key={col} style={{ textAlign: 'center', padding: '12px 10px', borderBottom: ri < rows.length - 1 ? '1px solid #F0F3F8' : 'none' }}>
+                    <button
+                      onClick={() => pickCell(row, col)}
+                      style={{
+                        width: 28, height: 28, borderRadius: '50%', cursor: 'pointer',
+                        border: `2px solid ${rowAnswers[row] === col ? '#1BBFB0' : '#D1D9E6'}`,
+                        background: rowAnswers[row] === col ? '#1BBFB0' : 'white',
+                        transition: 'all 0.12s',
+                      }}
+                      title={`${row} → ${col}`}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!allRowsAnswered && rows.length > 0 && (
+          <div style={{ fontSize: 11.5, color: '#8898AA', marginTop: 8 }}>
+            {rows.filter(r => !rowAnswers[r]).length} row{rows.filter(r => !rowAnswers[r]).length !== 1 ? 's' : ''} still unselected
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // DATE
+  if (type === 'DATE') {
+    return (
+      <input
+        type="date"
+        style={{ ...inputStyle(answered), maxWidth: 240 }}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      />
+    )
+  }
+
+  // TIME
+  if (type === 'TIME') {
+    return (
+      <input
+        type="time"
+        style={{ ...inputStyle(answered), maxWidth: 180 }}
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      />
+    )
+  }
+
+  // FILE
+  if (type === 'FILE') {
+    return (
+      <div>
+        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFileChange} />
+        {value ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ padding: '10px 14px', borderRadius: 9, border: '1.5px solid #1BBFB0', background: 'rgba(27,191,176,0.07)', fontSize: 13, color: '#0A8A7E', flex: 1, wordBreak: 'break-all' }}>
+              📎 {typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
+            </div>
+            <button onClick={() => { onChange(null); if (fileRef.current) fileRef.current.value = '' }} style={{ background: 'none', border: '1.5px solid #D1D9E6', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>
+              Change
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileRef.current.click()}
+            disabled={uploading}
+            style={{
+              padding: '12px 20px', borderRadius: 9, border: '1.5px dashed #D1D9E6', background: 'white',
+              fontSize: 14, color: uploading ? '#8898AA' : '#637082', cursor: uploading ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, transition: 'border-color 0.12s',
+            }}
+            onMouseEnter={e => { if (!uploading) e.currentTarget.style.borderColor = '#1BBFB0' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#D1D9E6' }}
+          >
+            {uploading
+              ? <><div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid rgba(27,191,176,0.2)', borderTopColor: '#1BBFB0', animation: 'as-spin 0.8s linear infinite' }} /> Uploading…</>
+              : <>📎 Choose File</>
+            }
+          </button>
+        )}
+        {uploadErr && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6 }}>⚠ {uploadErr}</div>}
+        <div style={{ fontSize: 12, color: '#8898AA', marginTop: 6 }}>File will be uploaded securely.</div>
+      </div>
+    )
+  }
+
+  // LIKERT (default, also handles legacy 'likert')
+  return (
+    <div className="as-scale-row" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+      {SCALE.map(v => (
+        <button
+          key={v}
+          className="as-scale-btn"
+          onClick={() => onChange(v)}
+          style={{
+            width: 64, height: 42, borderRadius: 9, cursor: 'pointer',
+            border: `1.5px solid ${value === v ? '#1BBFB0' : '#D1D9E6'}`,
+            background: value === v ? 'rgba(27,191,176,0.1)' : 'white',
+            color: value === v ? '#0A8A7E' : '#637082',
+            fontWeight: value === v ? 700 : 400,
+            fontSize: 15, transition: 'all 0.12s', fontFamily: 'inherit',
+          }}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  )
 }
 
-// ── Page shell (header + centred content) ──────────────────
-function PageShell({ orgName, progress, children }) {
+// ── Layout shells ──────────────────────────────────────────
+
+function PageShell({ surveyTitle, progress, children }) {
   return (
-    <div style={{ minHeight: '100vh', background: '#F4F6FA', fontFamily: 'var(--font, "Plus Jakarta Sans", sans-serif)' }}>
+    <div style={{ minHeight: '100vh', background: '#F4F6FA', fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
       <style>{`
         @keyframes as-spin { to { transform: rotate(360deg); } }
         @media (max-width: 680px) {
-          .as-layout  { flex-direction: column !important; }
-          .as-sidebar { display: none !important; }
-          .as-mob-tabs { display: flex !important; }
-          .as-scale-lbl { display: none !important; }
-          .as-scale-row { justify-content: stretch !important; }
-          .as-scale-btn { min-width: 0 !important; width: auto !important; height: 48px !important; flex: 1 !important; font-size: 16px !important; }
           .as-q-panel { padding: 18px 16px !important; }
-          .as-q-text { font-size: 15px !important; }
-          .as-nav-btns { flex-direction: column-reverse !important; gap: 10px !important; }
+          .as-q-text  { font-size: 15px !important; }
+          .as-scale-lbl { display: none !important; }
+          .as-scale-row { justify-content: stretch !important; flex-wrap: wrap !important; }
+          .as-scale-btn { min-width: 0 !important; width: auto !important; height: 48px !important; flex: 1 !important; font-size: 16px !important; }
+          .as-nav-btns  { flex-direction: column-reverse !important; gap: 10px !important; }
           .as-nav-btns button { width: 100% !important; padding: 14px !important; font-size: 15px !important; }
         }
       `}</style>
 
-      {/* Sticky header */}
-      <div style={{
-        background: 'white', borderBottom: '1px solid #E2E7EF',
-        height: 60, padding: '0 24px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 100,
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-      }}>
+      <div style={{ background: 'white', borderBottom: '1px solid #E2E7EF', height: 60, padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.5px' }}>
-            <span style={{ color: '#0B1D3E' }}>Culture</span>
-            <span style={{ color: '#1BBFB0' }}>Xe</span>
+            <span style={{ color: '#0B1D3E' }}>Culture</span><span style={{ color: '#1BBFB0' }}>Xe</span>
           </div>
-          {orgName && (
-            <span style={{ fontSize: 13, color: '#8898AA', borderLeft: '1px solid #E2E7EF', paddingLeft: 12 }}>
-              {orgName}
-            </span>
+          {surveyTitle && (
+            <span style={{ fontSize: 13, color: '#8898AA', borderLeft: '1px solid #E2E7EF', paddingLeft: 12 }}>{surveyTitle}</span>
           )}
         </div>
         {progress != null && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 100, height: 6, background: '#E2E7EF', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', width: `${progress}%`,
-                background: '#1BBFB0', borderRadius: 3, transition: 'width 0.35s',
-              }} />
+              <div style={{ height: '100%', width: `${progress}%`, background: '#1BBFB0', borderRadius: 3, transition: 'width 0.35s' }} />
             </div>
             <span style={{ fontSize: 12, color: '#8898AA', fontWeight: 500, minWidth: 32 }}>{progress}%</span>
           </div>
         )}
       </div>
 
-      <div style={{ maxWidth: 920, margin: '0 auto', padding: '28px 20px 60px' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 20px 60px' }}>
         {children}
       </div>
     </div>
   )
 }
 
-// ── Loading indicator ───────────────────────────────────────
 function SpinPage({ msg }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -140,42 +360,44 @@ function SpinPage({ msg }) {
   )
 }
 
-// ── Main component ──────────────────────────────────────────
+// ── Main ───────────────────────────────────────────────────
+
 export default function Assessment() {
   const { token } = useParams()
 
   const [phase, setPhase]               = useState('loading')
-  const [tokenData, setTokenData]       = useState(null)
-  const [orgName, setOrgName]           = useState('')
-  const [assessName, setAssessName]     = useState('')
+  const [respondent, setRespondent]     = useState(null)
+  const [survey, setSurvey]             = useState(null)
   const [questions, setQuestions]       = useState([])
-  const [activeDimIdx, setActiveDimIdx] = useState(0)
   const [answers, setAnswers]           = useState({})
-  const [personalScores, setPersonalScores] = useState({})
+  const [page, setPage]                 = useState(0)
   const [submitError, setSubmitError]   = useState('')
 
   useEffect(() => {
     async function init() {
       if (!token) { setPhase('invalid'); return }
       try {
-        const { data: tkn, error: tknErr } = await supabase
-          .from('response_tokens')
-          .select('id, assessment_id, email, used, assessments ( id, name, organisations ( id, name ) )')
+        const { data: resp, error: rErr } = await supabase
+          .from('survey_respondents')
+          .select('*, survey(*)')
           .eq('token', token)
           .maybeSingle()
 
-        if (tknErr) throw tknErr
-        if (!tkn)   { setPhase('invalid'); return }
-        if (tkn.used) { setPhase('used'); return }
+        if (rErr) throw rErr
+        if (!resp) { setPhase('invalid'); return }
+        if (resp.used) { setPhase('used'); return }
 
-        setTokenData(tkn)
-        setAssessName(tkn.assessments?.name || 'Culture Assessment')
-        setOrgName(tkn.assessments?.organisations?.name || '')
+        const sv = resp.survey
+        if (sv?.status !== 'live') { setPhase('not_live'); return }
+
+        setRespondent(resp)
+        setSurvey(sv)
 
         const { data: qs, error: qErr } = await supabase
-          .from('questions')
+          .from('survey_questions')
           .select('*')
-          .order('order_num', { ascending: true })
+          .eq('survey_id', sv.id)
+          .order('order_num')
 
         if (qErr) throw qErr
         setQuestions(qs || [])
@@ -187,12 +409,30 @@ export default function Assessment() {
     init()
   }, [token])
 
-  const activeDim   = dimensions[activeDimIdx]
-  const dimQs       = activeDim ? questions.filter(q => q.dimension === activeDim.id) : []
-  const totalAnswered = Object.keys(answers).length
-  const totalQ      = questions.length
-  const progress    = totalQ > 0 ? Math.round((totalAnswered / totalQ) * 100) : 0
+  // Paging: group by dimension if present, otherwise flat pages of 5
+  const dimensions = [...new Set(questions.map(q => q.dimension || '').filter(Boolean))]
+  const hasDimensions = dimensions.length > 0
+
+  let pages = []
+  if (hasDimensions) {
+    const noDim = questions.filter(q => !q.dimension)
+    for (const dim of dimensions) {
+      pages.push({ label: dim, qs: questions.filter(q => q.dimension === dim) })
+    }
+    if (noDim.length) pages.push({ label: 'Other', qs: noDim })
+  } else {
+    const chunkSize = 5
+    for (let i = 0; i < questions.length; i += chunkSize) {
+      pages.push({ label: `Questions ${i + 1}–${Math.min(i + chunkSize, questions.length)}`, qs: questions.slice(i, i + chunkSize) })
+    }
+  }
+
+  const currentPage = pages[page] || { label: '', qs: [] }
+  const totalQ = questions.length
+  const totalAnswered = questions.filter(q => isAnswered(q, answers[q.id])).length
+  const progress = totalQ > 0 ? Math.round((totalAnswered / totalQ) * 100) : 0
   const allAnswered = totalQ > 0 && totalAnswered === totalQ
+  const isLastPage = page === pages.length - 1
 
   function handleAnswer(qId, val) {
     setAnswers(prev => ({ ...prev, [qId]: val }))
@@ -202,19 +442,20 @@ export default function Assessment() {
     setSubmitError('')
     setPhase('submitting')
     try {
-      const { assessment_id: assessmentId, id: tokenId } = tokenData
+      const now = new Date().toISOString()
+      const timing = calcTiming(now, survey?.live_start, survey?.live_end)
 
-      await supabase.from('responses').insert({
-        assessment_id: assessmentId,
-        token_id:      tokenId,
+      await supabase.from('survey_responses').insert({
+        survey_id:     respondent.survey_id,
+        respondent_id: respondent.id,
         answers,
+        submitted_at:  now,
       })
 
-      await supabase.from('response_tokens').update({ used: true }).eq('id', tokenId)
-
-      setPersonalScores(calcPersonalScores(answers, questions))
-
-      await aggregateAndUpsertReport(assessmentId, questions)
+      await supabase
+        .from('survey_respondents')
+        .update({ used: true, submitted_at: now, response_timing: timing })
+        .eq('id', respondent.id)
 
       setPhase('complete')
     } catch (e) {
@@ -223,24 +464,18 @@ export default function Assessment() {
     }
   }
 
-  // ─── Phase: loading ───
+  // ── Phases ─────────────────────────────────────────────────
+
   if (phase === 'loading') {
-    return (
-      <PageShell orgName="">
-        <SpinPage msg="Loading your assessment…" />
-      </PageShell>
-    )
+    return <PageShell><SpinPage msg="Loading your survey…" /></PageShell>
   }
 
-  // ─── Phase: invalid ───
   if (phase === 'invalid') {
     return (
-      <PageShell orgName="">
+      <PageShell>
         <div style={{ textAlign: 'center', padding: '80px 20px' }}>
           <div style={{ fontSize: 52, marginBottom: 20 }}>⚠</div>
-          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>
-            This link is invalid or has expired
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>This link is invalid or has expired</div>
           <div style={{ fontSize: 14, color: '#637082', maxWidth: 400, margin: '0 auto', lineHeight: 1.7 }}>
             Please check the link you received and try again, or contact your HR team for a new invitation.
           </div>
@@ -249,123 +484,66 @@ export default function Assessment() {
     )
   }
 
-  // ─── Phase: used ───
+  if (phase === 'not_live') {
+    return (
+      <PageShell>
+        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+          <div style={{ fontSize: 52, marginBottom: 20 }}>⏳</div>
+          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>Survey Not Active</div>
+          <div style={{ fontSize: 14, color: '#637082', maxWidth: 400, margin: '0 auto', lineHeight: 1.7 }}>
+            This survey is not currently live. Please check back later or contact your HR team.
+          </div>
+        </div>
+      </PageShell>
+    )
+  }
+
   if (phase === 'used') {
     return (
-      <PageShell orgName={orgName}>
+      <PageShell surveyTitle={survey?.title}>
         <div style={{ textAlign: 'center', padding: '80px 20px' }}>
           <div style={{ fontSize: 52, color: '#1BBFB0', marginBottom: 20 }}>✓</div>
-          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>
-            Already submitted
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>Already submitted</div>
           <div style={{ fontSize: 14, color: '#637082', maxWidth: 400, margin: '0 auto', lineHeight: 1.7 }}>
-            You have already completed this assessment. Thank you for your contribution — your responses are making a difference.
+            You have already completed this survey. Thank you for your contribution.
           </div>
         </div>
       </PageShell>
     )
   }
 
-  // ─── Phase: submitting ───
   if (phase === 'submitting') {
-    return (
-      <PageShell orgName={orgName}>
-        <SpinPage msg="Saving your responses…" />
-      </PageShell>
-    )
+    return <PageShell surveyTitle={survey?.title}><SpinPage msg="Saving your responses…" /></PageShell>
   }
 
-  // ─── Phase: complete ───
   if (phase === 'complete') {
-    const scored = dimensions.filter(d => personalScores[d.id] != null)
-    const avgPersonal = scored.length > 0
-      ? Math.round(scored.reduce((s, d) => s + personalScores[d.id], 0) / scored.length)
-      : null
-
     return (
-      <PageShell orgName={orgName}>
-        <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 0' }}>
-          <div style={{ textAlign: 'center', marginBottom: 40 }}>
+      <PageShell surveyTitle={survey?.title}>
+        <div style={{ maxWidth: 560, margin: '40px auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
             <div style={{ fontSize: 60, color: '#1BBFB0', marginBottom: 16, lineHeight: 1 }}>✓</div>
-            <div style={{ fontWeight: 700, fontSize: 24, color: '#0B1D3E', marginBottom: 10 }}>
-              Survey Complete
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 24, color: '#0B1D3E', marginBottom: 10 }}>Survey Complete</div>
             <div style={{ fontSize: 14, color: '#637082', lineHeight: 1.7 }}>
-              Thank you for completing the {assessName}
-              {orgName && ` for ${orgName}`}.
-              <br />
-              Your responses are completely anonymous and help build a better culture.
+              Thank you for completing the <strong>{survey?.title}</strong>.
+              <br />Your responses are completely anonymous and help build a better workplace.
             </div>
-            {avgPersonal != null && (
-              <div style={{ marginTop: 20 }}>
-                <span style={{
-                  display: 'inline-block', fontSize: 36, fontWeight: 800,
-                  color: scoreColor(avgPersonal), lineHeight: 1,
-                }}>
-                  {avgPersonal}
-                </span>
-                <div style={{ fontSize: 13, color: '#8898AA', marginTop: 4 }}>Your personal culture score</div>
-              </div>
-            )}
           </div>
-
-          <div style={{ background: 'white', borderRadius: 12, padding: '24px 28px', border: '1px solid #E2E7EF' }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#0B1D3E', marginBottom: 20 }}>
-              Your Culture Profile
+          <div style={{ background: 'white', borderRadius: 12, padding: '24px 28px', border: '1px solid #E2E7EF', textAlign: 'center' }}>
+            <div style={{ fontSize: 13, color: '#8898AA', lineHeight: 1.7 }}>
+              Your responses have been recorded. You may now close this tab.
             </div>
-            {dimensions.map(dim => {
-              const s = personalScores[dim.id]
-              if (s == null) return null
-              return (
-                <div key={dim.id} style={{ marginBottom: 13 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 5 }}>
-                    <span style={{ color: '#0B1D3E' }}>{dim.icon} {dim.name}</span>
-                    <span style={{ fontWeight: 700, color: scoreColor(s) }}>{s}</span>
-                  </div>
-                  <div style={{ height: 6, background: '#E2E7EF', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', width: `${s}%`,
-                      background: scoreColor(s), borderRadius: 3, transition: 'width 0.8s ease',
-                    }} />
-                  </div>
-                </div>
-              )
-            })}
           </div>
         </div>
       </PageShell>
     )
   }
 
-  // ─── Phase: survey ───
-  return (
-    <PageShell orgName={orgName} progress={progress}>
+  // ── Phase: survey ───────────────────────────────────────────
 
-      {/* Mobile dimension tabs */}
-      <div className="as-mob-tabs" style={{
-        display: 'none', overflowX: 'auto', gap: 8,
-        padding: '4px 0 14px', marginBottom: 12, scrollbarWidth: 'none',
-      }}>
-        {dimensions.map((dim, idx) => {
-          const done = questions.filter(q => q.dimension === dim.id).every(q => answers[q.id] != null)
-          return (
-            <button
-              key={dim.id}
-              onClick={() => { setActiveDimIdx(idx); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              style={{
-                flexShrink: 0, padding: '8px 13px', borderRadius: 20,
-                border: `1.5px solid ${activeDimIdx === idx ? '#1BBFB0' : '#E2E7EF'}`,
-                background: activeDimIdx === idx ? 'rgba(27,191,176,0.08)' : 'white',
-                color: activeDimIdx === idx ? '#0A8A7E' : '#637082',
-                fontSize: 13, cursor: 'pointer', fontWeight: activeDimIdx === idx ? 600 : 400,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {dim.icon} {done ? '✓' : `${idx + 1}`}
-            </button>
-          )
-        })}
-      </div>
+  const hasLikertOnPage = currentPage.qs.some(q => q.question_type === 'likert' || q.question_type === 'LIKERT')
+
+  return (
+    <PageShell surveyTitle={survey?.title} progress={progress}>
 
       {submitError && (
         <div style={{ padding: '12px 16px', background: '#FFF0EE', border: '1px solid rgba(232,86,58,0.2)', borderRadius: 10, color: '#E8563A', fontSize: 13, marginBottom: 16 }}>
@@ -373,72 +551,43 @@ export default function Assessment() {
         </div>
       )}
 
-      <div className="as-layout" style={{ display: 'flex', gap: 20, alignItems: 'start' }}>
-
-        {/* Desktop sidebar */}
-        <div className="as-sidebar" style={{
-          width: 216, flexShrink: 0,
-          background: 'white', borderRadius: 12, padding: '20px 14px',
-          border: '1px solid #E2E7EF',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#8898AA', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 14 }}>
-            Dimensions
-          </div>
-          {dimensions.map((dim, idx) => {
-            const dQs = questions.filter(q => q.dimension === dim.id)
-            const answered = dQs.filter(q => answers[q.id] != null).length
-            const done = answered === dQs.length && dQs.length > 0
+      {/* Page progress pills */}
+      {pages.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+          {pages.map((p, i) => {
+            const done = p.qs.every(q => isAnswered(q, answers[q.id]))
             return (
               <button
-                key={dim.id}
-                onClick={() => { setActiveDimIdx(idx); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                key={i}
+                onClick={() => setPage(i)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 9,
-                  width: '100%', textAlign: 'left', border: 'none',
-                  padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
-                  background: activeDimIdx === idx ? 'rgba(27,191,176,0.08)' : 'transparent',
-                  borderLeft: `3px solid ${activeDimIdx === idx ? '#1BBFB0' : 'transparent'}`,
-                  marginBottom: 2,
+                  padding: '6px 13px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer',
+                  border: `1.5px solid ${i === page ? '#1BBFB0' : '#E2E7EF'}`,
+                  background: i === page ? 'rgba(27,191,176,0.08)' : 'white',
+                  color: i === page ? '#0A8A7E' : '#637082',
+                  fontFamily: 'inherit',
                 }}
               >
-                <span style={{ fontSize: 14 }}>{dim.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: activeDimIdx === idx ? 600 : 400, color: '#0B1D3E', lineHeight: 1.3 }}>
-                    {dim.name}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#8898AA' }}>{answered}/{dQs.length}</div>
-                </div>
-                {done && <span style={{ color: '#1BBFB0', fontSize: 13, flexShrink: 0 }}>✓</span>}
+                {done ? '✓ ' : ''}{p.label}
               </button>
             )
           })}
-          <div style={{ marginTop: 16, borderTop: '1px solid #E2E7EF', paddingTop: 14 }}>
-            <div style={{ fontSize: 11, color: '#8898AA', marginBottom: 5 }}>Overall progress</div>
-            <div style={{ height: 6, background: '#E2E7EF', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${progress}%`, background: '#1BBFB0', borderRadius: 3, transition: 'width 0.3s' }} />
-            </div>
-            <div style={{ fontSize: 11, color: '#8898AA', marginTop: 4 }}>{totalAnswered}/{totalQ} answered</div>
-          </div>
         </div>
+      )}
 
-        {/* Question panel */}
-        <div className="as-q-panel" style={{
-          flex: 1, background: 'white', borderRadius: 12,
-          padding: '24px 28px', border: '1px solid #E2E7EF',
-        }}>
+      <div className="as-q-panel" style={{ background: 'white', borderRadius: 12, padding: '28px 32px', border: '1px solid #E2E7EF' }}>
+
+        {hasDimensions && (
           <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 11, color: '#8898AA', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 5 }}>
-              Dimension {activeDimIdx + 1} of {dimensions.length}
+            <div style={{ fontSize: 11, color: '#8898AA', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 }}>
+              Section {page + 1} of {pages.length}
             </div>
-            <div style={{ fontWeight: 700, fontSize: 20, color: '#0B1D3E', marginBottom: 6 }}>
-              {activeDim?.icon} {activeDim?.name}
-            </div>
-            <div style={{ fontSize: 13, color: '#637082', lineHeight: 1.65 }}>
-              {activeDim?.description}
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 20, color: '#0B1D3E' }}>{currentPage.label}</div>
           </div>
+        )}
 
-          {/* Scale header labels — hidden on mobile */}
+        {/* Likert column headers — only when page has likert questions */}
+        {hasLikertOnPage && (
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 8 }}>
             {SCALE.map(v => (
               <div key={v} className="as-scale-lbl" style={{ width: 64, textAlign: 'center', fontSize: 10, color: '#8898AA', fontWeight: 500, lineHeight: 1.3 }}>
@@ -446,96 +595,60 @@ export default function Assessment() {
               </div>
             ))}
           </div>
+        )}
 
-          {dimQs.length === 0 && (
-            <div style={{ padding: '40px 0', textAlign: 'center', color: '#8898AA', fontSize: 13 }}>
-              No questions for this dimension yet.
+        {currentPage.qs.map((q, qi) => (
+          <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #E2E7EF' : 'none' }}>
+            <div className="as-q-text" style={{ fontSize: 14, color: '#0B1D3E', marginBottom: 6, lineHeight: 1.65, fontWeight: 500 }}>
+              {q.text}
             </div>
-          )}
-
-          {dimQs.map((q, qi) => (
-            <div
-              key={q.id}
-              style={{
-                padding: '16px 0',
-                borderBottom: qi < dimQs.length - 1 ? '1px solid #E2E7EF' : 'none',
-              }}
-            >
-              <div className="as-q-text" style={{ fontSize: 14, color: '#0B1D3E', marginBottom: 12, lineHeight: 1.65 }}>
-                {qi + 1}. {q.text}
-              </div>
-              <div className="as-scale-row" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                {SCALE.map(v => (
-                  <button
-                    key={v}
-                    className="as-scale-btn"
-                    onClick={() => handleAnswer(q.id, v)}
-                    style={{
-                      width: 64, height: 42, borderRadius: 9, cursor: 'pointer',
-                      border: `1.5px solid ${answers[q.id] === v ? '#1BBFB0' : '#D1D9E6'}`,
-                      background: answers[q.id] === v ? 'rgba(27,191,176,0.1)' : 'white',
-                      color: answers[q.id] === v ? '#0A8A7E' : '#637082',
-                      fontWeight: answers[q.id] === v ? 700 : 400,
-                      fontSize: 15, transition: 'all 0.12s',
-                    }}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <div className="as-nav-btns" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 12 }}>
-            <button
-              disabled={activeDimIdx === 0}
-              onClick={() => { setActiveDimIdx(i => i - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              style={{
-                padding: '10px 20px', borderRadius: 9, border: '1.5px solid #D1D9E6',
-                background: 'white', color: '#637082', fontSize: 14, cursor: 'pointer',
-                opacity: activeDimIdx === 0 ? 0.4 : 1,
-              }}
-            >
-              ← Previous
-            </button>
-
-            {activeDimIdx < dimensions.length - 1 ? (
-              <button
-                onClick={() => { setActiveDimIdx(i => i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-                style={{
-                  padding: '10px 22px', borderRadius: 9, border: 'none',
-                  background: '#1BBFB0', color: 'white', fontSize: 14,
-                  fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                Next →
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={!allAnswered}
-                title={!allAnswered ? `${totalQ - totalAnswered} question${totalQ - totalAnswered !== 1 ? 's' : ''} remaining` : ''}
-                style={{
-                  padding: '10px 22px', borderRadius: 9, border: 'none',
-                  background: allAnswered ? '#1BBFB0' : '#D1D9E6',
-                  color: allAnswered ? 'white' : '#8898AA',
-                  fontSize: 14, fontWeight: 600,
-                  cursor: allAnswered ? 'pointer' : 'not-allowed',
-                  transition: 'background 0.2s',
-                }}
-              >
-                Submit Survey ✓
-              </button>
+            {q.hint && (
+              <div style={{ fontSize: 12.5, color: '#8898AA', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>
             )}
+            <QuestionRenderer
+              q={q}
+              value={answers[q.id]}
+              onChange={val => handleAnswer(q.id, val)}
+              respondentId={respondent?.id}
+            />
           </div>
+        ))}
 
-          {!allAnswered && activeDimIdx === dimensions.length - 1 && totalQ > 0 && (
-            <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#8898AA' }}>
-              {totalQ - totalAnswered} question{totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered
-            </div>
+        {/* Navigation */}
+        <div className="as-nav-btns" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28, gap: 12 }}>
+          <button
+            disabled={page === 0}
+            onClick={() => { setPage(i => i - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+            style={{ padding: '11px 22px', borderRadius: 9, border: '1.5px solid #D1D9E6', background: 'white', color: '#637082', fontSize: 14, cursor: 'pointer', opacity: page === 0 ? 0.4 : 1, fontFamily: 'inherit' }}
+          >← Previous</button>
+
+          {!isLastPage ? (
+            <button
+              onClick={() => { setPage(i => i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+              style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            >Next →</button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={!allAnswered}
+              title={!allAnswered ? `${totalQ - totalAnswered} question${totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered` : ''}
+              style={{
+                padding: '11px 24px', borderRadius: 9, border: 'none',
+                background: allAnswered ? '#1BBFB0' : '#D1D9E6',
+                color: allAnswered ? 'white' : '#8898AA',
+                fontSize: 14, fontWeight: 600,
+                cursor: allAnswered ? 'pointer' : 'not-allowed',
+                transition: 'background 0.2s', fontFamily: 'inherit',
+              }}
+            >Submit Survey ✓</button>
           )}
         </div>
 
+        {!allAnswered && isLastPage && totalQ > 0 && (
+          <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#8898AA' }}>
+            {totalQ - totalAnswered} question{totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered
+          </div>
+        )}
       </div>
     </PageShell>
   )

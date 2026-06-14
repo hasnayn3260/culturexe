@@ -3,9 +3,11 @@ import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
-import Home       from './pages/Home'
-import Login      from './pages/Login'
-import Assessment from './pages/Assessment'
+import Home            from './pages/Home'
+import Login           from './pages/Login'
+import Signup          from './pages/Signup'
+import AdminRegister   from './pages/AdminRegister'
+import Assessment      from './pages/Assessment'
 import ConsultantPortal from './portals/ConsultantPortal'
 import ClientPortal     from './portals/ClientPortal'
 
@@ -16,8 +18,10 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/"      element={<Home />} />
-              <Route path="/login" element={<Login />} />
+              <Route path="/"               element={<Home />} />
+              <Route path="/login"          element={<Login />} />
+              <Route path="/signup"         element={<Signup />} />
+              <Route path="/admin-register" element={<AdminRegister />} />
 
               <Route path="/app" element={
                 <ProtectedRoute requiredRole={['consultant', 'superadmin']}>

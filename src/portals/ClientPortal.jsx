@@ -1,1017 +1,605 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useClientData } from '../hooks/useClientData'
-import { useOrganisations } from '../hooks/useOrganisations'
-import { usePulse } from '../hooks/usePulse'
-import UserMenu from '../components/UserMenu'
-import { useYSWH } from '../hooks/useYSWH'
+import { useClientSurvey } from '../hooks/useClientSurvey'
 import supabase from '../lib/supabaseClient'
-import './client.css'
 
-const ROLES_DEF = {
-  staff:   { tabs: ['today', 'voice', 'happening', 'yswh', 'me'] },
-  manager: { tabs: ['today', 'voice', 'happening', 'yswh', 'me', 'team'] },
-  hc:      { tabs: ['today', 'voice', 'happening', 'yswh', 'me', 'team', 'diagnostics', 'participation', 'lifecycle', 'governance'] },
-  exec:    { tabs: ['today', 'voice', 'happening', 'yswh', 'me', 'team', 'diagnostics', 'participation', 'governance'] },
+// ── Helpers ────────────────────────────────────────────────
+
+function calcTimeLeft(liveEnd) {
+  if (!liveEnd) return null
+  const diff = new Date(liveEnd).getTime() - Date.now()
+  if (diff <= 0) return { expired: true, total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 }
+  const days    = Math.floor(diff / 86400000)
+  const hours   = Math.floor((diff % 86400000) / 3600000)
+  const minutes = Math.floor((diff % 3600000) / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return { expired: false, total: diff, days, hours, minutes, seconds }
 }
 
-const TAB_LABELS = {
-  today: 'Today',
-  voice: 'My Voice',
-  happening: "What's Happening",
-  yswh: 'You Said We Heard',
-  me: 'Me',
-  team: 'My Team',
-  diagnostics: 'Diagnostics',
-  participation: 'Participation',
-  lifecycle: 'Lifecycle Config',
-  governance: 'Governance',
-}
-
-const DIMS_DEMO = [
-  { name: 'Strategic Coherence', score: 82, mentions: 12, color: 'bar-teal' },
-  { name: 'Systems Intelligence', score: 71, mentions: 8, color: 'bar-teal' },
-  { name: 'Execution Discipline', score: 69, mentions: 14, color: 'bar-blue' },
-  { name: 'Purpose & Meaning', score: 74, mentions: 6, color: 'bar-blue' },
-  { name: 'Governance & Decision Rights', score: 61, mentions: 19, color: 'bar-gold' },
-  { name: 'Value Recognition', score: 47, mentions: 31, color: 'bar-coral' },
-  { name: 'Listening & Learning', score: 63, mentions: 11, color: 'bar-blue' },
-  { name: 'Leadership Influence', score: 67, mentions: 42, color: 'bar-coral' },
-  { name: 'Psychological Safety', score: 58, mentions: 28, color: 'bar-coral' },
-  { name: 'Innovation', score: 71, mentions: 9, color: 'bar-teal' },
-  { name: 'Agility & Resilience', score: 76, mentions: 7, color: 'bar-teal' },
-  { name: 'Customer Orientation', score: 79, mentions: 5, color: 'bar-teal' },
-]
-
-const PULSE_DIM_OPTS = ['Leadership', 'Recognition', 'Collaboration', 'Wellbeing', 'Strategy', 'Communication']
-
-function scoreBarClass(score) {
-  if (score >= 75) return 'bar-teal'
-  if (score >= 60) return 'bar-blue'
-  if (score >= 50) return 'bar-gold'
-  return 'bar-coral'
-}
-
-function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins} min ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs} hr ago`
-  const days = Math.floor(hrs / 24)
-  if (days < 7) return `${days} day${days !== 1 ? 's' : ''} ago`
-  return `${Math.floor(days / 7)} week${Math.floor(days / 7) !== 1 ? 's' : ''} ago`
-}
-
-export default function ClientPortal() {
-  const navigate = useNavigate()
-  const { profile, role: authRole, signOut } = useAuth()
-
-  const isSuperAdmin = authRole === 'superadmin'
-  const { organisations } = useOrganisations()
-  const [previewOrgId, setPreviewOrgId] = useState(null)
-
-  const orgId = isSuperAdmin ? (previewOrgId || organisations[0]?.id || null) : (profile?.org_id || null)
-  const { org, assessments: clientAssessments, reports: clientReports, loading: clientLoading } = useClientData(orgId)
-  const { entries: pulseEntries, stats: pulseStats, createEntry, loading: pulseLoading } = usePulse(orgId)
-  const { items: ywshItems, loading: ywshLoading } = useYSWH(orgId)
-
-  const [demoRole, setDemoRole] = useState('exec')
-  const [view, setView] = useState('today')
-  const [pulseText, setPulseText] = useState('')
-  const [selectedDims, setSelectedDims] = useState([])
-  const [deptFilter, setDeptFilter] = useState('all')
-  const [userTokens, setUserTokens] = useState({})
-
-  // Initialise demoRole from real auth role on first load
+function useCountdown(liveEnd) {
+  const [t, setT] = useState(() => calcTimeLeft(liveEnd))
   useEffect(() => {
-    if (authRole === 'employee') setDemoRole('staff')
-    else if (authRole === 'client') setDemoRole('exec')
-  }, [authRole])
+    setT(calcTimeLeft(liveEnd))
+    const id = setInterval(() => setT(calcTimeLeft(liveEnd)), 1000)
+    return () => clearInterval(id)
+  }, [liveEnd])
+  return t
+}
 
-  const availableTabs = ROLES_DEF[demoRole]?.tabs || ROLES_DEF.staff.tabs
+function formatCountdown(t) {
+  if (!t) return null
+  if (t.expired) return { text: 'Survey closed', urgent: true }
+  if (t.days > 1)   return { text: `${t.days} days ${t.hours}h remaining`, urgent: false }
+  if (t.days === 1) return { text: `1 day ${t.hours}h ${t.minutes}m remaining`, urgent: false }
+  if (t.hours > 0)  return { text: `${t.hours}h ${t.minutes}m ${t.seconds}s remaining`, urgent: t.hours < 2 }
+  return { text: `${t.minutes}m ${t.seconds}s remaining`, urgent: true }
+}
 
-  // Ensure current view is in available tabs
-  const activeView = availableTabs.includes(view) ? view : availableTabs[0]
+function isAnswered(q, val) {
+  if (val == null) return false
+  if (Array.isArray(val)) return val.length > 0
+  if (typeof val === 'object') return Object.keys(val).length > 0
+  return val !== ''
+}
 
-  const toggleDim = (dim) => {
-    setSelectedDims(prev => prev.includes(dim) ? prev.filter(d => d !== dim) : [...prev, dim])
+const SCALE = [1, 2, 3, 4, 5]
+const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
+
+function Spin({ size = 20, color = '#1BBFB0' }) {
+  return <span style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', border: `2px solid ${color}22`, borderTopColor: color, animation: 'cp-spin 0.7s linear infinite', flexShrink: 0 }} />
+}
+
+// ── Question renderer ──────────────────────────────────────
+
+function QuestionInput({ q, value, onChange, userId }) {
+  const type = q.question_type
+  const answered = isAnswered(q, value)
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+  const fileRef = useRef(null)
+
+  const border = answered ? '#1BBFB0' : '#E0E8F0'
+  const base = { width: '100%', padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${border}`, fontSize: 14, fontFamily: 'inherit', color: '#1A2E44', outline: 'none', transition: 'border-color 0.15s', background: 'white', boxSizing: 'border-box' }
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0]; if (!file) return
+    setUploading(true); setUploadErr('')
+    try {
+      const path = `${userId || 'anon'}/${q.id}/${Date.now()}_${file.name}`
+      const { data, error } = await supabase.storage.from('survey-files').upload(path, file)
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('survey-files').getPublicUrl(data.path)
+      onChange(publicUrl)
+    } catch (err) { setUploadErr(err.message || 'Upload failed') }
+    finally { setUploading(false) }
   }
 
-  const initials = profile?.full_name
-    ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'U'
-  const displayName = profile?.full_name || 'User'
-  const firstName = displayName.split(' ')[0]
+  if (type === 'SHORT_TEXT') return <input type="text" style={base} placeholder="Your answer…" value={value || ''} onChange={e => onChange(e.target.value)} />
 
-  // Profile derived values
-  const dept = profile?.department || '—'
-  const jobTitle = profile?.job_title || '—'
-  const tenureStr = profile?.hire_date
-    ? (() => {
-        const months = Math.floor((new Date() - new Date(profile.hire_date)) / (1000 * 60 * 60 * 24 * 30.5))
-        const y = Math.floor(months / 12), m = months % 12
-        return y > 0 ? `${y}yr ${m}mo` : `${m}mo`
-      })()
-    : '—'
+  if (type === 'LONG_TEXT' || type === 'text') return <textarea style={{ ...base, minHeight: 100, resize: 'vertical' }} placeholder="Type your response here…" value={value || ''} onChange={e => onChange(e.target.value)} />
 
-  // Surveys visible to the client: active (open for responses) + pending (coming soon)
-  const activeAssessments = clientAssessments.filter(a => a.status === 'active' || a.status === 'pending')
-  const activeCount = clientAssessments.filter(a => a.status === 'active').length
-
-  // Load the user's survey tokens for active assessments
-  useEffect(() => {
-    if (!profile?.email || !activeAssessments.length) return
-    const ids = activeAssessments.map(a => a.id)
-    supabase
-      .from('response_tokens')
-      .select('assessment_id, token, used')
-      .eq('email', profile.email)
-      .in('assessment_id', ids)
-      .eq('used', false)
-      .then(({ data }) => {
-        if (!data) return
-        const map = {}
-        data.forEach(t => { map[t.assessment_id] = t.token })
-        setUserTokens(map)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.email, activeAssessments.length])
-
-  // Latest released report
-  const latestReport = clientReports[0] || null
-  const reportScores = latestReport?.scores || null
-
-  // Pulse themes — count dimension mentions
-  const pulseDimCounts = {}
-  pulseEntries.forEach(e => {
-    if (Array.isArray(e.dimensions)) {
-      e.dimensions.forEach(d => { pulseDimCounts[d] = (pulseDimCounts[d] || 0) + 1 })
-    }
-  })
-  const topThemes = Object.entries(pulseDimCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-
-  // YSWH status dot color
-  function ywshDotColor(status) {
-    if (status === 'in_progress') return '#1BBFB0'
-    if (status === 'planned') return '#C9B882'
-    if (status === 'complete') return '#065F46'
-    if (status === 'cancelled') return '#8A9BB0'
-    return '#8A9BB0'
+  if (type === 'SINGLE_CHOICE') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+        {(q.options?.choices || []).map(c => (
+          <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${value === c ? '#1BBFB0' : '#E0E8F0'}`, background: value === c ? '#F0FAFA' : 'white', cursor: 'pointer', transition: 'all 0.12s' }}>
+            <input type="radio" name={`q-${q.id}`} value={c} checked={value === c} onChange={() => onChange(c)} style={{ accentColor: '#1BBFB0', width: 17, height: 17, flexShrink: 0 }} />
+            <span style={{ fontSize: 14, color: '#1A2E44' }}>{c}</span>
+          </label>
+        ))}
+      </div>
+    )
   }
 
-  function ywshStatusLabel(status) {
-    if (status === 'in_progress') return 'In Progress'
-    if (status === 'planned') return 'Planned'
-    if (status === 'complete') return 'Completed'
-    if (status === 'cancelled') return 'Cancelled'
-    return status || '—'
+  if (type === 'MULTI_CHOICE') {
+    const sel = Array.isArray(value) ? value : []
+    const toggle = c => onChange(sel.includes(c) ? sel.filter(x => x !== c) : [...sel, c])
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+        {(q.options?.choices || []).map(c => {
+          const checked = sel.includes(c)
+          return (
+            <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, border: `1.5px solid ${checked ? '#1BBFB0' : '#E0E8F0'}`, background: checked ? '#F0FAFA' : 'white', cursor: 'pointer', transition: 'all 0.12s' }}>
+              <input type="checkbox" checked={checked} onChange={() => toggle(c)} style={{ accentColor: '#1BBFB0', width: 17, height: 17, flexShrink: 0 }} />
+              <span style={{ fontSize: 14, color: '#1A2E44' }}>{c}</span>
+            </label>
+          )
+        })}
+        {sel.length > 0 && <div style={{ fontSize: 12, color: '#7A9BB0', marginTop: 2 }}>{sel.length} selected</div>}
+      </div>
+    )
   }
 
-  function ywshStatusColor(status) {
-    if (status === 'in_progress') return '#0A8A7E'
-    if (status === 'planned') return '#7A6030'
-    if (status === 'complete') return '#065F46'
-    return 'var(--text3)'
+  if (type === 'DROPDOWN') {
+    return (
+      <select style={{ ...base, appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%238898AA\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: 18, paddingRight: 40 }}
+        value={value || ''} onChange={e => onChange(e.target.value)}>
+        <option value="">— Select —</option>
+        {(q.options?.choices || []).map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
+    )
   }
 
-  async function handleStartSurvey(assessmentId) {
-    let token = userTokens[assessmentId]
-    if (!token) {
-      const newToken = crypto.randomUUID()
-      const { error } = await supabase.from('response_tokens').insert({
-        assessment_id: assessmentId,
-        token: newToken,
-        email: profile?.email ?? null,
-        used: false,
-      })
-      if (error) { alert('Could not start survey: ' + error.message); return }
-      token = newToken
-      setUserTokens(prev => ({ ...prev, [assessmentId]: newToken }))
-    }
-    navigate(`/assess/${token}`)
-  }
-
-  async function handlePulseSubmit() {
-    if (!pulseText.trim() || !orgId) return
-    await createEntry(pulseText.trim(), selectedDims, orgId)
-    setPulseText('')
-    setSelectedDims([])
-  }
-
-  return (
-    <div className="portal-cl">
-      {/* ── TOPBAR ── */}
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-mark">
-            <span className="cx">Culture</span>
-            <span className="xe">Xe</span>
-          </div>
-          <div className="brand-org">{org?.name || '…'}</div>
-          {isSuperAdmin && (
-            <>
-              <select
-                value={previewOrgId || organisations[0]?.id || ''}
-                onChange={e => setPreviewOrgId(e.target.value)}
-                style={{ marginLeft: 10, fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'white', color: 'var(--navy)', cursor: 'pointer' }}
-              >
-                {organisations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-              <button
-                className="btn btn-outline btn-sm"
-                style={{ marginLeft: 8, fontSize: 11 }}
-                onClick={() => navigate('/app')}
-              >
-                ← Consultant Portal
-              </button>
-            </>
-          )}
-        </div>
-
-        <div className="top-center">
-          {availableTabs.map(tab => (
-            <button
-              key={tab}
-              className={`tn${activeView === tab ? ' active' : ''}`}
-              onClick={() => setView(tab)}
-            >
-              {TAB_LABELS[tab]}
+  if (type === 'RATING_SCALE') {
+    const { min = 1, max = 10, min_label = '', max_label = '' } = q.options || {}
+    const scale = Array.from({ length: Number(max) - Number(min) + 1 }, (_, i) => Number(min) + i)
+    return (
+      <div>
+        {(min_label || max_label) && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#7A9BB0', marginBottom: 8 }}><span>{min_label}</span><span>{max_label}</span></div>}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {scale.map(v => (
+            <button key={v} onClick={() => onChange(v)} style={{ width: 46, height: 46, borderRadius: 10, border: `1.5px solid ${value === v ? '#1BBFB0' : '#E0E8F0'}`, background: value === v ? '#F0FAFA' : 'white', color: value === v ? '#0A8A7E' : '#637082', fontWeight: value === v ? 700 : 400, fontSize: 14, cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit' }}>
+              {v}
             </button>
           ))}
         </div>
-
-        <div className="top-right">
-          <div className="role-switcher">
-            <select value={demoRole} onChange={e => { setDemoRole(e.target.value); setView('today') }}>
-              <option value="staff">Staff</option>
-              <option value="manager">Manager</option>
-              <option value="hc">HR / Culture Lead</option>
-              <option value="exec">Executive</option>
-            </select>
-          </div>
-          <UserMenu initials={initials} displayName={profile?.full_name || displayName} />
-        </div>
+        {value != null && <div style={{ fontSize: 12.5, color: '#0A8A7E', marginTop: 8, fontWeight: 500 }}>Selected: {value}</div>}
       </div>
+    )
+  }
 
-      {/* ── CONTENT ── */}
-      <div className="container">
+  if (type === 'MATRIX') {
+    const { rows = [], cols = [] } = q.options || {}
+    const rowAns = (typeof value === 'object' && !Array.isArray(value) && value) ? value : {}
+    return (
+      <div style={{ overflowX: 'auto', marginTop: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', padding: '8px 12px', color: '#7A9BB0', fontWeight: 500, fontSize: 12, borderBottom: '1px solid #E8EFF5', minWidth: 120 }} />
+              {cols.map(c => <th key={c} style={{ textAlign: 'center', padding: '8px 10px', color: '#637082', fontWeight: 500, fontSize: 12, borderBottom: '1px solid #E8EFF5', whiteSpace: 'nowrap' }}>{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={row} style={{ background: ri % 2 === 0 ? 'white' : '#FAFCFE' }}>
+                <td style={{ padding: '12px', color: '#1A2E44', fontWeight: 500, lineHeight: 1.45, borderBottom: ri < rows.length - 1 ? '1px solid #F0F5F8' : 'none' }}>{row}</td>
+                {cols.map(col => (
+                  <td key={col} style={{ textAlign: 'center', padding: '12px 10px', borderBottom: ri < rows.length - 1 ? '1px solid #F0F5F8' : 'none' }}>
+                    <button onClick={() => onChange({ ...rowAns, [row]: col })} title={`${row} → ${col}`}
+                      style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', border: `2px solid ${rowAns[row] === col ? '#1BBFB0' : '#D1D9E6'}`, background: rowAns[row] === col ? '#1BBFB0' : 'white', transition: 'all 0.12s' }} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
-        {/* ════════════════════════════════════════════════
-            TODAY VIEW
-        ════════════════════════════════════════════════ */}
-        {activeView === 'today' && (
-          <div>
-            <div className="hero-light">
-              <div className="hero-title-l">Good morning, {firstName} ☀️</div>
-              <div className="hero-sub-l">Here is what needs your attention today{org?.name ? ` at ${org.name}` : ''}.</div>
+  if (type === 'DATE') return <input type="date" style={{ ...base, maxWidth: 240 }} value={value || ''} onChange={e => onChange(e.target.value)} />
+  if (type === 'TIME') return <input type="time" style={{ ...base, maxWidth: 180 }} value={value || ''} onChange={e => onChange(e.target.value)} />
+
+  if (type === 'FILE') {
+    return (
+      <div>
+        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFile} />
+        {value ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #1BBFB0', background: '#F0FAFA', fontSize: 13.5, color: '#0A8A7E', flex: 1, wordBreak: 'break-all' }}>
+              📎 {typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
+            </div>
+            <button onClick={() => { onChange(null); if (fileRef.current) fileRef.current.value = '' }} style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', fontSize: 13, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>Change</button>
+          </div>
+        ) : (
+          <button onClick={() => fileRef.current.click()} disabled={uploading}
+            style={{ padding: '12px 20px', borderRadius: 10, border: '1.5px dashed #D1D9E6', background: 'white', fontSize: 14, color: uploading ? '#8898AA' : '#637082', cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {uploading ? <><Spin size={16} /> Uploading…</> : <>📎 Choose File</>}
+          </button>
+        )}
+        {uploadErr && <div style={{ fontSize: 12.5, color: '#E8563A', marginTop: 6 }}>⚠ {uploadErr}</div>}
+      </div>
+    )
+  }
+
+  // LIKERT (default)
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+        {SCALE.map(v => (
+          <button key={v} onClick={() => onChange(v)}
+            style={{ flex: 1, minWidth: 52, height: 46, borderRadius: 10, border: `1.5px solid ${value === v ? '#1BBFB0' : '#E0E8F0'}`, background: value === v ? '#F0FAFA' : 'white', color: value === v ? '#0A8A7E' : '#637082', fontWeight: value === v ? 700 : 400, fontSize: 15, cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit' }}>
+            {v}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#A0B0C0', marginTop: 5 }}>
+        <span>{SCALE_LABELS[1]}</span><span>{SCALE_LABELS[5]}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Profile screen ─────────────────────────────────────────
+
+function ProfileScreen({ profile, respondent, onSave, onBack }) {
+  const { updateProfile, user } = useAuth()
+  const [form, setForm] = useState({
+    full_name:  profile?.full_name     || '',
+    email:      user?.email            || '',
+    department: respondent?.department || '',
+    job_title:  respondent?.job_title  || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [msg,    setMsg]    = useState(null)
+
+  async function handleSave(e) {
+    e.preventDefault(); setSaving(true); setMsg(null)
+    try {
+      if (form.full_name !== profile?.full_name) await updateProfile({ full_name: form.full_name })
+      if (form.email !== user?.email) {
+        const { error } = await supabase.auth.updateUser({ email: form.email })
+        if (error) throw error
+      }
+      await onSave({ department: form.department, job_title: form.job_title, name: form.full_name })
+      setMsg({ ok: true, text: form.email !== user?.email ? 'Saved. Check your new email address to confirm the change.' : 'Profile updated successfully.' })
+    } catch (err) {
+      setMsg({ ok: false, text: err.message || 'Could not save changes.' })
+    } finally { setSaving(false) }
+  }
+
+  const iStyle = { width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', fontSize: 14, fontFamily: 'inherit', color: '#1A2E44', outline: 'none', transition: 'border-color 0.15s', background: 'white', boxSizing: 'border-box' }
+  const lStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5E72', marginBottom: 5 }
+
+  return (
+    <div style={{ maxWidth: 480, margin: '0 auto' }}>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#7A9BB0', cursor: 'pointer', fontSize: 13.5, fontFamily: 'inherit', padding: '0 0 20px', display: 'flex', alignItems: 'center', gap: 6 }}>← Back to survey</button>
+      <div style={{ background: 'white', borderRadius: 16, padding: '32px 28px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
+        <div style={{ fontSize: 20, fontWeight: 800, color: '#0D1F3C', marginBottom: 4 }}>Your Profile</div>
+        <div style={{ fontSize: 13.5, color: '#7A9BB0', marginBottom: 28 }}>Update your personal details.</div>
+
+        {msg && (
+          <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 20, fontSize: 13.5, background: msg.ok ? '#E8F7F5' : '#FDE8E3', color: msg.ok ? '#0A6B5E' : '#C0392B', border: `1px solid ${msg.ok ? 'rgba(27,191,176,0.3)' : 'rgba(232,86,58,0.25)'}` }}>
+            {msg.ok ? '✓ ' : '⚠ '}{msg.text}
+          </div>
+        )}
+
+        <form onSubmit={handleSave}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={lStyle}>Full Name</label>
+            <input style={iStyle} type="text" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
+              onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={lStyle}>Email Address</label>
+            <input style={iStyle} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
+            <div style={{ fontSize: 11.5, color: '#A0B0C0', marginTop: 4 }}>Changing your email requires inbox confirmation.</div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
+            <div style={{ flex: 1 }}>
+              <label style={lStyle}>Department</label>
+              <input style={iStyle} type="text" placeholder="e.g. Finance" value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))}
+                onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lStyle}>Job Title</label>
+              <input style={iStyle} type="text" placeholder="e.g. Manager" value={form.job_title} onChange={e => setForm(p => ({ ...p, job_title: e.target.value }))}
+                onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
+            </div>
+          </div>
+          <button type="submit" disabled={saving}
+            style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: saving ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {saving && <Spin size={16} color="white" />}
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Main portal ────────────────────────────────────────────
+
+export default function ClientPortal() {
+  const navigate = useNavigate()
+  const { user, profile, role, signOut } = useAuth()
+  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id)
+
+  const [screen,     setScreen]     = useState('survey')
+  const [answers,    setAnswers]    = useState({})
+  const [page,       setPage]       = useState(0)
+  const [saveState,  setSaveState]  = useState('idle') // idle | saving | saved | error
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted,  setSubmitted]  = useState(false)
+  const [submitErr,  setSubmitErr]  = useState('')
+  const autoSaveTimer = useRef(null)
+
+  const countdown = useCountdown(survey?.live_end)
+  const timer     = formatCountdown(countdown)
+  const isLive    = survey?.status === 'live'
+  const isClosed  = survey?.status === 'closed'
+
+  // Seed answers from existing response or draft
+  useEffect(() => {
+    if (existingResponse?.answers && Object.keys(existingResponse.answers).length > 0) {
+      setAnswers(existingResponse.answers); setSubmitted(true)
+    } else if (respondent?.draft_answers && Object.keys(respondent.draft_answers).length > 0) {
+      setAnswers(respondent.draft_answers)
+    }
+  }, [existingResponse, respondent])
+
+  // Auto-save draft 1.5s after last change
+  const triggerAutoSave = useCallback((ans) => {
+    if (!respondent || !isLive) return
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(async () => {
+      setSaveState('saving')
+      try { await saveDraft(ans); setSaveState('saved'); setTimeout(() => setSaveState('idle'), 2500) }
+      catch { setSaveState('error') }
+    }, 1500)
+  }, [respondent, isLive, saveDraft])
+
+  function handleAnswer(qId, val) {
+    setAnswers(prev => { const next = { ...prev, [qId]: val }; triggerAutoSave(next); return next })
+  }
+
+  // Paging: by dimension, else chunks of 6
+  const dimensions = [...new Set(questions.map(q => q.dimension || '').filter(Boolean))]
+  const hasDimensions = dimensions.length > 0
+  let pages = []
+  if (hasDimensions) {
+    const noDim = questions.filter(q => !q.dimension)
+    for (const dim of dimensions) pages.push({ label: dim, qs: questions.filter(q => q.dimension === dim) })
+    if (noDim.length) pages.push({ label: 'Other', qs: noDim })
+  } else {
+    for (let i = 0; i < questions.length; i += 6) pages.push({ label: `Part ${Math.floor(i / 6) + 1}`, qs: questions.slice(i, i + 6) })
+  }
+  const currentPage = pages[page] || { label: '', qs: [] }
+  const totalQ      = questions.length
+  const answered    = questions.filter(q => isAnswered(q, answers[q.id])).length
+  const progress    = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
+  const allAnswered = totalQ > 0 && answered === totalQ
+  const isLastPage  = page === pages.length - 1
+
+  async function handleSaveDraft() {
+    setSaveState('saving')
+    try { await saveDraft(answers); setSaveState('saved'); setTimeout(() => setSaveState('idle'), 2500) }
+    catch { setSaveState('error') }
+  }
+
+  async function handleSubmit() {
+    setSubmitErr(''); setSubmitting(true)
+    try { await submitResponse(answers); setSubmitted(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+    catch (e) { setSubmitErr(e.message || 'Something went wrong.') }
+    finally { setSubmitting(false) }
+  }
+
+  const displayName = profile?.full_name?.split(' ')[0] || 'there'
+  const initials    = profile?.full_name ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?'
+
+  const cardStyle = { background: 'white', borderRadius: 16, padding: '28px', boxShadow: '0 2px 16px rgba(0,0,0,0.05)', marginBottom: 20 }
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#F2F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <style>{`@keyframes cp-spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ textAlign: 'center' }}><Spin size={36} /><div style={{ marginTop: 16, color: '#7A9BB0', fontSize: 14 }}>Loading your survey…</div></div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#F2F7FA', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <style>{`@keyframes cp-spin { to { transform: rotate(360deg); } } @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+
+      {/* ── NAV ── */}
+      <nav style={{ background: 'white', borderBottom: '1px solid #E8EFF5', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px' }}>
+            <span style={{ color: '#0D1F3C' }}>Culture</span><span style={{ color: '#1BBFB0' }}>Xe</span>
+          </div>
+          {survey?.title && <span style={{ fontSize: 13, color: '#A0B0C0', borderLeft: '1px solid #E8EFF5', paddingLeft: 12 }}>{survey.title}</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {role && role !== 'client' && (
+            <select
+              value="client"
+              onChange={e => { if (e.target.value === 'consultant') navigate('/app') }}
+              style={{ padding: '6px 30px 6px 12px', borderRadius: 8, border: '1.5px solid #E0E8F0', background: 'white', color: '#1A2E44', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', outline: 'none', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238898AA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: 16 }}
+            >
+              <option value="client">Client View</option>
+              <option value="consultant">Consultant View</option>
+            </select>
+          )}
+          {isLive && timer && (
+            <div style={{ padding: '5px 12px', borderRadius: 20, background: timer.urgent ? '#FFF0EE' : '#F0FAFA', border: `1px solid ${timer.urgent ? 'rgba(232,86,58,0.2)' : 'rgba(27,191,176,0.2)'}`, fontSize: 12.5, fontWeight: 600, color: timer.urgent ? '#C0392B' : '#0A8A7E', display: 'flex', alignItems: 'center', gap: 5 }}>
+              {timer.urgent && <span style={{ animation: 'cp-pulse 1s infinite' }}>●</span>}
+              {timer.text}
+            </div>
+          )}
+          <button onClick={() => setScreen(s => s === 'profile' ? 'survey' : 'profile')} title={screen === 'profile' ? 'Back to survey' : 'Edit profile'}
+            style={{ width: 36, height: 36, borderRadius: '50%', background: '#1BBFB0', border: 'none', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {initials}
+          </button>
+          <button onClick={signOut} style={{ background: 'none', border: '1px solid #E8EFF5', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>
+            Sign out
+          </button>
+        </div>
+      </nav>
+
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 20px 80px' }}>
+
+        {/* ════════ PROFILE ════════ */}
+        {screen === 'profile' && (
+          <ProfileScreen profile={profile} respondent={respondent} onSave={updateRespondentProfile} onBack={() => setScreen('survey')} />
+        )}
+
+        {/* ════════ SURVEY ════════ */}
+        {screen === 'survey' && (
+          <>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#0D1F3C', marginBottom: 4 }}>Hello, {displayName} 👋</div>
+              <div style={{ fontSize: 14, color: '#7A9BB0' }}>{survey?.description || survey?.title || 'No active survey found.'}</div>
             </div>
 
-            <div className="grid-2 mb-20">
-              {/* Active Surveys */}
-              <div className="card">
-                <div className="flex-between mb-16">
-                  <div className="section-title" style={{ fontSize: 15 }}>Active Surveys</div>
-                  {activeCount > 0 && <span className="badge badge-teal">{activeCount} open</span>}
+            {error && (
+              <div style={{ ...cardStyle, background: '#FDE8E3', borderLeft: '4px solid #E8563A', padding: '16px 20px' }}>
+                <div style={{ color: '#C0392B', fontSize: 13.5 }}>⚠ {error}</div>
+              </div>
+            )}
+
+            {/* Not invited */}
+            {!loading && survey && !respondent && (
+              <div style={cardStyle}>
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div style={{ fontSize: 44, marginBottom: 16 }}>📋</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 8 }}>You haven't been added yet</div>
+                  <div style={{ fontSize: 14, color: '#7A9BB0', lineHeight: 1.7, maxWidth: 340, margin: '0 auto' }}>
+                    Your email (<strong style={{ color: '#1A2E44' }}>{user?.email}</strong>) hasn't been added to this survey. Contact your HR administrator.
+                  </div>
                 </div>
-                {activeAssessments.length > 0 ? activeAssessments.map(s => (
-                  <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 10, marginBottom: 8, background: s.status === 'pending' ? '#f9f9f9' : 'var(--teal-light)', border: `1px solid ${s.status === 'pending' ? 'var(--border)' : 'rgba(27,191,176,0.22)'}` }}>
+              </div>
+            )}
+
+            {/* Survey not live */}
+            {survey && respondent && !isLive && (
+              <div style={cardStyle}>
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div style={{ fontSize: 44, marginBottom: 16 }}>{isClosed ? '✓' : '⏳'}</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 8 }}>
+                    {isClosed ? 'Survey Closed' : 'Survey Not Live Yet'}
+                  </div>
+                  <div style={{ fontSize: 14, color: '#7A9BB0', lineHeight: 1.7 }}>
+                    {isClosed ? 'This survey has closed. Thank you for your participation.' : "The survey hasn't opened yet. Check back soon or contact your HR team."}
+                  </div>
+                  {survey?.live_start && !isLive && !isClosed && (
+                    <div style={{ marginTop: 16, fontSize: 13.5, color: '#1BBFB0', fontWeight: 600 }}>
+                      Opens: {new Date(survey.live_start).toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Active survey */}
+            {isLive && respondent && (
+              <>
+                {/* Status banner */}
+                <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #0A4A44 0%, #0A6B5E 100%)', color: 'white', padding: '22px 26px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)' }}>{s.name}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
-                        {s.status === 'pending' ? 'Coming soon' : s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}` : 'Open'}
+                      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '1.2px', color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>
+                        {submitted ? 'Response recorded — update anytime before close' : respondent.draft_saved_at ? 'Draft saved — not yet submitted' : 'Not yet submitted'}
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 18 }}>
+                        {submitted ? '✓ Response submitted' : `${answered} of ${totalQ} answered`}
                       </div>
                     </div>
-                    {s.status === 'pending'
-                      ? <span style={{ fontSize: 11, color: 'var(--text3)', background: '#eee', borderRadius: 6, padding: '3px 10px' }}>Coming soon</span>
-                      : <button className="btn btn-sm" style={{ background: 'var(--teal)', color: 'white', border: 'none' }} onClick={() => handleStartSurvey(s.id)}>Start →</button>
-                    }
+                    {timer && !timer.expired && (
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 2 }}>Time remaining</div>
+                        <div style={{ fontWeight: 700, fontSize: 15, color: timer.urgent ? '#FFBFB5' : '#7EEEE8' }}>{timer.text}</div>
+                      </div>
+                    )}
                   </div>
-                )) : (
-                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No active surveys right now.</div>
-                )}
-              </div>
-
-              {/* 360 Requests */}
-              <div className="card">
-                <div className="flex-between mb-16">
-                  <div className="section-title" style={{ fontSize: 15 }}>360 Requests</div>
+                  {!submitted && totalQ > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <div style={{ height: 5, background: 'rgba(255,255,255,0.15)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${progress}%`, background: '#1BBFB0', borderRadius: 3, transition: 'width 0.35s' }} />
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.45)', marginTop: 5, textAlign: 'right' }}>{progress}% complete</div>
+                    </div>
+                  )}
                 </div>
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No 360 requests pending.</div>
-              </div>
-            </div>
 
-            {/* Quick Pulse */}
-            <div className="pulse-input-wrap">
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--navy)', marginBottom: 10 }}>Quick Pulse — How are things at work today?</div>
-              <textarea
-                className="pulse-textarea"
-                placeholder="Share what's on your mind. Fully anonymous. Your voice shapes our culture..."
-                value={pulseText}
-                onChange={e => setPulseText(e.target.value)}
-              />
-              <div className="pulse-footer">
-                <div className="pulse-dims">
-                  {PULSE_DIM_OPTS.map(d => (
-                    <button key={d} className={`pulse-dim${selectedDims.includes(d) ? ' sel' : ''}`} onClick={() => toggleDim(d)}>{d}</button>
+                {/* Re-submit notice */}
+                {submitted && (
+                  <div style={{ ...cardStyle, background: '#F0FAFA', border: '1px solid rgba(27,191,176,0.2)', padding: '16px 20px' }}>
+                    <div style={{ fontSize: 13.5, color: '#0A6B5E', lineHeight: 1.65 }}>
+                      ✓ Submitted{respondent.submitted_at ? ` on ${new Date(respondent.submitted_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}.
+                      You can update your answers and re-submit — only your latest response is counted.
+                    </div>
+                  </div>
+                )}
+
+                {/* Page pills */}
+                {pages.length > 1 && (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
+                    {pages.map((p, i) => {
+                      const done = p.qs.every(q => isAnswered(q, answers[q.id]))
+                      return (
+                        <button key={i} onClick={() => setPage(i)}
+                          style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer', border: `1.5px solid ${i === page ? '#1BBFB0' : '#E0E8F0'}`, background: i === page ? '#F0FAFA' : 'white', color: i === page ? '#0A8A7E' : '#637082', fontFamily: 'inherit', fontWeight: i === page ? 600 : 400 }}>
+                          {done ? '✓ ' : ''}{p.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Questions */}
+                <div style={cardStyle}>
+                  {hasDimensions && (
+                    <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #E8EFF5' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#1BBFB0', textTransform: 'uppercase', letterSpacing: '0.7px' }}>Section {page + 1} of {pages.length}</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#0D1F3C', marginTop: 4 }}>{currentPage.label}</div>
+                    </div>
+                  )}
+
+                  {currentPage.qs.map((q, qi) => (
+                    <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #F0F5F8' : 'none' }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, color: '#0D1F3C', marginBottom: q.hint ? 4 : 12, lineHeight: 1.65 }}>
+                        {!hasDimensions && <span style={{ color: '#A0B8C8', fontSize: 13, fontWeight: 500, marginRight: 6 }}>Q{page * 6 + qi + 1}.</span>}
+                        {q.text}
+                      </div>
+                      {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
+                      <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} />
+                    </div>
                   ))}
                 </div>
-                <button className="btn btn-teal btn-sm" onClick={handlePulseSubmit} disabled={!pulseText.trim() || !orgId}>Submit →</button>
-              </div>
-            </div>
 
-            {/* Latest YSWH */}
-            <div className="card">
-              <div className="flex-between mb-16">
-                <div className="section-title" style={{ fontSize: 15 }}>Latest — You Said, We Heard</div>
-                <button className="btn btn-outline btn-sm" onClick={() => setView('yswh')}>View All →</button>
-              </div>
-              {ywshItems.length > 0 ? (
-                <div className="yswh-item">
-                  <div className="yswh-theme">{ywshItems[0].theme}</div>
-                  <div className="yswh-quote">{ywshItems[0].employee_quote}</div>
-                  <div className="yswh-response">{ywshItems[0].response_text}</div>
-                  <div className="yswh-action">
-                    <div className="yswh-dot" style={{ background: ywshDotColor(ywshItems[0].action_status) }} />
-                    <span style={{ color: ywshStatusColor(ywshItems[0].action_status) }}>{ywshStatusLabel(ywshItems[0].action_status)}</span>
-                    {ywshItems[0].target_date && (
-                      <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 8 }}>
-                        Target: {new Date(ywshItems[0].target_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </span>
+                {submitErr && (
+                  <div style={{ padding: '12px 16px', background: '#FDE8E3', border: '1px solid rgba(232,86,58,0.2)', borderRadius: 10, color: '#C0392B', fontSize: 13.5, marginBottom: 16 }}>⚠ {submitErr}</div>
+                )}
+
+                {saveState !== 'idle' && (
+                  <div style={{ fontSize: 12.5, textAlign: 'right', marginBottom: 8, color: saveState === 'saved' ? '#0A8A7E' : saveState === 'error' ? '#C0392B' : '#7A9BB0' }}>
+                    {saveState === 'saving' && '↻ Auto-saving…'}
+                    {saveState === 'saved'  && '✓ Draft saved'}
+                    {saveState === 'error'  && '⚠ Auto-save failed'}
+                  </div>
+                )}
+
+                {/* Navigation */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <button disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                    style={{ padding: '12px 22px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', color: '#637082', fontSize: 14, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, fontFamily: 'inherit' }}>
+                    ← Previous
+                  </button>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={handleSaveDraft} disabled={saveState === 'saving'}
+                      style={{ padding: '12px 20px', borderRadius: 10, border: '1.5px solid #1BBFB0', background: 'white', color: '#0A8A7E', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Save Progress
+                    </button>
+                    {!isLastPage ? (
+                      <button onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                        style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Next →
+                      </button>
+                    ) : (
+                      <button onClick={handleSubmit} disabled={!allAnswered || submitting}
+                        title={!allAnswered ? `${totalQ - answered} question${totalQ - answered !== 1 ? 's' : ''} unanswered` : ''}
+                        style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: allAnswered && !submitting ? '#1BBFB0' : '#C8D8E4', color: allAnswered && !submitting ? 'white' : '#7A9BB0', fontSize: 14, fontWeight: 700, cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s' }}>
+                        {submitting && <Spin size={15} color="white" />}
+                        {submitting ? 'Submitting…' : submitted ? 'Re-submit ✓' : 'Submit Survey ✓'}
+                      </button>
                     )}
                   </div>
                 </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No updates yet. Your leadership will post responses here.</div>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* ════════════════════════════════════════════════
-            MY VOICE VIEW
-        ════════════════════════════════════════════════ */}
-        {activeView === 'voice' && (
-          <div>
-            <div className="hero-dark">
-              <div className="hero-title-d">My Voice</div>
-              <div className="hero-sub-d">Share how you're experiencing work. Fully anonymous. Directly shapes culture decisions.</div>
-            </div>
-
-            {/* Always On Pulse */}
-            <div className="pulse-input-wrap">
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>Always On Pulse</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Share anything — a concern, a win, an observation. Completely anonymous.</div>
-              <textarea
-                className="pulse-textarea"
-                placeholder="What's on your mind about work, culture, leadership, or your team?"
-                value={pulseText}
-                onChange={e => setPulseText(e.target.value)}
-              />
-              <div className="pulse-footer">
-                <div className="pulse-dims">
-                  {PULSE_DIM_OPTS.map(d => (
-                    <button key={d} className={`pulse-dim${selectedDims.includes(d) ? ' sel' : ''}`} onClick={() => toggleDim(d)}>{d}</button>
-                  ))}
-                </div>
-                <button className="btn btn-teal btn-sm" onClick={handlePulseSubmit} disabled={!pulseText.trim() || !orgId}>Submit Anonymously →</button>
-              </div>
-            </div>
-
-            <div className="grid-2">
-              {/* Open Surveys */}
-              <div className="card">
-                <div className="section-title mb-16" style={{ fontSize: 15 }}>Open Surveys</div>
-                {activeAssessments.length > 0 ? activeAssessments.map(s => (
-                  <div key={s.id} style={{ marginBottom: 16 }}>
-                    <div className="flex-between" style={{ marginBottom: 6 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)' }}>{s.name}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        {s.status === 'pending' ? 'Coming soon' : s.close_date ? `Closes ${new Date(s.close_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Open'}
-                      </span>
-                    </div>
-                    <div className="dim-bar-bg">
-                      <div className="dim-bar bar-teal" style={{ width: '0%' }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11.5 }}>
-                      <span style={{ color: 'var(--text3)' }}>Not started</span>
-                      {s.status === 'pending'
-                        ? <span style={{ fontSize: 11, color: 'var(--text3)', background: '#eee', borderRadius: 6, padding: '3px 10px' }}>Coming soon</span>
-                        : <button className="btn btn-sm btn-teal" onClick={() => handleStartSurvey(s.id)}>Start →</button>
-                      }
-                    </div>
+                {!allAnswered && isLastPage && (
+                  <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#A0B0C0' }}>
+                    {totalQ - answered} question{totalQ - answered !== 1 ? 's' : ''} still unanswered
                   </div>
-                )) : (
-                  <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No open surveys at this time.</div>
                 )}
-              </div>
-
-              {/* 360 Requests */}
-              <div className="card">
-                <div className="section-title mb-16" style={{ fontSize: 15 }}>360 Requests</div>
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No 360 requests pending.</div>
-              </div>
-            </div>
-
-            {/* My Recent Submissions */}
-            <div className="card" style={{ marginTop: 20 }}>
-              <div className="section-title mb-16" style={{ fontSize: 15 }}>My Recent Submissions</div>
-              {pulseEntries.slice(0, 5).length > 0 ? pulseEntries.slice(0, 5).map((entry, i) => (
-                <div key={entry.id || i} className="sentiment">
-                  <div className="sentiment-head">
-                    <div className="sentiment-tags">
-                      {Array.isArray(entry.dimensions) && entry.dimensions.map(t => <span key={t} className="badge badge-slate">{t}</span>)}
-                    </div>
-                    <span className="sentiment-time">{timeAgo(entry.created_at)}</span>
-                  </div>
-                  <div className="sentiment-body">"{entry.text}"</div>
-                </div>
-              )) : (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No submissions yet. Share your first pulse above.</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            WHAT'S HAPPENING VIEW
-        ════════════════════════════════════════════════ */}
-        {activeView === 'happening' && (
-          <div>
-            <div className="hero-dark">
-              <div className="hero-title-d">What's Happening</div>
-              <div className="hero-sub-d">Anonymised culture themes and sentiment intelligence{org?.name ? ` from across ${org.name}` : ''}.</div>
-            </div>
-
-            {/* Trending themes */}
-            <div style={{ marginBottom: 12, fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1.5 }}>Trending This Week</div>
-            <div className="grid-3 mb-24">
-              {topThemes.length > 0 ? topThemes.map(([ theme, count ], idx) => (
-                <div key={theme} className={`insight${idx === 0 ? ' alert' : idx === 1 ? ' warn' : ''}`} style={{ margin: 0 }}>
-                  <div style={{ fontSize: 22, marginBottom: 8 }}>{idx === 0 ? '⚠' : idx === 1 ? '◎' : '✓'}</div>
-                  <div className="insight-title">{theme}</div>
-                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                    <span className={`badge badge-${idx === 0 ? 'coral' : idx === 1 ? 'gold' : 'teal'}`}>{count} mentions</span>
-                  </div>
-                  <div className="insight-text">Top mentioned dimension in recent pulse submissions.</div>
-                </div>
-              )) : (
-                <div className="insight" style={{ margin: 0, gridColumn: '1/-1' }}>
-                  <div className="insight-title">No themes yet</div>
-                  <div className="insight-text">Themes will appear here as employees submit pulse entries.</div>
-                </div>
-              )}
-            </div>
-
-            {/* Dimension Pulse */}
-            <div className="card">
-              <div className="flex-between mb-16">
-                <div className="section-title" style={{ fontSize: 15 }}>Dimension Pulse</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>Based on {pulseStats.total} open-text submissions</div>
-              </div>
-              {Object.keys(pulseDimCounts).length > 0 ? (
-                <div className="grid-2">
-                  {Object.entries(pulseDimCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([dim, count]) => {
-                      const maxCount = Math.max(...Object.values(pulseDimCounts))
-                      return (
-                        <div key={dim} className="dim-item">
-                          <div className="dim-header">
-                            <span className="dim-name">{dim}</span>
-                            <span className="dim-score" style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 500 }}>{count} mentions</span>
-                          </div>
-                          <div className="dim-bar-bg">
-                            <div className="dim-bar bar-blue" style={{ width: `${Math.min(100, (count / maxCount) * 100)}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
-              ) : (
-                <div className="grid-2">
-                  {DIMS_DEMO.slice().sort((a, b) => b.mentions - a.mentions).map(dim => (
-                    <div key={dim.name} className="dim-item">
-                      <div className="dim-header">
-                        <span className="dim-name">{dim.name}</span>
-                        <span className="dim-score" style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 500 }}>{dim.mentions} mentions</span>
-                      </div>
-                      <div className="dim-bar-bg">
-                        <div className={`dim-bar ${dim.color}`} style={{ width: `${Math.min(100, (dim.mentions / 42) * 100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            YOU SAID WE HEARD VIEW
-        ════════════════════════════════════════════════ */}
-        {activeView === 'yswh' && (
-          <div>
-            <div className="hero-light">
-              <div className="hero-title-l">You Said, We Heard, We're Doing</div>
-              <div className="hero-sub-l">Here's how {org?.name || 'your organisation'} has responded to your feedback. Transparency builds trust.</div>
-            </div>
-
-            {ywshItems.length > 0 ? ywshItems.map((item, i) => (
-              <div key={item.id || i} className="yswh-item">
-                <div className="yswh-theme">{item.theme}</div>
-                {item.employee_quote && <div className="yswh-quote">{item.employee_quote}</div>}
-                {item.response_text && (
-                  <>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Our Response</div>
-                    <div className="yswh-response">{item.response_text}</div>
-                  </>
-                )}
-                {item.action_text && (
-                  <>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Action Taken</div>
-                    <div style={{ fontSize: 12, color: 'var(--navy)', marginBottom: 10, fontStyle: 'italic' }}>{item.action_text}</div>
-                  </>
-                )}
-                <div className="yswh-action">
-                  <div className="yswh-dot" style={{ background: ywshDotColor(item.action_status) }} />
-                  <span style={{ color: ywshStatusColor(item.action_status) }}>{ywshStatusLabel(item.action_status)}</span>
-                  {item.target_date && (
-                    <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 8 }}>
-                      Target: {new Date(item.target_date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )) : (
-              <div style={{ textAlign: 'center', padding: '60px 24px', color: 'var(--text3)' }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>No updates yet.</div>
-                <div style={{ fontSize: 13 }}>Your leadership will post responses here.</div>
-              </div>
+              </>
             )}
-          </div>
+          </>
         )}
-
-        {/* ════════════════════════════════════════════════
-            ME VIEW
-        ════════════════════════════════════════════════ */}
-        {activeView === 'me' && (
-          <div>
-            <div className="hero-light">
-              <div className="hero-title-l">My Settings & Privacy</div>
-              <div className="hero-sub-l">Your profile, notification preferences, and privacy controls.</div>
-            </div>
-
-            <div className="grid-2">
-              {/* My Profile */}
-              <div>
-                <div className="card mb-16">
-                  <div className="section-title mb-16" style={{ fontSize: 15 }}>My Profile</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-                    <div className="avatar" style={{ width: 52, height: 52, fontSize: 18 }}>{initials}</div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--navy)' }}>{displayName}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>{dept} · {jobTitle}</div>
-                    </div>
-                  </div>
-                  {[
-                    { label: 'Department', value: dept },
-                    { label: 'Role', value: jobTitle },
-                    { label: 'Tenure', value: tenureStr },
-                    { label: 'Reports to', value: '—' },
-                  ].map(row => (
-                    <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                      <span style={{ color: 'var(--text3)', fontWeight: 500 }}>{row.label}</span>
-                      <span style={{ color: 'var(--navy)', fontWeight: 600 }}>{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Notification Preferences */}
-                <div className="card">
-                  <div className="section-title mb-16" style={{ fontSize: 15 }}>Notification Preferences</div>
-                  {[
-                    { label: 'New survey invitations', checked: true },
-                    { label: '360 feedback requests', checked: true },
-                    { label: 'YSWH updates from leadership', checked: true },
-                    { label: 'Weekly culture digest', checked: false },
-                  ].map(pref => (
-                    <div key={pref.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: 13, color: 'var(--navy)' }}>{pref.label}</span>
-                      <input type="checkbox" defaultChecked={pref.checked} style={{ width: 16, height: 16, accentColor: 'var(--teal)' }} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Privacy & Anonymity */}
-              <div className="card">
-                <div className="section-title mb-16" style={{ fontSize: 15 }}>Privacy & Anonymity</div>
-                <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 20 }}>
-                  CultureXe is built on a foundation of psychological safety and data ethics. Here's exactly how your data is protected.
-                </div>
-                <div className="gov-card">
-                  <div className="gov-body">
-                    {[
-                      { title: 'Full Anonymity', desc: 'Your individual responses are never visible to management, HR, or any other employee. Responses are processed by AI only.' },
-                      { title: 'Aggregate Reporting Only', desc: 'Results are only reported in groups of 5 or more. No individual response is ever surfaced.' },
-                      { title: 'No Reverse Engineering', desc: 'Open-text responses are paraphrased by AI before being included in any report to prevent identification.' },
-                      { title: 'Your Data, Your Rights', desc: 'You may request deletion of all your submitted data at any time by contacting your HR administrator.' },
-                      { title: 'POPIA Compliant', desc: 'CultureXe complies with the Protection of Personal Information Act (POPIA) and GDPR standards.' },
-                    ].map(item => (
-                      <div key={item.title} className="gov-item">
-                        <span className="gov-check">✓</span>
-                        <div>
-                          <strong style={{ color: 'var(--navy)' }}>{item.title}:</strong> {item.desc}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            TEAM VIEW (manager+)
-        ════════════════════════════════════════════════ */}
-        {activeView === 'team' && (
-          <div>
-            <div className="hero-dark">
-              <div className="hero-title-d">My Team</div>
-              <div className="hero-sub-d">Anonymised culture intelligence for your direct reports and reporting lines.</div>
-            </div>
-
-            <div className="grid-4 mb-24">
-              {[
-                { label: 'Team Size', value: '—', color: '#1BBFB0' },
-                { label: 'Survey Participation', value: '—', color: '#3A8FC4' },
-                { label: 'Pulse Activity', value: pulseStats.thisWeek, color: '#C9B882' },
-                { label: 'Avg Sentiment', value: pulseStats.avgSentiment != null ? `${pulseStats.avgSentiment}/5` : '—', color: '#E8563A' },
-              ].map(s => (
-                <div key={s.label} className="stat-card">
-                  <div className="stat-accent" style={{ background: s.color }} />
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value">{s.value}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="grid-2">
-              {/* Team Dimension Scores */}
-              <div className="card">
-                <div className="section-title mb-16" style={{ fontSize: 15 }}>Team Dimension Scores</div>
-                {DIMS_DEMO.slice(0, 8).map(dim => {
-                  const score = reportScores?.[dim.name] ?? dim.score
-                  return (
-                    <div key={dim.name} className="dim-item">
-                      <div className="dim-header">
-                        <span className="dim-name">{dim.name}</span>
-                        <span className="dim-score">{score}</span>
-                      </div>
-                      <div className="dim-bar-bg">
-                        <div className={`dim-bar ${scoreBarClass(score)}`} style={{ width: `${score}%` }} />
-                      </div>
-                    </div>
-                  )
-                })}
-                {!reportScores && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Sample data — no released report yet.</div>}
-              </div>
-
-              <div>
-                {/* Team Themes */}
-                <div className="card mb-16">
-                  <div className="section-title mb-16" style={{ fontSize: 15 }}>Team Themes</div>
-                  {pulseEntries.slice(0, 3).length > 0 ? pulseEntries.slice(0, 3).map((entry, i) => (
-                    <div key={entry.id || i} className="sentiment">
-                      <div className="sentiment-head">
-                        <div className="sentiment-tags">
-                          {Array.isArray(entry.dimensions) && entry.dimensions.map(t => <span key={t} className="badge badge-slate">{t}</span>)}
-                        </div>
-                        <span className="sentiment-time">{timeAgo(entry.created_at)}</span>
-                      </div>
-                      <div className="sentiment-body">"{entry.text}"</div>
-                    </div>
-                  )) : (
-                    <div style={{ textAlign: 'center', padding: '16px', color: 'var(--text3)', fontSize: 13 }}>No team pulse entries yet.</div>
-                  )}
-                </div>
-
-                {/* 360 Feedback */}
-                <div className="card">
-                  <div className="section-title mb-16" style={{ fontSize: 15 }}>Your Leadership 360</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 16 }}>
-                    {[
-                      { label: 'Self', val: 71 },
-                      { label: 'Direct Reports', val: 74 },
-                      { label: 'Peers', val: 72 },
-                      { label: 'Manager', val: 76 },
-                    ].map(s => (
-                      <div key={s.label} style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', padding: '12px', textAlign: 'center' }}>
-                        <div style={{ fontWeight: 800, fontSize: 24, color: 'var(--navy)' }}>{s.val}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="insight">
-                    <div className="insight-title">Alignment Insight</div>
-                    <div className="insight-text">Strong alignment across rater groups (5-point range). Direct reports rate your Leadership Influence highest. Opportunity area: Psychological Safety rated 3 points below self-assessment.</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            DIAGNOSTICS VIEW (hc/exec)
-        ════════════════════════════════════════════════ */}
-        {activeView === 'diagnostics' && (
-          <div>
-            <div className="hero-dark">
-              <div className="hero-title-d">Organisation Diagnostics</div>
-              <div className="hero-sub-d">Full culture intelligence across all 12 dimensions with real-time pulse integration.</div>
-            </div>
-
-            <div className="grid-4 mb-24">
-              {[
-                { label: 'Culture Score', value: reportScores ? Math.round(Object.values(reportScores).map(Number).filter(v => !isNaN(v)).reduce((a, b) => a + b, 0) / Object.values(reportScores).length) : '—', color: '#1BBFB0' },
-                { label: 'Always On Pulse', value: pulseStats.total, color: '#3A8FC4' },
-                { label: 'Avg Leader 360', value: '—', color: '#C9B882' },
-                { label: 'YSWH Items', value: ywshItems.length, color: '#1A3560' },
-              ].map(s => (
-                <div key={s.label} className="stat-card">
-                  <div className="stat-accent" style={{ background: s.color }} />
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value">{s.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* 12 Dimension Scores */}
-            <div className="card mb-20">
-              <div className="flex-between mb-16">
-                <div className="section-title" style={{ fontSize: 15 }}>12-Dimension Culture Scores</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {!reportScores && <span className="badge badge-gold">Sample data</span>}
-                  <select
-                    className="form-input"
-                    style={{ width: 'auto', fontSize: 12, padding: '5px 10px' }}
-                    value={deptFilter}
-                    onChange={e => setDeptFilter(e.target.value)}
-                  >
-                    <option value="all">All Departments</option>
-                    <option value="underwriting">Underwriting</option>
-                    <option value="claims">Claims</option>
-                    <option value="finance">Finance</option>
-                    <option value="ops">Operations</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid-2">
-                {[DIMS_DEMO.slice(0, 6), DIMS_DEMO.slice(6, 12)].map((col, ci) => (
-                  <div key={ci}>
-                    {col.map(dim => {
-                      const score = reportScores?.[dim.name] ?? dim.score
-                      return (
-                        <div key={dim.name} className="dim-item">
-                          <div className="dim-header">
-                            <span className="dim-name">{dim.name}</span>
-                            <span className="dim-score">{score}</span>
-                          </div>
-                          <div className="dim-bar-bg">
-                            <div className={`dim-bar ${scoreBarClass(score)}`} style={{ width: `${score}%` }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Connected Intelligence */}
-            <div className="card">
-              <div className="section-title mb-16" style={{ fontSize: 15 }}>Connected Intelligence</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-                {[
-                  { type: 'alert', title: 'Critical: Value Recognition', text: 'Score of 47 is the lowest and sits 21 points below sector average. Leading indicator of retention risk in Underwriting.' },
-                  { type: 'warn', title: 'Watch: Psychological Safety', text: 'At 58, below the 60-point activation threshold. Open-text confirms self-censoring behaviour across management layers.' },
-                  { type: '', title: 'Bright Spot: Customer Orientation', text: 'Score of 79 puts the organisation in the top quartile for customer-centricity. Strong correlation with recent NPS improvements.' },
-                ].map((ins, i) => (
-                  <div key={i} className={`insight${ins.type ? ` ${ins.type}` : ''}`} style={{ margin: 0 }}>
-                    <div className="insight-title">{ins.title}</div>
-                    <div className="insight-text">{ins.text}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            PARTICIPATION VIEW (hc/exec)
-        ════════════════════════════════════════════════ */}
-        {activeView === 'participation' && (
-          <div>
-            <div className="hero-light">
-              <div className="hero-title-l">Organisation Participation</div>
-              <div className="hero-sub-l">Track survey completion, pulse activity, and 360 engagement across all departments.</div>
-            </div>
-
-            <div className="grid-3 mb-24">
-              {clientAssessments.length > 0 ? [
-                { label: 'Survey Rate', value: `${Math.round(clientAssessments.reduce((sum, a) => sum + a.completion_rate, 0) / clientAssessments.length)}%`, color: '#1BBFB0' },
-                { label: 'Always On Active', value: `${pulseStats.total}`, color: '#3A8FC4' },
-                { label: '360 Completion', value: '—', color: '#C9B882' },
-              ].map(s => (
-                <div key={s.label} className="stat-card">
-                  <div className="stat-accent" style={{ background: s.color }} />
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value">{s.value}</div>
-                </div>
-              )) : [
-                { label: 'Survey Rate', value: '—', color: '#1BBFB0' },
-                { label: 'Always On Active', value: `${pulseStats.total}`, color: '#3A8FC4' },
-                { label: '360 Completion', value: '—', color: '#C9B882' },
-              ].map(s => (
-                <div key={s.label} className="stat-card">
-                  <div className="stat-accent" style={{ background: s.color }} />
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value">{s.value}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="card mb-20">
-              <div className="section-title mb-16" style={{ fontSize: 15 }}>Assessment Participation</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Assessment</th>
-                    <th>Invited</th>
-                    <th>Responses</th>
-                    <th>Completion</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientAssessments.length > 0 ? clientAssessments.map(a => (
-                    <tr key={a.id}>
-                      <td style={{ fontWeight: 600 }}>{a.name}</td>
-                      <td>{a.total_invited}</td>
-                      <td>{a.total_responses}</td>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div className="dim-bar-bg" style={{ width: 60 }}>
-                            <div className={`dim-bar ${a.completion_rate > 75 ? 'bar-teal' : a.completion_rate > 50 ? 'bar-gold' : 'bar-coral'}`} style={{ width: `${a.completion_rate}%` }} />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 600 }}>{a.completion_rate}%</span>
-                        </div>
-                      </td>
-                      <td>
-                        {a.status === 'complete' || a.status === 'completed' ? <span className="tag tag-complete">✓ On Track</span>
-                          : a.status === 'active' || a.status === 'live' ? <span className="tag tag-active">● Active</span>
-                          : <span className="tag tag-review">⚠ {a.status}</span>}
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: 'var(--text3)', fontSize: 13 }}>No assessments found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            LIFECYCLE CONFIG VIEW (hc only)
-        ════════════════════════════════════════════════ */}
-        {activeView === 'lifecycle' && (
-          <div>
-            <div className="hero-light">
-              <div className="hero-title-l">Lifecycle Listening Configuration</div>
-              <div className="hero-sub-l">Manage automated surveys triggered at key employee journey moments.</div>
-            </div>
-
-            <div className="grid-3">
-              {[
-                { icon: '🎉', title: 'Onboarding (Day 30)', desc: 'Automatically triggered 30 days after start date. Captures first impressions and onboarding experience.', status: 'active', n: 23, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-                { icon: '📅', title: '6-Month & Anniversary', desc: 'Triggered at 6 months, 1 year, and annually. Tracks sentiment evolution over time.', status: 'active', n: 41, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-                { icon: '⭐', title: 'Post-Promotion', desc: 'Triggered 60 days after a role change or promotion. Captures transition experience.', status: 'active', n: 8, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-                { icon: '🔄', title: 'Post-Restructuring', desc: 'Activated for employees affected by an organisational restructure. Tracks integration and morale.', status: 'active', n: 156, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-                { icon: '🌿', title: 'Return from Leave', desc: 'Triggered on return from parental, medical, or extended leave. Supports reintegration.', status: 'active', n: 12, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-                { icon: '👋', title: 'Exit Interview', desc: 'Triggered upon resignation or offboarding. Captures genuine departure feedback for culture improvement.', status: 'active', n: 6, statusColor: '#0A8A7E', statusBg: '#D1FAE5' },
-              ].map(card => (
-                <div key={card.title} className="lifecycle-card">
-                  <div className="lc-icon">{card.icon}</div>
-                  <div className="lc-title">{card.title}</div>
-                  <div className="lc-desc">{card.desc}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-                    <span className="lc-status" style={{ background: card.statusBg, color: card.statusColor }}>● Active</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)' }}>{card.n} recipients</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════
-            GOVERNANCE VIEW (hc/exec)
-        ════════════════════════════════════════════════ */}
-        {activeView === 'governance' && (
-          <div>
-            <div className="hero-dark">
-              <div className="hero-title-d">Governance & Data Ethics</div>
-              <div className="hero-sub-d">Full transparency on how CultureXe handles employee data, privacy, and access controls.</div>
-            </div>
-
-            <div className="grid-2 mb-24">
-              {/* Anonymity Thresholds */}
-              <div className="gov-card">
-                <div className="gov-head">🔒 Anonymity Thresholds</div>
-                <div className="gov-body">
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Individual responses never surfaced to any user — including HR and Executive.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Results only reported in groups of <strong>5 or more respondents</strong>.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Open-text responses paraphrased by AI before inclusion in reports.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Department breakdowns suppressed if n &lt; 5 to prevent reverse-engineering.</div></div>
-                </div>
-              </div>
-
-              {/* Data Retention */}
-              <div className="gov-card">
-                <div className="gov-head">🗄 Data Retention Policy</div>
-                <div className="gov-body">
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Survey response data retained for <strong>3 years</strong> from collection date.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Always On Pulse submissions retained for <strong>18 months</strong>.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Deleted employee data purged from all systems within <strong>30 days</strong> of departure.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Full data export available to organisation on contract termination.</div></div>
-                </div>
-              </div>
-
-              {/* Access Controls */}
-              <div className="gov-card">
-                <div className="gov-head">🔑 Access Controls</div>
-                <div className="gov-body">
-                  <div className="gov-item"><span className="gov-check">✓</span><div><strong>Staff:</strong> Can submit responses and view YSWH summaries only.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div><strong>Manager:</strong> Can view anonymised team-level summaries (min. n=5).</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div><strong>Executive:</strong> Can view department and organisation-level reports.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div><strong>HR / Culture Lead:</strong> Can view all aggregate reports and configure lifecycle triggers.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div><strong>AIA Consultant:</strong> Can view all data and generate AI insights. Cannot see individual responses.</div></div>
-                </div>
-              </div>
-
-              {/* Ethical Framework */}
-              <div className="gov-card">
-                <div className="gov-head">⚖ Ethical Framework</div>
-                <div className="gov-body">
-                  <div className="gov-item"><span className="gov-check">✓</span><div>POPIA (Protection of Personal Information Act) compliant.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>GDPR standards applied to all data processing activities.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>AI insights reviewed by human AIA consultants before delivery to clients.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>No data sold to, or shared with, any third party under any circumstances.</div></div>
-                  <div className="gov-item"><span className="gov-check">✓</span><div>Annual data ethics audit conducted by independent auditor.</div></div>
-                </div>
-              </div>
-            </div>
-
-            {/* Access Audit Log */}
-            <div className="card">
-              <div className="section-title mb-16" style={{ fontSize: 15 }}>Access Audit Log</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Action</th>
-                    <th>Timestamp</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    { user: displayName, role: demoRole.toUpperCase(), action: 'Viewed Org Diagnostics Report', time: new Date().toLocaleString('en-ZA'), status: 'normal' },
-                    { user: 'System', role: 'Automated', action: 'Lifecycle trigger: Onboarding survey sent', time: new Date(Date.now() - 86400000).toLocaleString('en-ZA'), status: 'automated' },
-                  ].map((row, i) => (
-                    <tr key={i}>
-                      <td style={{ fontWeight: 600 }}>{row.user}</td>
-                      <td><span className="badge badge-slate">{row.role}</span></td>
-                      <td style={{ color: 'var(--text2)' }}>{row.action}</td>
-                      <td style={{ color: 'var(--text3)', fontSize: 12 }}>{row.time}</td>
-                      <td>{row.status === 'automated' ? <span className="tag tag-pending">Automated</span> : <span className="tag tag-complete">Normal</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
       </div>
     </div>
   )

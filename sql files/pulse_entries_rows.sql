@@ -1,0 +1,1 @@
+INSERT INTO "public"."pulse_entries" ("id", "org_id", "assessment_id", "text", "dimensions", "sentiment", "flagged", "severity", "created_at") VALUES ('786a5c25-1b97-41cb-a952-053858d55a15', '24bce85f-c58e-49f2-ba06-6a56d9d1b201', null, 'Testing', ARRAY[], null, false, null, '2026-05-18 12:41:39.044165+00');

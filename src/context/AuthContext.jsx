@@ -19,12 +19,11 @@ export function AuthProvider({ children }) {
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
-        .single()
+        .maybeSingle()
       setUser(authUser)
       setProfile(data)
       setRole(data?.role || null)
     } catch {
-      // profile table unreachable — keep user set so they're not force-logged-out
       setUser(authUser)
       setProfile(null)
       setRole(null)
@@ -32,15 +31,12 @@ export function AuthProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    // Fire once on mount to hydrate state from existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       loadProfile(session?.user ?? null).finally(() => setLoading(false))
     })
 
-    // Keep state in sync when token refreshes, user signs in/out in another tab, etc.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        // INITIAL_SESSION is already handled by getSession above — skip to avoid double fetch
         if (event === 'INITIAL_SESSION') return
         loadProfile(session?.user ?? null)
       }
@@ -63,13 +59,12 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
-  async function signUp(email, password, fullName) {
+  async function signUp(email, password, fullName, jobTitle = '', role = 'client') {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        // full_name is read by the handle_new_user() DB trigger
-        data: { full_name: fullName },
+        data: { full_name: fullName, job_title: jobTitle, role },
       },
     })
     if (error) throw error

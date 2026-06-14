@@ -8,7 +8,10 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Code Projects\\\\culturexe\" -Recurse -Filter \"*.sql\")",
       "Bash(New-Item -ItemType Directory -Path \"C:\\\\Code Projects\\\\culturexe\\\\supabase\\\\functions\\\\send-invitations\" -Force)",
       "Bash(Out-Null)",
-      "Bash(Write-Output \"created\")"
+      "Bash(Write-Output \"created\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Code Projects\\\\culturexe\" -Force)",
+      "Bash(Select-Object Mode, Name)",
+      "Bash(xargs ls -lh)"
     ]
   }
 }
