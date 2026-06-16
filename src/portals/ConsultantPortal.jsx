@@ -646,7 +646,7 @@ export default function ConsultantPortal() {
   const { users, createUser, deactivateUser, organisations, loading: usersLoading } = useAdminData()
   const {
     survey, questions, respondents, responses, loading, refetch,
-    updateSurvey, addQuestion, updateQuestion, deleteQuestion, moveQuestion,
+    updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
   } = useSurvey()
 
@@ -763,6 +763,11 @@ export default function ConsultantPortal() {
   async function handleDeleteQuestion(id) {
     if (!window.confirm('Delete this question?')) return
     try { await deleteQuestion(id) } catch (e) { alert('Error: ' + e.message) }
+  }
+
+  async function handleDeleteAllQuestions() {
+    if (!window.confirm(`Delete all ${questions.length} questions? This cannot be undone.`)) return
+    try { await deleteAllQuestions() } catch (e) { alert('Error: ' + e.message) }
   }
 
   async function handleCSVImport(parsedQuestions) {
@@ -1080,6 +1085,11 @@ export default function ConsultantPortal() {
                     <div className="section-sub">{questions.length} question{questions.length !== 1 ? 's' : ''} in this survey</div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
+                    {questions.length > 0 && (
+                      <button className="btn btn-sm" style={{ background: 'var(--coral-light)', color: 'var(--coral)', border: 'none' }} onClick={handleDeleteAllQuestions}>
+                        Delete All
+                      </button>
+                    )}
                     <button className="btn btn-outline btn-sm" onClick={() => setShowCSV(true)}>⬆ Import CSV</button>
                     {!addingQ && <button className="btn btn-teal btn-sm" onClick={() => { setAddingQ(true); setEditingQId(null) }}>+ Add Question</button>}
                   </div>

@@ -30,14 +30,22 @@ function FluidSVG({ size = 100, id = 'fl' }) {
 
 export default function Login() {
   const navigate = useNavigate()
-  const { user, role, loading: authLoading, signIn, signInWithMagicLink, signOut } = useAuth()
+  const { user, role, loading: authLoading, signIn, signUp, signOut } = useAuth()
 
   const [tab,        setTab]        = useState('password')
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
-  const [magicSent,  setMagicSent]  = useState(false)
+
+  // Sign up fields
+  const [firstName,  setFirstName]  = useState('')
+  const [lastName,   setLastName]   = useState('')
+  const [username,   setUsername]   = useState('')
+  const [confirmPw,  setConfirmPw]  = useState('')
+  const [jobTitle,   setJobTitle]   = useState('')
+  const [position,   setPosition]   = useState('')
+  const [signUpDone, setSignUpDone] = useState(false)
 
   useEffect(() => {
     if (!authLoading && user && role) {
@@ -47,7 +55,7 @@ export default function Login() {
 
   const noProfile = !authLoading && user && !role
 
-  function switchTab(t) { setTab(t); setError(''); setMagicSent(false) }
+  function switchTab(t) { setTab(t); setError(''); setSignUpDone(false) }
 
   async function handleSignIn(e) {
     e.preventDefault()
@@ -67,15 +75,22 @@ export default function Login() {
     }
   }
 
-  async function handleMagicLink(e) {
+  async function handleSignUp(e) {
     e.preventDefault()
     setError('')
+    if (!firstName.trim()) { setError('Please enter your first name.'); return }
+    if (!lastName.trim())  { setError('Please enter your surname.'); return }
+    if (!username.trim())  { setError('Please choose a username.'); return }
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters and contain only letters, numbers, or underscores.'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    if (password !== confirmPw) { setError('Passwords do not match.'); return }
     setSubmitting(true)
     try {
-      await signInWithMagicLink(email)
-      setMagicSent(true)
+      const fullName = `${firstName.trim()} ${lastName.trim()}`
+      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position)
+      setSignUpDone(true)
     } catch (err) {
-      setError(err.message || 'Failed to send magic link.')
+      setError(err.message || 'Could not create account. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -156,7 +171,7 @@ export default function Login() {
 
           {/* Tabs: Sign In / Magic Link */}
           <div style={{ display: 'flex', background: '#EEF5F9', borderRadius: 11, padding: 4, marginBottom: 32, gap: 4 }}>
-            {[{ key: 'password', label: 'Sign In' }, { key: 'magic', label: 'Magic Link' }].map(t => (
+            {[{ key: 'password', label: 'Sign In' }, { key: 'signup', label: 'Sign Up' }].map(t => (
               <button key={t.key} onClick={() => switchTab(t.key)} style={{ flex: 1, padding: '10px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, fontWeight: 600, transition: 'all 0.15s', background: tab === t.key ? 'white' : 'transparent', color: tab === t.key ? '#0D1F3C' : '#8A9BB0', boxShadow: tab === t.key ? '0 1px 8px rgba(13,31,60,0.10)' : 'none' }}>
                 {t.label}
               </button>
@@ -182,13 +197,13 @@ export default function Login() {
           {tab === 'password' && (
             <form onSubmit={handleSignIn}>
               <div className="form-group">
-                <label className="form-label">Email Address</label>
-                <input className="form-input" type="email" placeholder="you@organisation.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+                <label className="form-label">Email or Username</label>
+                <input className="form-input" type="text" placeholder="you@organisation.com or username" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
               </div>
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <label className="form-label" style={{ margin: 0 }}>Password</label>
-                  <button type="button" style={{ background: 'none', border: 'none', fontSize: 12.5, color: '#1BBFB0', cursor: 'pointer', fontWeight: 500, padding: 0, fontFamily: 'inherit' }} onClick={() => switchTab('magic')}>
+                  <button type="button" style={{ background: 'none', border: 'none', fontSize: 12.5, color: '#1BBFB0', cursor: 'pointer', fontWeight: 500, padding: 0, fontFamily: 'inherit' }} onClick={() => switchTab('signup')}>
                     Forgot password?
                   </button>
                 </div>
@@ -200,28 +215,64 @@ export default function Login() {
             </form>
           )}
 
-          {/* Magic link form */}
-          {tab === 'magic' && !magicSent && (
-            <form onSubmit={handleMagicLink}>
-              <div className="form-group">
-                <label className="form-label">Email Address</label>
-                <input className="form-input" type="email" placeholder="you@organisation.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+          {/* Sign Up form */}
+          {tab === 'signup' && !signUpDone && (
+            <form onSubmit={handleSignUp}>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">First Name *</label>
+                  <input className="form-input" type="text" placeholder="First name" value={firstName} onChange={e => setFirstName(e.target.value)} required autoFocus />
+                </div>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label className="form-label">Surname *</label>
+                  <input className="form-input" type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} required />
+                </div>
               </div>
-              <p style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.65, marginBottom: 20 }}>We'll send a secure one-click sign-in link. No password needed.</p>
-              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer' }}>
-                {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Sending…</span> : 'Send Magic Link →'}
+              <div className="form-group">
+                <label className="form-label">Username *</label>
+                <input className="form-input" type="text" placeholder="e.g. john_doe" value={username} onChange={e => setUsername(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Work Email *</label>
+                <input className="form-input" type="email" placeholder="you@organisation.com" value={email} onChange={e => setEmail(e.target.value)} required />
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 0 }}>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Position <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
+                  <select className="form-input" value={position} onChange={e => setPosition(e.target.value)} style={{ cursor: 'pointer' }}>
+                    <option value="">Select position…</option>
+                    {['Executive','Senior Manager','Manager','Team Lead','Supervisor','Senior Employee','Employee','Intern','Contractor','Other'].map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group" style={{ flex: 1 }}>
+                  <label className="form-label">Job Title <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
+                  <input className="form-input" type="text" placeholder="e.g. Finance Lead" value={jobTitle} onChange={e => setJobTitle(e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Password *</label>
+                <input className="form-input" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Confirm Password *</label>
+                <input className="form-input" type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+              </div>
+              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
+                {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Creating account…</span> : 'Create Account →'}
               </button>
             </form>
           )}
 
-          {tab === 'magic' && magicSent && (
-            <div>
-              <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)', borderRadius: 12, padding: '20px', marginBottom: 20, textAlign: 'center' }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✉️</div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>Check your inbox</div>
-                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>A sign-in link was sent to<br /><strong style={{ color: '#0D1F3C' }}>{email}</strong></div>
+          {tab === 'signup' && signUpDone && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>Account Created</div>
+                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>Check your inbox at <strong style={{ color: '#0D1F3C' }}>{email}</strong> to confirm your address, then sign in.</div>
               </div>
-              <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setMagicSent(false); setEmail('') }}>Use a different email</button>
+              <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setSignUpDone(false); switchTab('password') }}>Go to Sign In →</button>
             </div>
           )}
 
@@ -229,7 +280,7 @@ export default function Login() {
           <div style={{ marginTop: 36, paddingTop: 24, borderTop: '1px solid #E2E8F0', textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: '#8A9BB0', lineHeight: 1.8 }}>
               New survey participant?{' '}
-              <Link to="/signup" style={{ color: '#1BBFB0', textDecoration: 'none', fontWeight: 600 }}>Create account →</Link>
+              <button onClick={() => switchTab('signup')} style={{ background: 'none', border: 'none', color: '#1BBFB0', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0 }}>Create account →</button>
             </div>
             <div style={{ fontSize: 12, color: '#B0BCC8', marginTop: 6 }}>
               Need help?{' '}

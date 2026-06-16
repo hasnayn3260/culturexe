@@ -45,7 +45,18 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [loadProfile])
 
-  async function signIn(email, password) {
+  async function signIn(emailOrUsername, password) {
+    let email = emailOrUsername
+    if (!emailOrUsername.includes('@')) {
+      // Treat as username — look up the email
+      const { data: profile, error: lookupError } = await supabase
+        .from('profiles')
+        .select('email')
+        .ilike('username', emailOrUsername)
+        .maybeSingle()
+      if (lookupError || !profile) throw new Error('No account found with that username.')
+      email = profile.email
+    }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
@@ -59,12 +70,12 @@ export function AuthProvider({ children }) {
     if (error) throw error
   }
 
-  async function signUp(email, password, fullName, jobTitle = '', role = 'client') {
+  async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '') {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, job_title: jobTitle, role },
+        data: { full_name: fullName, job_title: jobTitle, role, username, position },
       },
     })
     if (error) throw error

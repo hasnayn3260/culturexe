@@ -81,6 +81,15 @@ export function useSurvey() {
     await refetch()
   }
 
+  async function deleteAllQuestions() {
+    const { error: err } = await supabase
+      .from('survey_questions')
+      .delete()
+      .eq('survey_id', survey.id)
+    if (err) throw err
+    await refetch()
+  }
+
   async function moveQuestion(id, direction) {
     const idx = questions.findIndex(q => q.id === id)
     if (idx < 0) return
@@ -127,7 +136,7 @@ export function useSurvey() {
 
   return {
     survey, questions, respondents, responses, loading, error, refetch,
-    updateSurvey, addQuestion, updateQuestion, deleteQuestion, moveQuestion,
+    updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
   }
 }

@@ -28,11 +28,13 @@ export default function Signup() {
 
   const [firstName,  setFirstName]  = useState('')
   const [lastName,   setLastName]   = useState('')
+  const [username,   setUsername]   = useState('')
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
   const [department, setDepartment] = useState('')
   const [jobTitle,   setJobTitle]   = useState('')
+  const [position,   setPosition]   = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
@@ -42,13 +44,15 @@ export default function Signup() {
     setError('')
     if (!firstName.trim()) { setError('Please enter your first name.'); return }
     if (!lastName.trim())  { setError('Please enter your surname.'); return }
+    if (!username.trim())  { setError('Please choose a username.'); return }
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters: letters, numbers, or underscores only.'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
 
     setSubmitting(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
-      await signUp(email, password, fullName, jobTitle, 'client')
+      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position)
       setDone(true)
     } catch (err) {
       setError(err.message || 'Could not create account. Please try again.')
@@ -119,6 +123,12 @@ export default function Signup() {
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Username *</label>
+                  <input style={fieldStyle} type="text" placeholder="e.g. john_doe" value={username} onChange={e => setUsername(e.target.value)} required
+                    onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Work Email *</label>
                   <input style={fieldStyle} type="email" placeholder="you@organisation.com" value={email} onChange={e => setEmail(e.target.value)} required
                     onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
@@ -126,15 +136,26 @@ export default function Signup() {
 
                 <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
                   <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Position <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
+                    <select style={{ ...fieldStyle, cursor: 'pointer' }} value={position} onChange={e => setPosition(e.target.value)}
+                      onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'}>
+                      <option value="">Select position…</option>
+                      {['Executive','Senior Manager','Manager','Team Lead','Supervisor','Senior Employee','Employee','Intern','Contractor','Other'].map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Department <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
                     <input style={fieldStyle} type="text" placeholder="e.g. Finance" value={department} onChange={e => setDepartment(e.target.value)}
                       onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Job Title <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
-                    <input style={fieldStyle} type="text" placeholder="e.g. Manager" value={jobTitle} onChange={e => setJobTitle(e.target.value)}
-                      onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
-                  </div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Job Title <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
+                  <input style={fieldStyle} type="text" placeholder="e.g. Finance Lead" value={jobTitle} onChange={e => setJobTitle(e.target.value)}
+                    onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
                 </div>
 
                 <div style={{ marginBottom: 16 }}>
