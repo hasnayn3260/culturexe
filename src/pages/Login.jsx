@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 
 const ROLE_REDIRECTS = {
@@ -32,17 +32,9 @@ export default function Login() {
   const navigate = useNavigate()
   const { user, role, loading: authLoading, signIn, signUp, signOut } = useAuth()
 
-  const location = useLocation()
-
-  // Capture once from router state, then immediately wipe it so refresh / back never re-shows the banner
-  const [verifiedBanner, setVerifiedBanner] = useState(() => !!location.state?.verified)
-  const [verifyErrBanner, setVerifyErrBanner] = useState(() => location.state?.verifyError || '')
-
-  useEffect(() => {
-    if (location.state?.verified || location.state?.verifyError) {
-      navigate('/login', { replace: true, state: {} })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const [searchParams] = useSearchParams()
+  const verifiedParam  = searchParams.get('verified')
+  const errorParam     = searchParams.get('error')
 
   const [tab,        setTab]        = useState('password')
   const [email,      setEmail]      = useState('')
@@ -96,6 +88,8 @@ export default function Login() {
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters and contain only letters, numbers, or underscores.'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
+    if (!position)              { setError('Please select your position.'); return }
+    if (!jobTitle.trim())       { setError('Please enter your job title.'); return }
     setSubmitting(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
@@ -191,7 +185,7 @@ export default function Login() {
           </div>
 
           {/* Email verification result banner */}
-          {verifiedBanner && (
+          {verifiedParam && (
             <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.35)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 16, color: '#1BBFB0', flexShrink: 0 }}>✓</span>
               <div>
@@ -200,12 +194,12 @@ export default function Login() {
               </div>
             </div>
           )}
-          {verifyErrBanner && (
+          {errorParam && (
             <div style={{ background: '#FDE8E3', border: '1px solid rgba(232,86,58,0.25)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span style={{ fontSize: 16, color: '#E8563A', flexShrink: 0 }}>✕</span>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: '#C0392B', marginBottom: 2 }}>Verification failed</div>
-                <div style={{ fontSize: 13, color: '#4A6380', lineHeight: 1.55 }}>{verifyErrBanner}</div>
+                <div style={{ fontSize: 13, color: '#4A6380', lineHeight: 1.55 }}>{decodeURIComponent(errorParam)}</div>
               </div>
             </div>
           )}
@@ -270,8 +264,8 @@ export default function Login() {
               </div>
               <div style={{ display: 'flex', gap: 12, marginBottom: 0 }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Position <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
-                  <select className="form-input" value={position} onChange={e => setPosition(e.target.value)} style={{ cursor: 'pointer' }}>
+                  <label className="form-label">Position <span style={{ color: '#E8563A' }}>*</span></label>
+                  <select className="form-input" value={position} onChange={e => setPosition(e.target.value)} required style={{ cursor: 'pointer' }}>
                     <option value="">Select position…</option>
                     {['Executive','Senior Manager','Manager','Team Lead','Supervisor','Senior Employee','Employee','Intern','Contractor','Other'].map(p => (
                       <option key={p} value={p}>{p}</option>
@@ -279,8 +273,8 @@ export default function Login() {
                   </select>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label className="form-label">Job Title <span style={{ color: '#A0AEC0', fontWeight: 400 }}>(optional)</span></label>
-                  <input className="form-input" type="text" placeholder="e.g. Finance Lead" value={jobTitle} onChange={e => setJobTitle(e.target.value)} />
+                  <label className="form-label">Job Title <span style={{ color: '#E8563A' }}>*</span></label>
+                  <input className="form-input" type="text" placeholder="e.g. Finance Lead" value={jobTitle} onChange={e => setJobTitle(e.target.value)} required />
                 </div>
               </div>
               <div className="form-group">

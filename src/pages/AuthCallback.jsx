@@ -78,12 +78,12 @@ export default function AuthCallback() {
   // Once status is settled, redirect to login with the result
   useEffect(() => {
     if (status === 'success') {
-      const t = setTimeout(() => navigate('/login', { replace: true, state: { verified: true } }), 2200)
+      const t = setTimeout(() => navigate('/login?verified=true', { replace: true }), 2200)
       return () => clearTimeout(t)
     }
     if (status === 'error') {
       const t = setTimeout(
-        () => navigate('/login', { replace: true, state: { verifyError: errorMsg || 'Verification failed.' } }),
+        () => navigate(`/login?error=${encodeURIComponent(errorMsg || 'Verification failed.')}`, { replace: true }),
         3000,
       )
       return () => clearTimeout(t)
