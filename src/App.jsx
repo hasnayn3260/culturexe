@@ -8,6 +8,7 @@ import Login           from './pages/Login'
 import Signup          from './pages/Signup'
 import AdminRegister   from './pages/AdminRegister'
 import Assessment      from './pages/Assessment'
+import AuthCallback    from './pages/AuthCallback'
 import ConsultantPortal from './portals/ConsultantPortal'
 import ClientPortal     from './portals/ClientPortal'
 
@@ -35,7 +36,8 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
-              <Route path="/assess/:token" element={<Assessment />} />
+              <Route path="/assess/:token"  element={<Assessment />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
             </Routes>
           </BrowserRouter>
         </ToastProvider>

@@ -34,7 +34,7 @@ const steps = [
   },
   {
     num: '02', icon: '◎', title: 'Analyse',
-    desc: 'The CultureXe Intelligence Engine scores all 8 dimensions, surfaces patterns, and benchmarks results against the Africa International Advisors peer group.',
+    desc: 'The CultureXe Intelligence Engine scores all 12 dimensions, surfaces patterns, and benchmarks results against the Africa International Advisors peer group.',
     color: '#3A8FC4', bg: 'linear-gradient(135deg, #EAF4FB 0%, #EEF7FC 100%)',
   },
   {
@@ -184,19 +184,16 @@ export default function Home() {
         height: 66, display: 'flex', alignItems: 'center',
         padding: '0 48px', justifyContent: 'space-between',
       }}>
-        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div className="fluid-breathe">
             <FluidSVG size={36} id="nav" />
           </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px', lineHeight: 1 }}>
-              <span style={{ color: '#0D1F3C' }}>Culture</span>
-              <span style={{ color: '#1BBFB0' }}>Xe</span>
-            </div>
-            <div style={{ fontSize: 9, color: 'rgba(13,31,60,0.35)', letterSpacing: '2.5px', textTransform: 'uppercase', marginTop: 3 }}>
-              by Africa International Advisors
-            </div>
+          <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px', lineHeight: 1 }}>
+            <span style={{ color: '#0D1F3C' }}>Culture</span>
+            <span style={{ color: '#1BBFB0' }}>Xe</span>
           </div>
+          <div style={{ width: 1, height: 32, background: 'rgba(13,31,60,0.12)', flexShrink: 0 }} />
+          <img src="/aia_logo.svg" alt="Africa International Advisors" style={{ height: 30 }} />
         </Link>
 
         {/* Desktop nav links */}
@@ -278,6 +275,12 @@ export default function Home() {
                 </div>
               ))}
             </div>
+
+            <div style={{ marginTop: 44, display: 'flex', alignItems: 'center', gap: 16 }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.40)', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 600, whiteSpace: 'nowrap' }}>A product of</span>
+              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.15)', flexShrink: 0 }} />
+              <img src="/aia_logo.svg" alt="Africa International Advisors" style={{ height: 44, filter: 'brightness(0) invert(1)' }} />
+            </div>
           </div>
 
           <div className="home-hero-svg" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
@@ -304,7 +307,7 @@ export default function Home() {
           {[
             { value: '14+', label: 'Client Organisations', icon: '🏢' },
             { value: '1,800+', label: 'Responses Collected', icon: '📊' },
-            { value: '8', label: 'Culture Dimensions', icon: '⬡' },
+            { value: '12', label: 'Culture Dimensions', icon: '⬡' },
             { value: '31', label: 'Reports Released', icon: '📋' },
           ].map((stat, i) => (
             <div
@@ -335,7 +338,7 @@ export default function Home() {
               A new intelligence for<br />organisational culture
             </h2>
             <p style={{ fontSize: 15.5, color: '#4A6380', lineHeight: 1.82, marginBottom: 20 }}>
-              CultureXe combines a rigorously validated 8-dimension culture framework with AI-powered
+              CultureXe combines a rigorously validated 12-dimension culture framework with AI-powered
               pattern recognition to give consultants and leaders an evidence-based view of how their
               organisation truly operates — beyond the org chart.
             </p>
@@ -348,7 +351,7 @@ export default function Home() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[
-              { icon: '⬡', title: '8-Dimension Framework', color: '#1BBFB0', desc: 'A proprietary culture model covering Purpose, Leadership, Innovation, Collaboration, Accountability, Inclusion, Learning, and Customer orientation.' },
+              { icon: '⬡', title: '12-Dimension Framework', color: '#1BBFB0', desc: 'A proprietary culture model covering Strategic Coherence, Execution Discipline, Psychological Safety, Leadership Influence, Innovation, and seven more evidence-based dimensions.' },
               { icon: '◎', title: 'AI-Powered Insights', color: '#3A8FC4', desc: 'Pattern recognition across hundreds of responses surfaces trends, risks, and opportunities your team might otherwise miss.' },
               { icon: '★', title: 'Consultant-Led', color: '#C9B882', desc: "Africa International Advisors' expertise is baked into every report — from interpretation frameworks to intervention recommendations." },
             ].map(f => (
@@ -461,8 +464,8 @@ export default function Home() {
               The CultureXe Model
             </h2>
             <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.48)', maxWidth: 540, margin: '0 auto', lineHeight: 1.75 }}>
-              Eight evidence-based dimensions that together map the full landscape of organisational
-              culture — from purpose alignment to community impact.
+              Twelve evidence-based dimensions that together map the full landscape of organisational
+              culture — from strategic coherence to customer orientation.
             </p>
           </div>
 
@@ -574,13 +577,11 @@ export default function Home() {
 
             <div className="home-footer-right" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 10,
-                background: 'rgba(27,191,176,0.10)', border: '1px solid rgba(27,191,176,0.22)',
-                borderRadius: 12, padding: '12px 16px', marginBottom: 16,
+                display: 'inline-flex', alignItems: 'center', gap: 12,
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 12, padding: '14px 20px', marginBottom: 16,
               }}>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#1BBFB0' }}>Africa International Advisors</span>
-                <span style={{ width: 1, height: 14, background: 'rgba(27,191,176,0.3)', display: 'inline-block' }} />
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.38)' }}>Consultant Portal</span>
+                <img src="/aia_logo.svg" alt="Africa International Advisors" style={{ height: 32, filter: 'brightness(0) invert(1)' }} />
               </div>
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.24)', lineHeight: 1.7 }}>
                 Powering culture transformation<br />across African markets.

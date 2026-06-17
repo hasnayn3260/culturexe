@@ -441,21 +441,8 @@ export default function ClientPortal() {
               </div>
             )}
 
-            {/* Not invited */}
-            {!loading && survey && !respondent && (
-              <div style={cardStyle}>
-                <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                  <div style={{ fontSize: 44, marginBottom: 16 }}>📋</div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 8 }}>You haven't been added yet</div>
-                  <div style={{ fontSize: 14, color: '#7A9BB0', lineHeight: 1.7, maxWidth: 340, margin: '0 auto' }}>
-                    Your email (<strong style={{ color: '#1A2E44' }}>{user?.email}</strong>) hasn't been added to this survey. Contact your HR administrator.
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Survey not live */}
-            {survey && respondent && !isLive && (
+            {survey && !isLive && (
               <div style={cardStyle}>
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
                   <div style={{ fontSize: 44, marginBottom: 16 }}>{isClosed ? '✓' : '⏳'}</div>
@@ -475,7 +462,7 @@ export default function ClientPortal() {
             )}
 
             {/* Active survey */}
-            {isLive && respondent && (
+            {isLive && (
               <>
                 {/* Status banner */}
                 <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #0A4A44 0%, #0A6B5E 100%)', color: 'white', padding: '22px 26px' }}>

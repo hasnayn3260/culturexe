@@ -35,13 +35,19 @@ export function useClientSurvey(userEmail, userId) {
         .eq('survey_id', sv.id).order('order_num')
       setQuestions(qs || [])
 
-      const { data: resp } = await supabase
+      let { data: resp } = await supabase
         .from('survey_respondents').select('*')
         .eq('survey_id', sv.id).eq('email', userEmail).maybeSingle()
-      setRespondent(resp)
 
-      if (resp) {
-        // Link auth user if not already linked
+      if (!resp) {
+        const { data: created, error: createErr } = await supabase
+          .from('survey_respondents')
+          .insert({ survey_id: sv.id, email: userEmail, user_id: userId || null })
+          .select()
+          .single()
+        if (createErr) throw createErr
+        resp = created
+      } else {
         if (userId && !resp.user_id) {
           await supabase.from('survey_respondents')
             .update({ user_id: userId }).eq('id', resp.id)
@@ -51,6 +57,8 @@ export function useClientSurvey(userEmail, userId) {
           .eq('respondent_id', resp.id).maybeSingle()
         setExistingResponse(existing)
       }
+
+      setRespondent(resp)
     } catch (e) {
       setError(e.message)
     } finally {
