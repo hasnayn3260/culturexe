@@ -45,7 +45,6 @@ export default function Login() {
   const [confirmPw,  setConfirmPw]  = useState('')
   const [jobTitle,   setJobTitle]   = useState('')
   const [position,   setPosition]   = useState('')
-  const [signUpDone, setSignUpDone] = useState(false)
 
   useEffect(() => {
     if (!authLoading && user && role) {
@@ -90,7 +89,7 @@ export default function Login() {
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
       await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position)
-      setSignUpDone(true)
+      switchTab('password')
     } catch (err) {
       setError(err.message || 'Could not create account. Please try again.')
     } finally {
@@ -266,17 +265,6 @@ export default function Login() {
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Creating account…</span> : 'Create Account →'}
               </button>
             </form>
-          )}
-
-          {tab === 'signup' && signUpDone && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
-                <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>Account Created</div>
-                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>Check your inbox at <strong style={{ color: '#0D1F3C' }}>{email}</strong> to confirm your address, then sign in.</div>
-              </div>
-              <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setSignUpDone(false); switchTab('password') }}>Go to Sign In →</button>
-            </div>
           )}
 
           {/* Footer */}
