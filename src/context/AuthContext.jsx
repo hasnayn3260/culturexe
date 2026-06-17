@@ -76,11 +76,9 @@ export function AuthProvider({ children }) {
       password,
       options: {
         data: { full_name: fullName, job_title: jobTitle, role, username, position },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     if (error) throw error
-    // Supabase silently succeeds when the email already exists — detect it via empty identities
     if (data.user && data.user.identities && data.user.identities.length === 0) {
       throw new Error('An account with this email already exists. Please sign in instead.')
     }
