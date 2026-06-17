@@ -11,13 +11,11 @@ export function useAssessments() {
     setError(null)
     try {
       const { data, error: err } = await supabase
-        .from('assessments')
-        .select(`*, organisations ( id, name )`)
+        .from('assessment_stats')
+        .select('*')
         .order('created_at', { ascending: false })
       if (err) throw err
-      setAssessments(
-        (data || []).map(a => ({ ...a, org_name: a.organisations?.name || '—' }))
-      )
+      setAssessments(data || [])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -44,5 +42,15 @@ export function useAssessments() {
     await fetch()
   }
 
-  return { assessments, loading, error, createAssessment, updateAssessment, refetch: fetch }
+  async function getAssessmentById(id) {
+    const { data, error: err } = await supabase
+      .from('assessment_stats')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle()
+    if (err) throw err
+    return data
+  }
+
+  return { assessments, loading, error, createAssessment, updateAssessment, getAssessmentById, refetch: fetch }
 }

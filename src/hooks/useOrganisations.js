@@ -25,13 +25,32 @@ export function useOrganisations() {
 
   useEffect(() => { fetch() }, [fetch])
 
-  async function createOrganisation(org) {
+  async function createOrganisation({ name, industry, employee_count, country, contact_name, contact_email, website, ...rest }) {
+    const payload = {
+      name,
+      ...(industry        !== undefined ? { industry }        : {}),
+      ...(employee_count  !== undefined ? { employee_count: employee_count ? parseInt(employee_count) : null } : {}),
+      ...(country         !== undefined ? { country }         : {}),
+      ...(contact_name    !== undefined ? { contact_name }    : {}),
+      ...(contact_email   !== undefined ? { contact_email }   : {}),
+      ...(website         !== undefined ? { website }         : {}),
+      ...rest,
+    }
     const { error: err } = await supabase
       .from('organisations')
-      .insert(org)
+      .insert(payload)
     if (err) throw err
     await fetch()
   }
 
-  return { organisations, loading, error, createOrganisation, refetch: fetch }
+  async function updateOrganisation(id, updates) {
+    const { error: err } = await supabase
+      .from('organisations')
+      .update(updates)
+      .eq('id', id)
+    if (err) throw err
+    await fetch()
+  }
+
+  return { organisations, loading, error, createOrganisation, updateOrganisation, refetch: fetch }
 }
