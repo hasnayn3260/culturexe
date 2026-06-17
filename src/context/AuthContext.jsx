@@ -76,6 +76,7 @@ export function AuthProvider({ children }) {
       password,
       options: {
         data: { full_name: fullName, job_title: jobTitle, role, username, position },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     if (error) throw error
