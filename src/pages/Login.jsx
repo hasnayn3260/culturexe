@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import Turnstile from '../components/Turnstile'
+import { isTurnstileEnabled } from '../lib/turnstile'
 
 const ROLE_REDIRECTS = {
   superadmin: '/app',
@@ -42,6 +44,12 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
 
+  // Cloudflare Turnstile (anti-bot). Token is single-use, so we bump
+  // captchaReset to request a fresh one after any failed attempt.
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaReset, setCaptchaReset] = useState(0)
+  const captchaRequired = isTurnstileEnabled()
+
   // Sign up fields
   const [firstName,  setFirstName]  = useState('')
   const [lastName,   setLastName]   = useState('')
@@ -59,14 +67,15 @@ export default function Login() {
 
   const noProfile = !authLoading && user && !role
 
-  function switchTab(t) { setTab(t); setError(''); setSignUpDone(false) }
+  function switchTab(t) { setTab(t); setError(''); setSignUpDone(false); setCaptchaReset(n => n + 1) }
 
   async function handleSignIn(e) {
     e.preventDefault()
     setError('')
+    if (captchaRequired && !captchaToken) { setError('Please complete the verification challenge.'); return }
     setSubmitting(true)
     try {
-      await signIn(email, password)
+      await signIn(email, password, captchaToken)
     } catch (err) {
       const msg = err.message || ''
       if (msg.toLowerCase().includes('email not confirmed')) {
@@ -74,6 +83,7 @@ export default function Login() {
       } else {
         setError(msg || 'Invalid email or password.')
       }
+      setCaptchaReset(n => n + 1)
     } finally {
       setSubmitting(false)
     }
@@ -90,13 +100,15 @@ export default function Login() {
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     if (!position)              { setError('Please select your position.'); return }
     if (!jobTitle.trim())       { setError('Please enter your job title.'); return }
+    if (captchaRequired && !captchaToken) { setError('Please complete the verification challenge.'); return }
     setSubmitting(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
-      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position)
+      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position, captchaToken)
       setSignUpDone(true)
     } catch (err) {
       setError(err.message || 'Could not create account. Please try again.')
+      setCaptchaReset(n => n + 1)
     } finally {
       setSubmitting(false)
     }
@@ -235,7 +247,8 @@ export default function Login() {
                 </div>
                 <input className="form-input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
               </div>
-              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
+              <Turnstile onVerify={setCaptchaToken} resetSignal={captchaReset} />
+              <button type="submit" className="btn btn-teal" disabled={submitting || (captchaRequired && !captchaToken)} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: (submitting || (captchaRequired && !captchaToken)) ? 0.7 : 1, cursor: (submitting || (captchaRequired && !captchaToken)) ? 'not-allowed' : 'pointer', marginTop: 8 }}>
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Signing in…</span> : 'Sign In →'}
               </button>
             </form>
@@ -285,7 +298,8 @@ export default function Login() {
                 <label className="form-label">Confirm Password *</label>
                 <input className="form-input" type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
               </div>
-              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
+              <Turnstile onVerify={setCaptchaToken} resetSignal={captchaReset} />
+              <button type="submit" className="btn btn-teal" disabled={submitting || (captchaRequired && !captchaToken)} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: (submitting || (captchaRequired && !captchaToken)) ? 0.7 : 1, cursor: (submitting || (captchaRequired && !captchaToken)) ? 'not-allowed' : 'pointer', marginTop: 8 }}>
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Creating account…</span> : 'Create Account →'}
               </button>
             </form>

@@ -11,7 +11,9 @@
       "Bash(Write-Output \"created\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Code Projects\\\\culturexe\" -Force)",
       "Bash(Select-Object Mode, Name)",
-      "Bash(xargs ls -lh)"
+      "Bash(xargs ls -lh)",
+      "Bash(npm audit *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

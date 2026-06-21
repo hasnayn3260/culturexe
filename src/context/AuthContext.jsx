@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [loadProfile])
 
-  async function signIn(emailOrUsername, password) {
+  async function signIn(emailOrUsername, password, captchaToken) {
     let email = emailOrUsername
     if (!emailOrUsername.includes('@')) {
       // Treat as username — look up the email
@@ -57,26 +57,37 @@ export function AuthProvider({ children }) {
       if (lookupError || !profile) throw new Error('No account found with that username.')
       email = profile.email
     }
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken },
+    })
     if (error) throw error
     return data
   }
 
-  async function signInWithMagicLink(email) {
+  async function signInWithMagicLink(email, captchaToken) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
+      options: { shouldCreateUser: false, emailRedirectTo: window.location.origin, captchaToken },
     })
     if (error) throw error
   }
 
-  async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '') {
+  async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '', captchaToken) {
+    // Self-service sign-up may NEVER mint a privileged account. Even though the
+    // database trigger (handle_new_user) clamps this server-side, we also clamp
+    // here so the public client can only ever request a non-privileged role.
+    // Consultant / superadmin accounts are created exclusively via the
+    // superadmin-gated create-user Edge Function.
+    const safeRole = role === 'employee' ? 'employee' : 'client'
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { full_name: fullName, job_title: jobTitle, role, username, position },
+        data: { full_name: fullName, job_title: jobTitle, role: safeRole, username, position },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        captchaToken,
       },
     })
     if (error) throw error
@@ -88,8 +99,14 @@ export function AuthProvider({ children }) {
 
   async function updateProfile(updates) {
     if (!user) throw new Error('Not authenticated')
+    // Privilege-sensitive columns can never be changed by the user editing their
+    // own profile. These are owned by superadmins (via the create-user Edge
+    // Function / admin tools) and enforced again by RLS + a DB trigger.
+    // Stripping them here is defence-in-depth so the UI never even attempts it.
+    const { role, org_id, active, id, email, ...safeUpdates } = updates || {}
+    void role; void org_id; void active; void id; void email
     const { data, error } = await supabase
-      .from('profiles').update(updates).eq('id', user.id).select().single()
+      .from('profiles').update(safeUpdates).eq('id', user.id).select().single()
     if (error) throw error
     setProfile(data)
     return data

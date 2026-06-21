@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import Turnstile from '../components/Turnstile'
+import { isTurnstileEnabled } from '../lib/turnstile'
 
 // Internal-only registration page for consultants and admins.
 // Not linked from any public UI. Not indexed by search engines.
@@ -13,10 +15,12 @@ export default function AdminRegister() {
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
-  const [selectedRole, setSelectedRole] = useState('consultant')
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaReset, setCaptchaReset] = useState(0)
+  const captchaRequired = isTurnstileEnabled()
 
   // Inject noindex meta on mount
   useEffect(() => {
@@ -38,12 +42,17 @@ export default function AdminRegister() {
     if (!fullName.trim()) { setError('Please enter a full name.'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
+    if (captchaRequired && !captchaToken) { setError('Please complete the verification challenge.'); return }
     setSubmitting(true)
     try {
-      await signUp(email, password, fullName, '', selectedRole)
+      // Self-service registration always creates a non-privileged account.
+      // Consultant / superadmin roles are granted only by an existing superadmin
+      // through User Management (the create-user Edge Function).
+      await signUp(email, password, fullName, '', 'client', '', '', captchaToken)
       setDone(true)
     } catch (err) {
       setError(err.message || 'Could not create account.')
+      setCaptchaReset(n => n + 1)
     } finally {
       setSubmitting(false)
     }
@@ -100,14 +109,6 @@ export default function AdminRegister() {
                   <input style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} type="email" placeholder="name@africaia.com" value={email} onChange={e => setEmail(e.target.value)} required />
                 </div>
                 <div style={{ marginBottom: 14 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Role</label>
-                  <select style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} value={selectedRole} onChange={e => setSelectedRole(e.target.value)}>
-                    <option value="consultant">Consultant</option>
-                    <option value="superadmin">Super Admin</option>
-                    <option value="client">Client</option>
-                  </select>
-                </div>
-                <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Password</label>
                   <input style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
                 </div>
@@ -115,10 +116,11 @@ export default function AdminRegister() {
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Confirm Password</label>
                   <input style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} type="password" placeholder="Repeat password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
                 </div>
+                <Turnstile onVerify={setCaptchaToken} resetSignal={captchaReset} />
                 <button
                   type="submit"
-                  disabled={submitting}
-                  style={{ width: '100%', padding: '12px', borderRadius: 9, border: 'none', background: submitting ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  disabled={submitting || (captchaRequired && !captchaToken)}
+                  style={{ width: '100%', padding: '12px', borderRadius: 9, border: 'none', background: (submitting || (captchaRequired && !captchaToken)) ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 700, cursor: (submitting || (captchaRequired && !captchaToken)) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
                   {submitting && <span style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'ar-spin 0.7s linear infinite', display: 'inline-block' }} />}
                   {submitting ? 'Creating…' : 'Create Account →'}
