@@ -24,10 +24,8 @@ dist-ssr
 *.sw?
 
 # Environment
-.env
-.env.*
 !.env.example
-
+.env
 # Dev / test artifacts
 test_survey.csv
 archive/

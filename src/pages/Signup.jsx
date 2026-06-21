@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import Turnstile from '../components/Turnstile'
-import { isTurnstileEnabled } from '../lib/turnstile'
 
 function FluidSVG({ size = 60, id = 'su' }) {
   return (
@@ -40,9 +38,6 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
-  const [captchaToken, setCaptchaToken] = useState('')
-  const [captchaReset, setCaptchaReset] = useState(0)
-  const captchaRequired = isTurnstileEnabled()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -53,16 +48,14 @@ export default function Signup() {
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters: letters, numbers, or underscores only.'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
-    if (captchaRequired && !captchaToken) { setError('Please complete the verification challenge.'); return }
 
     setSubmitting(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
-      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position, captchaToken)
+      await signUp(email, password, fullName, jobTitle, 'client', username.trim(), position)
       setDone(true)
     } catch (err) {
       setError(err.message || 'Could not create account. Please try again.')
-      setCaptchaReset(n => n + 1)
     } finally {
       setSubmitting(false)
     }
@@ -177,11 +170,10 @@ export default function Signup() {
                     onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
                 </div>
 
-                <Turnstile onVerify={setCaptchaToken} resetSignal={captchaReset} />
                 <button
                   type="submit"
-                  disabled={submitting || (captchaRequired && !captchaToken)}
-                  style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: (submitting || (captchaRequired && !captchaToken)) ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: (submitting || (captchaRequired && !captchaToken)) ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                  disabled={submitting}
+                  style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: submitting ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                 >
                   {submitting && <span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'su-spin 0.7s linear infinite', display: 'inline-block' }} />}
                   {submitting ? 'Creating account…' : 'Create Account →'}
