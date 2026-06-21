@@ -1,5 +1,10 @@
 export const questions = [
 
+  // ── 00 · About You ───────────────────────────────────────
+  { id: 'ay1', dimension: 'about_you', type: 'SHORT_TEXT',    text: 'Which division or department do you work in?', hint: 'e.g. Credit, Finance, Operations' },
+  { id: 'ay2', dimension: 'about_you', type: 'SINGLE_CHOICE', text: 'How long have you worked at DBN?', options: { choices: ['Less than 1 year', '1–3 years', '4–7 years', '8+ years'] } },
+  { id: 'ay3', dimension: 'about_you', type: 'SINGLE_CHOICE', text: 'What is your role level?', options: { choices: ['Staff', 'Specialist', 'Manager', 'Senior leadership'] } },
+
   // ── 01 · Strategic Coherence ──────────────────────────────
   { id: 'sc1', dimension: 'strategic_coherence', type: 'LIKERT', text: "I understand DBN's strategic priorities clearly enough to explain them in my own words." },
   { id: 'sc2', dimension: 'strategic_coherence', type: 'LIKERT', text: "I understand how my role contributes to DBN's mandate and strategic objectives." },
