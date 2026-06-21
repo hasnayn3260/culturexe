@@ -50,6 +50,49 @@ function Spin({ size = 20, color = '#1BBFB0' }) {
   return <span style={{ display: 'inline-block', width: size, height: size, borderRadius: '50%', border: `2px solid ${color}22`, borderTopColor: color, animation: 'cp-spin 0.7s linear infinite', flexShrink: 0 }} />
 }
 
+// ── SVG Icons ──────────────────────────────────────────────
+const IconShield = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1BBFB0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <polyline points="9 12 11 14 15 10"/>
+  </svg>
+)
+const IconLock = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1BBFB0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </svg>
+)
+const IconCloud = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1BBFB0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="16 16 12 12 8 16"/>
+    <line x1="12" y1="12" x2="12" y2="21"/>
+    <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+  </svg>
+)
+const IconStar = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1BBFB0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+  </svg>
+)
+const IconClock = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#A0B0C0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+)
+const IconCheck = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#1BBFB0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+    <polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+)
+const IconPaperclip = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+  </svg>
+)
+
 // ── Question renderer ──────────────────────────────────────
 
 function QuestionInput({ q, value, onChange, userId, showError }) {
@@ -178,15 +221,15 @@ function QuestionInput({ q, value, onChange, userId, showError }) {
         <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFile} />
         {value ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #1BBFB0', background: '#F0FAFA', fontSize: 13.5, color: '#0A8A7E', flex: 1, wordBreak: 'break-all' }}>
-              📎 {typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
+            <div style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #1BBFB0', background: '#F0FAFA', fontSize: 13.5, color: '#0A8A7E', flex: 1, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 7 }}>
+              <IconPaperclip />{typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
             </div>
             <button onClick={() => { onChange(null); if (fileRef.current) fileRef.current.value = '' }} style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', fontSize: 13, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>Change</button>
           </div>
         ) : (
           <button onClick={() => fileRef.current.click()} disabled={uploading}
             style={{ padding: '12px 20px', borderRadius: 10, border: '1.5px dashed #D1D9E6', background: 'white', fontSize: 14, color: uploading ? '#8898AA' : '#637082', cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {uploading ? <><Spin size={16} /> Uploading…</> : <>📎 Choose File</>}
+            {uploading ? <><Spin size={16} /> Uploading…</> : <><IconPaperclip /> Choose File</>}
           </button>
         )}
         {uploadErr && <div style={{ fontSize: 12.5, color: '#E8563A', marginTop: 6 }}>⚠ {uploadErr}</div>}
@@ -317,7 +360,7 @@ export default function ClientPortal() {
   // Seed answers from existing response or draft
   useEffect(() => {
     if (existingResponse?.answers && Object.keys(existingResponse.answers).length > 0) {
-      setAnswers(existingResponse.answers); setSubmitted(true); setShowWelcome(false)
+      setAnswers(existingResponse.answers); setSubmitted(true)
     } else if (respondent?.draft_answers && Object.keys(respondent.draft_answers).length > 0) {
       setAnswers(respondent.draft_answers)
     }
@@ -349,13 +392,15 @@ export default function ClientPortal() {
   } else {
     for (let i = 0; i < questions.length; i += 6) pages.push({ label: `Part ${Math.floor(i / 6) + 1}`, qs: questions.slice(i, i + 6) })
   }
-  const currentPage    = pages[page] || { label: '', qs: [] }
-  const totalQ         = questions.length
-  const answered       = questions.filter(q => isAnswered(q, answers[q.id])).length
-  const progress       = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
-  const allAnswered    = totalQ > 0 && answered === totalQ
-  const isLastPage     = page === pages.length - 1
-  const sectionDone    = currentPage.qs.every(q => isAnswered(q, answers[q.id]))
+  const currentPage       = pages[page] || { label: '', qs: [] }
+  const isOptionalSection = currentPage.qs.length > 0 && currentPage.qs[0].dimension === 'About You'
+  const mandatoryQs       = questions.filter(q => q.dimension !== 'About You')
+  const totalQ            = mandatoryQs.length
+  const answered          = mandatoryQs.filter(q => isAnswered(q, answers[q.id])).length
+  const progress          = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
+  const allAnswered       = totalQ > 0 && answered === totalQ
+  const isLastPage        = page === pages.length - 1
+  const sectionDone       = isOptionalSection || currentPage.qs.every(q => isAnswered(q, answers[q.id]))
 
   async function handleSaveDraft() {
     setSaveState('saving')
@@ -450,7 +495,7 @@ export default function ClientPortal() {
             {survey && !isLive && (
               <div style={cardStyle}>
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                  <div style={{ fontSize: 44, marginBottom: 16 }}>{isClosed ? '✓' : '⏳'}</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>{isClosed ? <IconCheck /> : <IconClock />}</div>
                   <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 8 }}>
                     {isClosed ? 'Survey Closed' : 'Survey Not Live Yet'}
                   </div>
@@ -468,37 +513,73 @@ export default function ClientPortal() {
 
             {/* ── WELCOME PAGE ── */}
             {isLive && showWelcome && (
-              <div style={cardStyle}>
-                <div style={{ textAlign: 'center', padding: '20px 0 32px' }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>👋</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0D1F3C', marginBottom: 10 }}>
-                    Welcome, {displayName}
-                  </div>
-                  <div style={{ fontSize: 15, color: '#7A9BB0', lineHeight: 1.75, maxWidth: 460, margin: '0 auto' }}>
-                    {survey?.description || survey?.title || 'Please complete the survey below.'}
-                  </div>
-                </div>
+              <>
+                {/* Hero */}
+                <div style={{ background: 'linear-gradient(145deg, #071E1A 0%, #0A3A34 45%, #0A5A4A 100%)', borderRadius: 16, padding: '44px 36px 40px', marginBottom: 16, color: 'white', position: 'relative', overflow: 'hidden' }}>
+                  {/* Decorative rings */}
+                  <div style={{ position: 'absolute', top: -60, right: -60, width: 240, height: 240, borderRadius: '50%', border: '1px solid rgba(27,191,176,0.12)', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', top: -30, right: -30, width: 160, height: 160, borderRadius: '50%', border: '1px solid rgba(27,191,176,0.08)', pointerEvents: 'none' }} />
+                  <div style={{ position: 'absolute', bottom: -40, left: -40, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(27,191,176,0.07) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
-                  {[
-                    { icon: '📋', text: `${pages.length} section${pages.length !== 1 ? 's' : ''} · ${totalQ} question${totalQ !== 1 ? 's' : ''} total` },
-                    { icon: '✱',  text: 'All questions are mandatory — none can be skipped' },
-                    { icon: '🔒', text: 'Complete every question in a section before moving on' },
-                    { icon: '💾', text: 'Your progress is auto-saved as you answer' },
-                  ].map(({ icon, text }) => (
-                    <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 10, background: '#F5F8FA', border: '1px solid #E8EFF5' }}>
-                      <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
-                      <span style={{ fontSize: 13.5, color: '#4A5E72' }}>{text}</span>
+                  <div style={{ position: 'relative', zIndex: 1 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(27,191,176,0.15)', border: '1px solid rgba(27,191,176,0.25)', borderRadius: 20, padding: '5px 14px', marginBottom: 22 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1BBFB0' }} />
+                      <span style={{ fontSize: 11, letterSpacing: '1.5px', textTransform: 'uppercase', color: '#7EEEE8', fontWeight: 600 }}>DBN Culture Diagnostic</span>
                     </div>
-                  ))}
+
+                    <div style={{ fontSize: 30, fontWeight: 800, color: 'white', lineHeight: 1.2, marginBottom: 16, letterSpacing: '-0.4px', maxWidth: 440 }}>
+                      The culture we are<br />building together
+                    </div>
+                    <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.6)', lineHeight: 1.8, maxWidth: 460, marginBottom: 36 }}>
+                      Hello, <strong style={{ color: 'rgba(255,255,255,0.85)' }}>{displayName}</strong> — your honest read on how DBN works today helps leadership see what is working, what gets in the way, and where to act.
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {[
+                        { value: pages.length, label: 'sections' },
+                        { value: totalQ,       label: 'questions' },
+                        { value: '15–18',      label: 'minutes' },
+                      ].map(({ value, label }) => (
+                        <div key={label} style={{ padding: '10px 18px', borderRadius: 10, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 72 }}>
+                          <span style={{ fontWeight: 800, fontSize: 20, color: '#7EEEE8', lineHeight: 1 }}>{value}</span>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 3, letterSpacing: '0.5px' }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => setShowWelcome(false)}
-                  style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  Begin Survey →
-                </button>
-              </div>
+                {/* Info + CTA */}
+                <div style={{ background: 'white', borderRadius: 16, padding: '28px 28px 24px', boxShadow: '0 2px 16px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                  <div style={{ marginBottom: 24 }}>
+                    {[
+                      { icon: <IconShield />, title: 'Fully confidential', body: 'Responses are reviewed in aggregate only — never linked to individuals.' },
+                      { icon: <IconStar />,   title: 'All questions are required', body: 'Every question must be answered before you can move to the next section.' },
+                      { icon: <IconLock />,   title: 'Complete each section in full', body: 'Work through one section at a time — you can review previous sections at any point.' },
+                      { icon: <IconCloud />,  title: 'Auto-saved as you go', body: 'Your progress is saved automatically — you can return and continue if needed.' },
+                    ].map(({ icon, title, body }, i, arr) => (
+                      <div key={title} style={{ display: 'flex', gap: 16, padding: '16px 0', borderBottom: i < arr.length - 1 ? '1px solid #F0F5F8' : 'none', alignItems: 'flex-start' }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 10, background: '#F0FAFA', border: '1px solid rgba(27,191,176,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {icon}
+                        </div>
+                        <div style={{ paddingTop: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13.5, color: '#0D1F3C', marginBottom: 3 }}>{title}</div>
+                          <div style={{ fontSize: 13, color: '#7A9BB0', lineHeight: 1.6 }}>{body}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button onClick={() => setShowWelcome(false)}
+                    style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #1BBFB0 0%, #0A8A7E 100%)', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.2px', boxShadow: '0 4px 16px rgba(27,191,176,0.35)' }}>
+                    Begin Survey
+                  </button>
+                  <div style={{ textAlign: 'center', marginTop: 12, fontSize: 12, color: '#B0C0CC' }}>
+                    Your responses are saved securely to your account
+                  </div>
+                </div>
+              </>
             )}
 
             {/* ── ACTIVE SURVEY ── */}
@@ -569,8 +650,12 @@ export default function ClientPortal() {
                 <div style={cardStyle}>
                   {hasDimensions && (
                     <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #E8EFF5' }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#1BBFB0', textTransform: 'uppercase', letterSpacing: '0.7px' }}>Section {page + 1} of {pages.length}</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: '#0D1F3C', marginTop: 4 }}>{currentPage.label}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#1BBFB0', textTransform: 'uppercase', letterSpacing: '0.7px' }}>Section {page + 1} of {pages.length}</div>
+                        {isOptionalSection && <div style={{ fontSize: 10, fontWeight: 700, color: '#8A9BB0', textTransform: 'uppercase', letterSpacing: '0.8px', background: '#F0F5F8', borderRadius: 4, padding: '2px 7px' }}>Optional</div>}
+                      </div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#0D1F3C', marginTop: 2 }}>{currentPage.label}</div>
+                      {isOptionalSection && <div style={{ fontSize: 13, color: '#8A9BB0', marginTop: 6, lineHeight: 1.55 }}>Helps us understand patterns across DBN — never used to identify individuals.</div>}
                     </div>
                   )}
 
@@ -582,11 +667,11 @@ export default function ClientPortal() {
                         <div style={{ fontSize: 14.5, fontWeight: 600, color: '#0D1F3C', marginBottom: q.hint ? 4 : 12, lineHeight: 1.65 }}>
                           {!hasDimensions && <span style={{ color: '#A0B8C8', fontSize: 13, fontWeight: 500, marginRight: 6 }}>Q{page * 6 + qi + 1}.</span>}
                           {q.text}
-                          <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>
+                          {!isOptionalSection && <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>}
                         </div>
                         {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
-                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError} />
-                        {showError && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
+                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError && !isOptionalSection} />
+                        {showError && !isOptionalSection && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
                       </div>
                     )
                   })}
