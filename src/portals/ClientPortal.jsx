@@ -52,14 +52,14 @@ function Spin({ size = 20, color = '#1BBFB0' }) {
 
 // ── Question renderer ──────────────────────────────────────
 
-function QuestionInput({ q, value, onChange, userId }) {
+function QuestionInput({ q, value, onChange, userId, showError }) {
   const type = q.question_type
   const answered = isAnswered(q, value)
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
   const fileRef = useRef(null)
 
-  const border = answered ? '#1BBFB0' : '#E0E8F0'
+  const border = answered ? '#1BBFB0' : showError ? '#E8563A' : '#E0E8F0'
   const base = { width: '100%', padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${border}`, fontSize: 14, fontFamily: 'inherit', color: '#1A2E44', outline: 'none', transition: 'border-color 0.15s', background: 'white', boxSizing: 'border-box' }
 
   async function handleFile(e) {
@@ -298,13 +298,15 @@ export default function ClientPortal() {
   const { user, profile, role, signOut } = useAuth()
   const { survey, questions, respondent, existingResponse, loading, error, saveDraft, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id)
 
-  const [screen,     setScreen]     = useState('survey')
-  const [answers,    setAnswers]    = useState({})
-  const [page,       setPage]       = useState(0)
-  const [saveState,  setSaveState]  = useState('idle') // idle | saving | saved | error
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted,  setSubmitted]  = useState(false)
-  const [submitErr,  setSubmitErr]  = useState('')
+  const [screen,      setScreen]      = useState('survey')
+  const [answers,     setAnswers]     = useState({})
+  const [page,        setPage]        = useState(0)
+  const [saveState,   setSaveState]   = useState('idle') // idle | saving | saved | error
+  const [submitting,  setSubmitting]  = useState(false)
+  const [submitted,   setSubmitted]   = useState(false)
+  const [submitErr,   setSubmitErr]   = useState('')
+  const [showWelcome, setShowWelcome] = useState(true)
+  const [triedNext,   setTriedNext]   = useState(false)
   const autoSaveTimer = useRef(null)
 
   const countdown = useCountdown(survey?.live_end)
@@ -315,7 +317,7 @@ export default function ClientPortal() {
   // Seed answers from existing response or draft
   useEffect(() => {
     if (existingResponse?.answers && Object.keys(existingResponse.answers).length > 0) {
-      setAnswers(existingResponse.answers); setSubmitted(true)
+      setAnswers(existingResponse.answers); setSubmitted(true); setShowWelcome(false)
     } else if (respondent?.draft_answers && Object.keys(respondent.draft_answers).length > 0) {
       setAnswers(respondent.draft_answers)
     }
@@ -347,12 +349,13 @@ export default function ClientPortal() {
   } else {
     for (let i = 0; i < questions.length; i += 6) pages.push({ label: `Part ${Math.floor(i / 6) + 1}`, qs: questions.slice(i, i + 6) })
   }
-  const currentPage = pages[page] || { label: '', qs: [] }
-  const totalQ      = questions.length
-  const answered    = questions.filter(q => isAnswered(q, answers[q.id])).length
-  const progress    = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
-  const allAnswered = totalQ > 0 && answered === totalQ
-  const isLastPage  = page === pages.length - 1
+  const currentPage    = pages[page] || { label: '', qs: [] }
+  const totalQ         = questions.length
+  const answered       = questions.filter(q => isAnswered(q, answers[q.id])).length
+  const progress       = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
+  const allAnswered    = totalQ > 0 && answered === totalQ
+  const isLastPage     = page === pages.length - 1
+  const sectionDone    = currentPage.qs.every(q => isAnswered(q, answers[q.id]))
 
   async function handleSaveDraft() {
     setSaveState('saving')
@@ -365,6 +368,13 @@ export default function ClientPortal() {
     try { await submitResponse(answers); setSubmitted(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }
     catch (e) { setSubmitErr(e.message || 'Something went wrong.') }
     finally { setSubmitting(false) }
+  }
+
+  function handleNext() {
+    if (!sectionDone) { setTriedNext(true); window.scrollTo({ top: 0, behavior: 'smooth' }); return }
+    setTriedNext(false)
+    setPage(p => p + 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const displayName = profile?.full_name?.split(' ')[0] || 'there'
@@ -430,11 +440,6 @@ export default function ClientPortal() {
         {/* ════════ SURVEY ════════ */}
         {screen === 'survey' && (
           <>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#0D1F3C', marginBottom: 4 }}>Hello, {displayName} 👋</div>
-              <div style={{ fontSize: 14, color: '#7A9BB0' }}>{survey?.description || survey?.title || 'No active survey found.'}</div>
-            </div>
-
             {error && (
               <div style={{ ...cardStyle, background: '#FDE8E3', borderLeft: '4px solid #E8563A', padding: '16px 20px' }}>
                 <div style={{ color: '#C0392B', fontSize: 13.5 }}>⚠ {error}</div>
@@ -461,8 +466,43 @@ export default function ClientPortal() {
               </div>
             )}
 
-            {/* Active survey */}
-            {isLive && (
+            {/* ── WELCOME PAGE ── */}
+            {isLive && showWelcome && (
+              <div style={cardStyle}>
+                <div style={{ textAlign: 'center', padding: '20px 0 32px' }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>👋</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#0D1F3C', marginBottom: 10 }}>
+                    Welcome, {displayName}
+                  </div>
+                  <div style={{ fontSize: 15, color: '#7A9BB0', lineHeight: 1.75, maxWidth: 460, margin: '0 auto' }}>
+                    {survey?.description || survey?.title || 'Please complete the survey below.'}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
+                  {[
+                    { icon: '📋', text: `${pages.length} section${pages.length !== 1 ? 's' : ''} · ${totalQ} question${totalQ !== 1 ? 's' : ''} total` },
+                    { icon: '✱',  text: 'All questions are mandatory — none can be skipped' },
+                    { icon: '🔒', text: 'Complete every question in a section before moving on' },
+                    { icon: '💾', text: 'Your progress is auto-saved as you answer' },
+                  ].map(({ icon, text }) => (
+                    <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 10, background: '#F5F8FA', border: '1px solid #E8EFF5' }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>{icon}</span>
+                      <span style={{ fontSize: 13.5, color: '#4A5E72' }}>{text}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setShowWelcome(false)}
+                  style={{ width: '100%', padding: '15px', borderRadius: 12, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Begin Survey →
+                </button>
+              </div>
+            )}
+
+            {/* ── ACTIVE SURVEY ── */}
+            {isLive && !showWelcome && (
               <>
                 {/* Status banner */}
                 <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #0A4A44 0%, #0A6B5E 100%)', color: 'white', padding: '22px 26px' }}>
@@ -508,12 +548,20 @@ export default function ClientPortal() {
                     {pages.map((p, i) => {
                       const done = p.qs.every(q => isAnswered(q, answers[q.id]))
                       return (
-                        <button key={i} onClick={() => setPage(i)}
-                          style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer', border: `1.5px solid ${i === page ? '#1BBFB0' : '#E0E8F0'}`, background: i === page ? '#F0FAFA' : 'white', color: i === page ? '#0A8A7E' : '#637082', fontFamily: 'inherit', fontWeight: i === page ? 600 : 400 }}>
+                        <button key={i} onClick={() => { if (i < page) { setTriedNext(false); setPage(i) } }}
+                          style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, cursor: i < page ? 'pointer' : 'default', border: `1.5px solid ${i === page ? '#1BBFB0' : '#E0E8F0'}`, background: i === page ? '#F0FAFA' : 'white', color: i === page ? '#0A8A7E' : i < page ? '#637082' : '#B0C4CE', fontFamily: 'inherit', fontWeight: i === page ? 600 : 400, opacity: i > page ? 0.45 : 1 }}>
                           {done ? '✓ ' : ''}{p.label}
                         </button>
                       )
                     })}
+                  </div>
+                )}
+
+                {/* Section incomplete warning */}
+                {triedNext && !sectionDone && (
+                  <div style={{ padding: '13px 16px', background: '#FDE8E3', border: '1px solid rgba(232,86,58,0.25)', borderRadius: 10, marginBottom: 16, fontSize: 13.5, color: '#C0392B', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flexShrink: 0 }}>⚠</span>
+                    <span>Please answer all questions in this section before continuing.</span>
                   </div>
                 )}
 
@@ -526,16 +574,22 @@ export default function ClientPortal() {
                     </div>
                   )}
 
-                  {currentPage.qs.map((q, qi) => (
-                    <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #F0F5F8' : 'none' }}>
-                      <div style={{ fontSize: 14.5, fontWeight: 600, color: '#0D1F3C', marginBottom: q.hint ? 4 : 12, lineHeight: 1.65 }}>
-                        {!hasDimensions && <span style={{ color: '#A0B8C8', fontSize: 13, fontWeight: 500, marginRight: 6 }}>Q{page * 6 + qi + 1}.</span>}
-                        {q.text}
+                  {currentPage.qs.map((q, qi) => {
+                    const qAnswered = isAnswered(q, answers[q.id])
+                    const showError = triedNext && !qAnswered
+                    return (
+                      <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #F0F5F8' : 'none' }}>
+                        <div style={{ fontSize: 14.5, fontWeight: 600, color: '#0D1F3C', marginBottom: q.hint ? 4 : 12, lineHeight: 1.65 }}>
+                          {!hasDimensions && <span style={{ color: '#A0B8C8', fontSize: 13, fontWeight: 500, marginRight: 6 }}>Q{page * 6 + qi + 1}.</span>}
+                          {q.text}
+                          <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>
+                        </div>
+                        {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
+                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError} />
+                        {showError && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
                       </div>
-                      {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
-                      <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} />
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 {submitErr && (
@@ -552,7 +606,7 @@ export default function ClientPortal() {
 
                 {/* Navigation */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <button disabled={page === 0} onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                  <button disabled={page === 0} onClick={() => { setTriedNext(false); setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                     style={{ padding: '12px 22px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', color: '#637082', fontSize: 14, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.4 : 1, fontFamily: 'inherit' }}>
                     ← Previous
                   </button>
@@ -563,7 +617,7 @@ export default function ClientPortal() {
                       Save Progress
                     </button>
                     {!isLastPage ? (
-                      <button onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                      <button onClick={handleNext}
                         style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                         Next →
                       </button>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import Turnstile from '../components/Turnstile'
 
 const ROLE_REDIRECTS = {
   superadmin: '/app',
@@ -36,11 +37,15 @@ export default function Login() {
   const verifiedParam  = searchParams.get('verified')
   const errorParam     = searchParams.get('error')
 
-  const [tab,        setTab]        = useState('password')
-  const [email,      setEmail]      = useState('')
-  const [password,   setPassword]   = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error,      setError]      = useState('')
+  const [tab,            setTab]            = useState('password')
+  const [email,          setEmail]          = useState('')
+  const [password,       setPassword]       = useState('')
+  const [submitting,     setSubmitting]     = useState(false)
+  const [error,          setError]          = useState('')
+  const [signInToken,    setSignInToken]    = useState(null)
+  const [signUpToken,    setSignUpToken]    = useState(null)
+  const [signInReset,    setSignInReset]    = useState(0)
+  const [signUpReset,    setSignUpReset]    = useState(0)
 
   // Sign up fields
   const [firstName,  setFirstName]  = useState('')
@@ -61,9 +66,13 @@ export default function Login() {
 
   function switchTab(t) { setTab(t); setError(''); setSignUpDone(false) }
 
+  function resetSignInTurnstile() { setSignInToken(null); setSignInReset(n => n + 1) }
+  function resetSignUpTurnstile() { setSignUpToken(null); setSignUpReset(n => n + 1) }
+
   async function handleSignIn(e) {
     e.preventDefault()
     setError('')
+    if (!signInToken) { setError('Please complete the security check.'); return }
     setSubmitting(true)
     try {
       await signIn(email, password)
@@ -74,6 +83,7 @@ export default function Login() {
       } else {
         setError(msg || 'Invalid email or password.')
       }
+      resetSignInTurnstile()
     } finally {
       setSubmitting(false)
     }
@@ -90,6 +100,7 @@ export default function Login() {
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     if (!position)              { setError('Please select your position.'); return }
     if (!jobTitle.trim())       { setError('Please enter your job title.'); return }
+    if (!signUpToken)           { setError('Please complete the security check.'); return }
     setSubmitting(true)
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`
@@ -97,6 +108,7 @@ export default function Login() {
       setSignUpDone(true)
     } catch (err) {
       setError(err.message || 'Could not create account. Please try again.')
+      resetSignUpTurnstile()
     } finally {
       setSubmitting(false)
     }
@@ -235,7 +247,8 @@ export default function Login() {
                 </div>
                 <input className="form-input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
               </div>
-              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
+              <Turnstile resetKey={signInReset} onVerify={setSignInToken} />
+              <button type="submit" className="btn btn-teal" disabled={submitting || !signInToken} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting || !signInToken ? 0.7 : 1, cursor: submitting || !signInToken ? 'not-allowed' : 'pointer', marginTop: 8 }}>
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Signing in…</span> : 'Sign In →'}
               </button>
             </form>
@@ -285,7 +298,8 @@ export default function Login() {
                 <label className="form-label">Confirm Password *</label>
                 <input className="form-input" type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
               </div>
-              <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
+              <Turnstile resetKey={signUpReset} onVerify={setSignUpToken} />
+              <button type="submit" className="btn btn-teal" disabled={submitting || !signUpToken} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting || !signUpToken ? 0.7 : 1, cursor: submitting || !signUpToken ? 'not-allowed' : 'pointer', marginTop: 8 }}>
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Creating account…</span> : 'Create Account →'}
               </button>
             </form>
