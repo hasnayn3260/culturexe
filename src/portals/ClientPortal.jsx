@@ -287,7 +287,7 @@ function ProfileScreen({ profile, respondent, onSave, onBack }) {
   const lStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5E72', marginBottom: 5 }
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto' }}>
+    <div style={{ maxWidth: 680, margin: '0 auto' }}>
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#7A9BB0', cursor: 'pointer', fontSize: 13.5, fontFamily: 'inherit', padding: '0 0 20px', display: 'flex', alignItems: 'center', gap: 6 }}>← Back to survey</button>
       <div style={{ background: 'white', borderRadius: 16, padding: '32px 28px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
         <div style={{ fontSize: 20, fontWeight: 800, color: '#0D1F3C', marginBottom: 4 }}>Your Profile</div>
@@ -475,7 +475,7 @@ export default function ClientPortal() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 20px 80px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 32px 80px' }}>
 
         {/* ════════ PROFILE ════════ */}
         {screen === 'profile' && (
