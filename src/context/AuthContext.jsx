@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [loadProfile])
 
-  async function signIn(emailOrUsername, password, captchaToken) {
+  async function signIn(emailOrUsername, password) {
     let email = emailOrUsername
     if (!emailOrUsername.includes('@')) {
       // Treat as username — look up the email
@@ -57,24 +57,20 @@ export function AuthProvider({ children }) {
       if (lookupError || !profile) throw new Error('No account found with that username.')
       email = profile.email
     }
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-      options: { captchaToken },
-    })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
     return data
   }
 
-  async function signInWithMagicLink(email, captchaToken) {
+  async function signInWithMagicLink(email) {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false, emailRedirectTo: window.location.origin, captchaToken },
+      options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
     })
     if (error) throw error
   }
 
-  async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '', captchaToken) {
+  async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '') {
     // Self-service sign-up may NEVER mint a privileged account. Even though the
     // database trigger (handle_new_user) clamps this server-side, we also clamp
     // here so the public client can only ever request a non-privileged role.
@@ -87,7 +83,6 @@ export function AuthProvider({ children }) {
       options: {
         data: { full_name: fullName, job_title: jobTitle, role: safeRole, username, position },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
-        captchaToken,
       },
     })
     if (error) throw error

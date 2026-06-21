@@ -25,7 +25,7 @@ dist-ssr
 
 # Environment
 !.env.example
-
+.env
 # Dev / test artifacts
 test_survey.csv
 archive/
