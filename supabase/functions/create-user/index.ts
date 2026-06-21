@@ -1,8 +1,19 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// Only these origins may call this function from a browser. Add your local dev
+// origin here if needed. Anything else gets no CORS grant (request is blocked
+// by the browser). Set via the ALLOWED_ORIGINS env var (comma-separated) to
+// avoid hard-coding, falling back to the production site.
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ??
+  'https://culture-xe.com,https://www.culture-xe.com')
+  .split(',').map((o) => o.trim()).filter(Boolean)
+
 Deno.serve(async (req) => {
+  const origin = req.headers.get('Origin') ?? ''
+  const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
   const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   }
@@ -78,16 +89,20 @@ Deno.serve(async (req) => {
       )
     }
 
+    // Upsert (not insert): the handle_new_user trigger has already created a
+    // non-privileged profile row for this user. As the service role we now
+    // authoritatively set the intended role/org — this is the ONLY path that is
+    // allowed to assign privileged roles (consultant / superadmin).
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
+      .upsert({
         id: newUser.user.id,
         email,
         full_name,
         role,
         org_id: org_id || null,
         active: true
-      })
+      }, { onConflict: 'id' })
 
     if (profileError) {
       return new Response(
