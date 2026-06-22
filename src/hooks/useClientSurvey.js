@@ -45,7 +45,7 @@ export function useClientSurvey(userEmail, userId) {
           .insert({ survey_id: sv.id, email: userEmail, user_id: userId || null })
           .select()
           .single()
-        if (createErr) { console.warn('survey_respondents insert:', createErr.message); return }
+        if (createErr) console.warn('survey_respondents insert:', createErr.message)
         resp = created
       } else {
         if (userId && !resp.user_id) {
@@ -79,7 +79,7 @@ export function useClientSurvey(userEmail, userId) {
   }
 
   async function submitResponse(answers) {
-    if (!respondent || !survey) return
+    if (!respondent || !survey) throw new Error('Unable to save your response — please refresh the page and try again.')
     const now = new Date().toISOString()
     const timing = calcTiming(now, survey.live_start, survey.live_end)
 
