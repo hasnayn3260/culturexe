@@ -590,7 +590,7 @@ export default function ClientPortal() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '1.2px', color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>
-                        {submitted ? 'Response recorded — update anytime before close' : respondent.draft_saved_at ? 'Draft saved — not yet submitted' : 'Not yet submitted'}
+                        {submitted ? 'Response recorded — update anytime before close' : respondent?.draft_saved_at ? 'Draft saved — not yet submitted' : 'Not yet submitted'}
                       </div>
                       <div style={{ fontWeight: 700, fontSize: 18 }}>
                         {submitted ? '✓ Response submitted' : `${answered} of ${totalQ} answered`}
@@ -617,7 +617,7 @@ export default function ClientPortal() {
                 {submitted && (
                   <div style={{ ...cardStyle, background: '#F0FAFA', border: '1px solid rgba(27,191,176,0.2)', padding: '16px 20px' }}>
                     <div style={{ fontSize: 13.5, color: '#0A6B5E', lineHeight: 1.65 }}>
-                      ✓ Submitted{respondent.submitted_at ? ` on ${new Date(respondent.submitted_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}.
+                      ✓ Submitted{respondent?.submitted_at ? ` on ${new Date(respondent.submitted_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}.
                       You can update your answers and re-submit — only your latest response is counted.
                     </div>
                   </div>
