@@ -45,7 +45,7 @@ export function useClientSurvey(userEmail, userId) {
           .insert({ survey_id: sv.id, email: userEmail, user_id: userId || null })
           .select()
           .single()
-        if (createErr) throw createErr
+        if (createErr) { console.warn('survey_respondents insert:', createErr.message); return }
         resp = created
       } else {
         if (userId && !resp.user_id) {
