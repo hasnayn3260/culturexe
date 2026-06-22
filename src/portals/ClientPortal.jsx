@@ -491,22 +491,8 @@ export default function ClientPortal() {
               </div>
             )}
 
-            {/* No organisation linked */}
-            {!profile?.org_id && (
-              <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 32px' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>🏢</div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 10 }}>
-                  No Organisation Linked
-                </div>
-                <div style={{ fontSize: 14, color: '#7A9BB0', lineHeight: 1.7, maxWidth: 380, margin: '0 auto' }}>
-                  Your email address is not linked to any organisation on CultureXe.
-                  Please contact your HR team or survey administrator to get access.
-                </div>
-              </div>
-            )}
-
             {/* Survey not live */}
-            {profile?.org_id && survey && !isLive && (
+            {survey && !isLive && (
               <div style={cardStyle}>
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
                   <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>{isClosed ? <IconCheck /> : <IconClock />}</div>
@@ -526,7 +512,7 @@ export default function ClientPortal() {
             )}
 
             {/* ── WELCOME PAGE ── */}
-            {profile?.org_id && isLive && showWelcome && (
+            {isLive && showWelcome && (
               <>
                 {/* Hero */}
                 <div style={{ background: 'linear-gradient(145deg, #071E1A 0%, #0A3A34 45%, #0A5A4A 100%)', borderRadius: 16, padding: '44px 36px 40px', marginBottom: 16, color: 'white', position: 'relative', overflow: 'hidden' }}>
@@ -597,7 +583,7 @@ export default function ClientPortal() {
             )}
 
             {/* ── ACTIVE SURVEY ── */}
-            {profile?.org_id && isLive && !showWelcome && (
+            {isLive && !showWelcome && (
               <>
                 {/* Status banner */}
                 <div style={{ ...cardStyle, background: 'linear-gradient(135deg, #0A4A44 0%, #0A6B5E 100%)', color: 'white', padding: '22px 26px' }}>
