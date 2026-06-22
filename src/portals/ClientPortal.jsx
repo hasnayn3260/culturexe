@@ -410,7 +410,7 @@ export default function ClientPortal() {
 
   async function handleSubmit() {
     setSubmitErr(''); setSubmitting(true)
-    try { await submitResponse(answers); setSubmitted(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+    try { await submitResponse(answers); setSubmitted(true); setScreen('complete') }
     catch (e) { setSubmitErr(e.message || 'Something went wrong.') }
     finally { setSubmitting(false) }
   }
@@ -480,6 +480,41 @@ export default function ClientPortal() {
         {/* ════════ PROFILE ════════ */}
         {screen === 'profile' && (
           <ProfileScreen profile={profile} respondent={respondent} onSave={updateRespondentProfile} onBack={() => setScreen('survey')} />
+        )}
+
+        {/* ════════ COMPLETE ════════ */}
+        {screen === 'complete' && (
+          <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <style>{`
+              @keyframes cp-complete-pop { 0% { opacity:0; transform:scale(0.88) translateY(18px); } 100% { opacity:1; transform:scale(1) translateY(0); } }
+              @keyframes cp-tick-draw { from { stroke-dashoffset: 60; } to { stroke-dashoffset: 0; } }
+            `}</style>
+            <div style={{ maxWidth: 520, width: '100%', background: 'white', borderRadius: 20, padding: '56px 44px 48px', border: '1px solid #E2E7EF', boxShadow: '0 8px 40px rgba(13,31,60,0.09)', textAlign: 'center', animation: 'cp-complete-pop 0.45s cubic-bezier(0.22,1,0.36,1) forwards' }}>
+
+              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, #1BBFB0 0%, #0A8A7E 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 28px', boxShadow: '0 6px 24px rgba(27,191,176,0.35)' }}>
+                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                  <polyline points="7,19 15,27 29,11" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="60" strokeDashoffset="60"
+                    style={{ animation: 'cp-tick-draw 0.5s 0.2s cubic-bezier(0.22,1,0.36,1) forwards' }} />
+                </svg>
+              </div>
+
+              <div style={{ fontWeight: 800, fontSize: 26, color: '#0D1F3C', letterSpacing: '-0.4px', marginBottom: 12 }}>Survey Successfully Submitted</div>
+              <div style={{ fontSize: 15, color: '#4A6380', lineHeight: 1.75, marginBottom: 36 }}>
+                Thank you for completing the <strong style={{ color: '#0D1F3C' }}>{survey?.title}</strong>. Your honest input helps shape a stronger culture at DBN.
+              </div>
+
+              <div style={{ height: 1, background: '#EEF2F7', margin: '0 -44px 32px' }} />
+
+              <button
+                onClick={() => window.location.reload()}
+                style={{ padding: '13px 28px', borderRadius: 10, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#0A8A7E'}
+                onMouseLeave={e => e.currentTarget.style.background = '#1BBFB0'}
+              >
+                Back to Home
+              </button>
+            </div>
+          </div>
         )}
 
         {/* ════════ SURVEY ════════ */}
@@ -627,11 +662,11 @@ export default function ClientPortal() {
                 {pages.length > 1 && (
                   <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
                     {pages.map((p, i) => {
-                      const done = p.qs.every(q => isAnswered(q, answers[q.id]))
+                      const current = i === page
                       return (
-                        <button key={i} onClick={() => { if (i < page) { setTriedNext(false); setPage(i) } }}
-                          style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, cursor: i < page ? 'pointer' : 'default', border: `1.5px solid ${i === page ? '#1BBFB0' : '#E0E8F0'}`, background: i === page ? '#F0FAFA' : 'white', color: i === page ? '#0A8A7E' : i < page ? '#637082' : '#B0C4CE', fontFamily: 'inherit', fontWeight: i === page ? 600 : 400, opacity: i > page ? 0.45 : 1 }}>
-                          {done ? '✓ ' : ''}{p.label}
+                        <button key={i} onClick={() => { setTriedNext(false); setPage(i); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                          style={{ padding: '7px 14px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer', border: `1.5px solid ${current ? '#1BBFB0' : '#D1D9E6'}`, background: current ? '#1BBFB0' : 'white', color: current ? 'white' : '#0D1F3C', fontFamily: 'inherit', fontWeight: current ? 600 : 500, transition: 'all 0.15s' }}>
+                          {p.label}
                         </button>
                       )
                     })}
@@ -707,9 +742,16 @@ export default function ClientPortal() {
                         Next →
                       </button>
                     ) : (
-                      <button onClick={handleSubmit} disabled={!allAnswered || submitting}
-                        title={!allAnswered ? `${totalQ - answered} question${totalQ - answered !== 1 ? 's' : ''} unanswered` : ''}
-                        style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: allAnswered && !submitting ? '#1BBFB0' : '#C8D8E4', color: allAnswered && !submitting ? 'white' : '#7A9BB0', fontSize: 14, fontWeight: 700, cursor: allAnswered && !submitting ? 'pointer' : 'not-allowed', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s' }}>
+                      <button
+                        onClick={() => {
+                          const unanswered = totalQ - answered
+                          if (unanswered > 0) {
+                            if (!window.confirm(`You have ${unanswered} unanswered question${unanswered !== 1 ? 's' : ''}. Submit anyway?`)) return
+                          }
+                          handleSubmit()
+                        }}
+                        disabled={submitting}
+                        style={{ padding: '12px 24px', borderRadius: 10, border: 'none', background: submitting ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s' }}>
                         {submitting && <Spin size={15} color="white" />}
                         {submitting ? 'Submitting…' : submitted ? 'Re-submit ✓' : 'Submit Survey ✓'}
                       </button>

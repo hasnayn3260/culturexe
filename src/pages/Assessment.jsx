@@ -611,20 +611,22 @@ export default function Assessment() {
       {pages.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
           {pages.map((p, i) => {
-            const done = p.qs.every(q => isAnswered(q, answers[q.id]))
+            const current = i === page
             return (
               <button
                 key={i}
-                onClick={() => setPage(i)}
+                onClick={() => { setPage(i); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                 style={{
                   padding: '6px 13px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer',
-                  border: `1.5px solid ${i === page ? '#1BBFB0' : '#E2E7EF'}`,
-                  background: i === page ? 'rgba(27,191,176,0.08)' : 'white',
-                  color: i === page ? '#0A8A7E' : '#637082',
+                  border: `1.5px solid ${current ? '#1BBFB0' : '#D1D9E6'}`,
+                  background: current ? '#1BBFB0' : 'white',
+                  color: current ? 'white' : '#0B1D3E',
                   fontFamily: 'inherit',
+                  fontWeight: current ? 600 : 500,
+                  transition: 'all 0.15s',
                 }}
               >
-                {done ? '✓ ' : ''}{p.label}
+                {p.label}
               </button>
             )
           })}
@@ -685,15 +687,17 @@ export default function Assessment() {
             >Next →</button>
           ) : (
             <button
-              onClick={handleSubmit}
-              disabled={!allAnswered}
-              title={!allAnswered ? `${totalQ - totalAnswered} question${totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered` : ''}
+              onClick={() => {
+                const unanswered = totalQ - totalAnswered
+                if (unanswered > 0) {
+                  if (!window.confirm(`You have ${unanswered} unanswered question${unanswered !== 1 ? 's' : ''}. Submit anyway?`)) return
+                }
+                handleSubmit()
+              }}
               style={{
                 padding: '11px 24px', borderRadius: 9, border: 'none',
-                background: allAnswered ? '#1BBFB0' : '#D1D9E6',
-                color: allAnswered ? 'white' : '#8898AA',
-                fontSize: 14, fontWeight: 600,
-                cursor: allAnswered ? 'pointer' : 'not-allowed',
+                background: '#1BBFB0', color: 'white',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer',
                 transition: 'background 0.2s', fontFamily: 'inherit',
               }}
             >Submit Survey ✓</button>
@@ -702,7 +706,7 @@ export default function Assessment() {
 
         {!allAnswered && isLastPage && totalQ > 0 && (
           <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#8898AA' }}>
-            {totalQ - totalAnswered} question{totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered
+            {totalQ - totalAnswered} question{totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered — you can still submit
           </div>
         )}
       </div>
