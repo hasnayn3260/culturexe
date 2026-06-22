@@ -9,6 +9,8 @@ import Signup          from './pages/Signup'
 import AdminRegister   from './pages/AdminRegister'
 import Assessment      from './pages/Assessment'
 import AuthCallback    from './pages/AuthCallback'
+import ForgotPassword  from './pages/ForgotPassword'
+import ResetPassword   from './pages/ResetPassword'
 import ConsultantPortal from './portals/ConsultantPortal'
 import ClientPortal     from './portals/ClientPortal'
 
@@ -37,6 +39,8 @@ export default function App() {
               } />
 
               <Route path="/assess/:token"  element={<Assessment />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
             </Routes>
           </BrowserRouter>

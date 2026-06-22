@@ -236,9 +236,9 @@ export default function Login() {
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <label className="form-label" style={{ margin: 0 }}>Password</label>
-                  <button type="button" style={{ background: 'none', border: 'none', fontSize: 12.5, color: '#1BBFB0', cursor: 'pointer', fontWeight: 500, padding: 0, fontFamily: 'inherit' }} onClick={() => switchTab('signup')}>
+                  <Link to="/forgot-password" style={{ fontSize: 12.5, color: '#1BBFB0', fontWeight: 500, textDecoration: 'none' }}>
                     Forgot password?
-                  </button>
+                  </Link>
                 </div>
                 <input className="form-input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
               </div>
