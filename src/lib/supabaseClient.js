@@ -5,7 +5,7 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY,
   {
     auth: {
-      storage:           sessionStorage, // cleared when tab/browser closes
+      storage:           localStorage,
       persistSession:    true,
       autoRefreshToken:  true,
       detectSessionInUrl: true,
