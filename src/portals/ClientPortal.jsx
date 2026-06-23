@@ -239,18 +239,25 @@ function QuestionInput({ q, value, onChange, userId, showError }) {
 
   // LIKERT (default)
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-        {SCALE.map(v => (
-          <button key={v} onClick={() => onChange(v)}
-            style={{ flex: 1, minWidth: 52, height: 46, borderRadius: 10, border: `1.5px solid ${value === v ? '#1BBFB0' : '#E0E8F0'}`, background: value === v ? '#F0FAFA' : 'white', color: value === v ? '#0A8A7E' : '#637082', fontWeight: value === v ? 700 : 400, fontSize: 15, cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit' }}>
-            {v}
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+      {SCALE.map(v => {
+        const active = value === v
+        const [word1, word2] = SCALE_LABELS[v].split(' ')
+        return (
+          <button key={v} onClick={() => onChange(v)} style={{
+            flex: 1, minWidth: 60, minHeight: 72, borderRadius: 10,
+            border: `1.5px solid ${active ? '#1BBFB0' : '#E0E8F0'}`,
+            background: active ? '#F0FAFA' : 'white',
+            cursor: 'pointer', transition: 'all 0.12s', fontFamily: 'inherit',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 2, padding: '8px 4px',
+          }}>
+            <span style={{ fontSize: 16, fontWeight: active ? 700 : 500, color: active ? '#0A8A7E' : '#637082', lineHeight: 1 }}>{v}</span>
+            <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, color: active ? '#0A8A7E' : '#8898AA', lineHeight: 1.25, textAlign: 'center' }}>{word1}</span>
+            {word2 && <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, color: active ? '#0A8A7E' : '#8898AA', lineHeight: 1.25, textAlign: 'center' }}>{word2}</span>}
           </button>
-        ))}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#A0B0C0', marginTop: 5 }}>
-        <span>{SCALE_LABELS[1]}</span><span>{SCALE_LABELS[5]}</span>
-      </div>
+        )
+      })}
     </div>
   )
 }

@@ -285,24 +285,37 @@ function QuestionRenderer({ q, value, onChange, respondentId }) {
 
   // LIKERT (default, also handles legacy 'likert')
   return (
-    <div className="as-scale-row" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-      {SCALE.map(v => (
-        <button
-          key={v}
-          className="as-scale-btn"
-          onClick={() => onChange(v)}
-          style={{
-            width: 64, height: 42, borderRadius: 9, cursor: 'pointer',
-            border: `1.5px solid ${value === v ? '#1BBFB0' : '#D1D9E6'}`,
-            background: value === v ? 'rgba(27,191,176,0.1)' : 'white',
-            color: value === v ? '#0A8A7E' : '#637082',
-            fontWeight: value === v ? 700 : 400,
-            fontSize: 15, transition: 'all 0.12s', fontFamily: 'inherit',
-          }}
-        >
-          {v}
-        </button>
-      ))}
+    <div className="as-scale-row" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+      {SCALE.map(v => {
+        const active = value === v
+        const [word1, word2] = SCALE_LABELS[v].split(' ')
+        return (
+          <button
+            key={v}
+            className="as-scale-btn"
+            onClick={() => onChange(v)}
+            style={{
+              width: 72, minHeight: 72, borderRadius: 9, cursor: 'pointer',
+              border: `1.5px solid ${active ? '#1BBFB0' : '#D1D9E6'}`,
+              background: active ? 'rgba(27,191,176,0.1)' : 'white',
+              color: active ? '#0A8A7E' : '#637082',
+              transition: 'all 0.12s', fontFamily: 'inherit',
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 2, padding: '8px 4px',
+            }}
+          >
+            <span style={{ fontSize: 16, fontWeight: active ? 700 : 500, lineHeight: 1 }}>{v}</span>
+            <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, lineHeight: 1.25, textAlign: 'center', color: active ? '#0A8A7E' : '#8898AA' }}>
+              {word1}
+            </span>
+            {word2 && (
+              <span style={{ fontSize: 11, fontWeight: active ? 600 : 400, lineHeight: 1.25, textAlign: 'center', color: active ? '#0A8A7E' : '#8898AA' }}>
+                {word2}
+              </span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -317,9 +330,8 @@ function PageShell({ surveyTitle, progress, children }) {
         @media (max-width: 680px) {
           .as-q-panel { padding: 18px 16px !important; }
           .as-q-text  { font-size: 15px !important; }
-          .as-scale-lbl { display: none !important; }
           .as-scale-row { justify-content: stretch !important; flex-wrap: wrap !important; }
-          .as-scale-btn { min-width: 0 !important; width: auto !important; height: 48px !important; flex: 1 !important; font-size: 16px !important; }
+          .as-scale-btn { min-width: 0 !important; width: auto !important; min-height: 72px !important; flex: 1 !important; }
           .as-nav-btns  { flex-direction: column-reverse !important; gap: 10px !important; }
           .as-nav-btns button { width: 100% !important; padding: 14px !important; font-size: 15px !important; }
         }
@@ -644,16 +656,6 @@ export default function Assessment() {
           </div>
         )}
 
-        {/* Likert column headers — only when page has likert questions */}
-        {hasLikertOnPage && (
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginBottom: 8 }}>
-            {SCALE.map(v => (
-              <div key={v} className="as-scale-lbl" style={{ width: 64, textAlign: 'center', fontSize: 10, color: '#8898AA', fontWeight: 500, lineHeight: 1.3 }}>
-                {SCALE_LABELS[v]}
-              </div>
-            ))}
-          </div>
-        )}
 
         {currentPage.qs.map((q, qi) => (
           <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #E2E7EF' : 'none' }}>
