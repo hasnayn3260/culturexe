@@ -117,56 +117,56 @@ function StepMockup({ step }) {
   if (step === 3) {
     return (
       <div style={{
-        background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 12,
-        padding: '20px 24px',
+        background: 'white', border: '1px solid #E8EDF2', borderRadius: 16,
+        padding: '28px 28px 24px',
+        boxShadow: '0 2px 16px rgba(13,31,60,0.07)',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, color: '#0D1F3C' }}>
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 800, fontSize: 18, color: '#0D1F3C', marginBottom: 4 }}>
             Create your account
           </div>
-          <div style={{ fontSize: 12, color: '#8A9BB0', fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 2 }}>Join CultureXe</div>
+          <div style={{ fontSize: 13, color: '#8A9BB0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Join CultureXe</div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[
-            { label: 'Work email', value: 'yourname@dbn.com.na', highlight: true },
-          ].map(f => (
-            <div key={f.label}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#4A6380', marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{f.label}</div>
-              <div style={{
-                background: 'white', border: `1.5px solid ${f.highlight ? '#1BBFB0' : '#D1D9E3'}`, borderRadius: 8,
-                padding: '8px 12px', fontSize: 12, color: f.highlight ? '#0D1F3C' : '#8A9BB0',
-                fontFamily: "'Plus Jakarta Sans', sans-serif",
-              }}>
-                {f.value}
-              </div>
-            </div>
-          ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#4A6380', marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Location / Role</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#4A6380', marginBottom: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Work email</div>
             <div style={{
-              background: 'white', border: '1.5px solid #1BBFB0', borderRadius: 8,
-              padding: '8px 12px', fontSize: 12, color: '#0D1F3C',
+              background: 'white', border: '1.5px solid #1BBFB0', borderRadius: 10,
+              padding: '11px 14px', fontSize: 13.5, color: '#0D1F3C',
               fontFamily: "'Plus Jakarta Sans', sans-serif",
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              width: '100%', boxSizing: 'border-box',
             }}>
-              <span>Client / Survey Accepted</span>
-              <span style={{ color: '#8A9BB0' }}>▾</span>
+              yourname@dbn.com.na
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#4A6380', marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Password</div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#4A6380', marginBottom: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Location / Role</div>
             <div style={{
-              background: 'white', border: '1.5px solid #D1D9E3', borderRadius: 8,
-              padding: '8px 12px', fontSize: 12, color: '#8A9BB0',
+              background: 'white', border: '1.5px solid #1BBFB0', borderRadius: 10,
+              padding: '11px 14px', fontSize: 13.5, color: '#0D1F3C',
               fontFamily: "'Plus Jakarta Sans', sans-serif",
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              width: '100%', boxSizing: 'border-box',
             }}>
-              ••••••••••
+              <span>Client / Survey Accepted</span>
+              <span style={{ color: '#4A6380', fontSize: 11 }}>▼</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#4A6380', marginBottom: 6, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Password</div>
+            <div style={{
+              background: 'white', border: '1.5px solid #D1D9E3', borderRadius: 10,
+              padding: '11px 14px', fontSize: 13, color: '#B0BAC8',
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              width: '100%', boxSizing: 'border-box',
+            }}>
+              •••••••••
             </div>
           </div>
           <div style={{
-            background: '#1BBFB0', color: 'white', borderRadius: 8,
-            padding: '10px', textAlign: 'center', fontSize: 13, fontWeight: 600,
-            fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 2,
+            background: '#1BBFB0', color: 'white', borderRadius: 10,
+            padding: '13px', textAlign: 'center', fontSize: 14, fontWeight: 700,
+            fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 4,
           }}>
             Create Account →
           </div>

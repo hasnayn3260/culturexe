@@ -61,6 +61,7 @@ export default function Login() {
   }, [authLoading, user, role, navigate])
 
   const noProfile = !authLoading && user && !role
+  if (noProfile) console.warn('[Login] Signed in but no profile/role found for', user?.email)
 
   function switchTab(t) { setTab(t); setError(''); setSignUpDone(false) }
 
@@ -211,13 +212,6 @@ export default function Login() {
             </div>
           )}
 
-          {/* No profile warning */}
-          {noProfile && (
-            <div style={{ background: '#FFF8E6', border: '1px solid rgba(201,184,130,0.5)', borderRadius: 9, padding: '12px 15px', marginBottom: 20, fontSize: 13.5, color: '#7A6030' }}>
-              <strong>Signed in but no profile found.</strong> Contact your administrator.{' '}
-              <button onClick={signOut} style={{ background: 'none', border: 'none', color: '#1BBFB0', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: 0, textDecoration: 'underline' }}>Sign out →</button>
-            </div>
-          )}
 
           {/* Error */}
           {error && (
