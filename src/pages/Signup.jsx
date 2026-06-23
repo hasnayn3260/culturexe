@@ -88,7 +88,7 @@ export default function Signup() {
               <div style={{ fontSize: 52, color: '#1BBFB0', marginBottom: 16 }}>✓</div>
               <div style={{ fontWeight: 700, fontSize: 20, color: '#0D1F3C', marginBottom: 10 }}>Account Created</div>
               <div style={{ fontSize: 14, color: '#637082', lineHeight: 1.7, marginBottom: 28 }}>
-                {email ? <>Check your inbox at <strong style={{ color: '#0D1F3C' }}>{email}</strong> to confirm your address, then sign in below.</> : 'Your account is ready. Sign in to access your survey.'}
+                Your account is ready. Sign in below to access your survey.
               </div>
               <button
                 onClick={() => navigate('/login')}

@@ -48,14 +48,11 @@ export function AuthProvider({ children }) {
   async function signIn(emailOrUsername, password) {
     let email = emailOrUsername
     if (!emailOrUsername.includes('@')) {
-      // Treat as username — look up the email
-      const { data: profile, error: lookupError } = await supabase
-        .from('profiles')
-        .select('email')
-        .ilike('username', emailOrUsername)
-        .maybeSingle()
-      if (lookupError || !profile) throw new Error('No account found with that username.')
-      email = profile.email
+      // Resolve username → email via security-definer RPC (bypasses RLS for anon)
+      const { data: resolvedEmail, error: lookupError } = await supabase
+        .rpc('get_email_by_username', { p_username: emailOrUsername.trim() })
+      if (lookupError || !resolvedEmail) throw new Error('No account found with that username.')
+      email = resolvedEmail
     }
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
@@ -82,13 +79,17 @@ export function AuthProvider({ children }) {
       password,
       options: {
         data: { full_name: fullName, job_title: jobTitle, role: safeRole, username, position },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     })
     if (error) throw error
     if (data.user && data.user.identities && data.user.identities.length === 0) {
       throw new Error('An account with this email already exists. Please sign in instead.')
     }
+    // If email confirmation is disabled in Supabase (recommended), sign in immediately.
+    if (data.session) return data
+    // Auto sign-in so the user lands in the app without a confirmation step.
+    const signInResult = await supabase.auth.signInWithPassword({ email, password })
+    if (!signInResult.error) return signInResult.data
     return data
   }
 
