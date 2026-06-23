@@ -75,12 +75,7 @@ export default function Login() {
     try {
       await signIn(email, password)
     } catch (err) {
-      const msg = err.message || ''
-      if (msg.toLowerCase().includes('email not confirmed')) {
-        setError('Email not confirmed. Check your inbox for a confirmation link.')
-      } else {
-        setError(msg || 'Invalid email or password.')
-      }
+      setError(err.message || 'Invalid email or password.')
       resetSignInTurnstile()
     } finally {
       setSubmitting(false)
@@ -298,7 +293,7 @@ export default function Login() {
               <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.3)', borderRadius: 12, padding: '20px', marginBottom: 20 }}>
                 <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: '#0D1F3C', marginBottom: 6 }}>Account Created</div>
-                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>Check your inbox at <strong style={{ color: '#0D1F3C' }}>{email}</strong> to confirm your address, then sign in.</div>
+                <div style={{ fontSize: 13.5, color: '#4A6380', lineHeight: 1.65 }}>Your account is ready. Sign in below to access your dashboard.</div>
               </div>
               <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setSignUpDone(false); switchTab('password') }}>Go to Sign In →</button>
             </div>
