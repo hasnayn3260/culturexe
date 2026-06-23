@@ -13,6 +13,7 @@ import ForgotPassword  from './pages/ForgotPassword'
 import ResetPassword   from './pages/ResetPassword'
 import ConsultantPortal from './portals/ConsultantPortal'
 import ClientPortal     from './portals/ClientPortal'
+import HowToGuide      from './pages/HowToGuide'
 
 export default function App() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/how-to-guide" element={<HowToGuide />} />
             </Routes>
           </BrowserRouter>
         </ToastProvider>

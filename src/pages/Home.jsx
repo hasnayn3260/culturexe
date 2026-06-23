@@ -153,15 +153,27 @@ export default function Home() {
               { href: '#how-it-works', label: 'How It Works' },
               { href: '#the-model',    label: 'The Model' },
               { href: '#who-its-for',  label: "Who It's For" },
+              { to: '/how-to-guide',   label: "How-To Guide" },
             ].map(link => (
-              <a
-                key={link.label}
-                href={link.href}
-                onClick={() => setMobileMenuOpen(false)}
-                style={{ fontSize: 22, fontWeight: 600, color: 'rgba(255,255,255,0.8)', textDecoration: 'none' }}
-              >
-                {link.label}
-              </a>
+              link.to ? (
+                <Link
+                  key={link.label}
+                  to={link.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{ fontSize: 22, fontWeight: 600, color: 'rgba(255,255,255,0.8)', textDecoration: 'none' }}
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  style={{ fontSize: 22, fontWeight: 600, color: 'rgba(255,255,255,0.8)', textDecoration: 'none' }}
+                >
+                  {link.label}
+                </a>
+              )
             ))}
           </nav>
           <Link
@@ -201,6 +213,7 @@ export default function Home() {
           <a href="#how-it-works" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>How It Works</a>
           <a href="#the-model"    style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>The Model</a>
           <a href="#who-its-for"  style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>Who It's For</a>
+          <Link to="/how-to-guide" style={{ fontSize: 13.5, color: '#4A6380', textDecoration: 'none', fontWeight: 500 }}>How-To Guide</Link>
           <Link to="/login" className="btn btn-teal btn-sm">Login →</Link>
         </div>
 
@@ -261,6 +274,9 @@ export default function Home() {
               <a href="#how-it-works" className="btn btn-ghost" style={{ padding: '14px 30px', fontSize: 15 }}>
                 See How It Works
               </a>
+              <Link to="/how-to-guide" className="btn btn-ghost" style={{ padding: '14px 30px', fontSize: 15 }}>
+                How-To Guide
+              </Link>
             </div>
 
             <div className="home-hero-stats" style={{ marginTop: 52, display: 'flex', gap: 36 }}>
@@ -561,6 +577,7 @@ export default function Home() {
                 { label: 'How It Works', href: '#how-it-works' },
                 { label: 'The Model', href: '#the-model' },
                 { label: "Who It's For", href: '#who-its-for' },
+                { label: 'How-To Guide', to: '/how-to-guide' },
                 { label: 'Login', to: '/login' },
               ].map(link => (
                 link.to ? (

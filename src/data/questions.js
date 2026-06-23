@@ -122,7 +122,7 @@ export const questions = [
   { id: 'co3', dimension: 'customer_orientation', type: 'LIKERT', text: "Customer and stakeholder needs shape how my team plans, prioritises and improves work." },
   { id: 'co4', dimension: 'customer_orientation', type: 'LIKERT', text: "When a customer or stakeholder raises a concern, it is taken seriously and responded to within a reasonable time by my team." },
 
-  // ── 13 · EXCO Trust Index ─────────────────────────────────
+  // ── 13 · EXCO ─────────────────────────────────
   // "EXCO" = DBN's Executive Committee as a collective leadership team, not your direct line manager or one individual executive.
   { id: 'et1', dimension: 'exco_trust_index', type: 'LIKERT', text: "I trust EXCO to act in the best interests of DBN and its employees.", hint: "EXCO refers to DBN's Executive Committee as a collective leadership team — not your direct line manager or one individual executive." },
   { id: 'et2', dimension: 'exco_trust_index', type: 'LIKERT', text: "EXCO provides clear and consistent direction on DBN's priorities and what matters most." },
