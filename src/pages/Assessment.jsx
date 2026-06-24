@@ -385,6 +385,7 @@ export default function Assessment() {
   const [answers, setAnswers]           = useState({})
   const [page, setPage]                 = useState(0)
   const [submitError, setSubmitError]   = useState('')
+  const [navError, setNavError]         = useState('')
 
   useEffect(() => {
     async function init() {
@@ -447,11 +448,28 @@ export default function Assessment() {
   const allAnswered = totalQ > 0 && totalAnswered === totalQ
   const isLastPage = page === pages.length - 1
 
+  // A page is complete only when every question on it is answered (all compulsory).
+  const pageComplete = (i) => (pages[i]?.qs || []).every(q => isAnswered(q, answers[q.id]))
+  // A section is reachable only when every earlier section is complete.
+  const canAccess = (i) => {
+    for (let j = 0; j < i; j++) if (!pageComplete(j)) return false
+    return true
+  }
+  const currentPageComplete = pageComplete(page)
+  const currentRemaining = currentPage.qs.filter(q => !isAnswered(q, answers[q.id])).length
+
   function handleAnswer(qId, val) {
     setAnswers(prev => ({ ...prev, [qId]: val }))
   }
 
   async function handleSubmit() {
+    // Compulsory: every question must be answered before a submission is allowed.
+    if (!allAnswered) {
+      const firstIncomplete = pages.findIndex((_, i) => !pageComplete(i))
+      if (firstIncomplete !== -1) { setPage(firstIncomplete); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+      setSubmitError(`You have ${totalQ - totalAnswered} unanswered question${totalQ - totalAnswered !== 1 ? 's' : ''}. All questions are required before you can submit.`)
+      return
+    }
     setSubmitError('')
     setPhase('submitting')
     try {
@@ -619,15 +637,30 @@ export default function Assessment() {
         </div>
       )}
 
+      {navError && (
+        <div style={{ padding: '12px 16px', background: '#FFF8EC', border: '1px solid rgba(214,158,46,0.25)', borderRadius: 10, color: '#9A6B00', fontSize: 13, marginBottom: 16 }}>
+          ⚠ {navError}
+        </div>
+      )}
+
       {/* Page progress pills */}
       {pages.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
           {pages.map((p, i) => {
             const current = i === page
+            const locked = !canAccess(i)
             return (
               <button
                 key={i}
-                onClick={() => { setPage(i); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                onClick={() => {
+                  if (locked) {
+                    setNavError('Please complete all questions in the current section before moving on.')
+                    return
+                  }
+                  setNavError('')
+                  setPage(i)
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
                 style={{
                   padding: '6px 13px', borderRadius: 20, fontSize: 12.5, cursor: 'pointer',
                   border: `1.5px solid ${current ? '#1BBFB0' : '#D1D9E6'}`,
@@ -684,31 +717,42 @@ export default function Assessment() {
 
           {!isLastPage ? (
             <button
-              onClick={() => { setPage(i => i + 1); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
-              style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              onClick={() => {
+                if (!currentPageComplete) {
+                  setNavError('Please answer every question in this section before continuing.')
+                  return
+                }
+                setNavError('')
+                setPage(i => i + 1)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              disabled={!currentPageComplete}
+              style={{
+                padding: '11px 24px', borderRadius: 9, border: 'none',
+                background: currentPageComplete ? '#1BBFB0' : '#B7E5DF',
+                color: 'white', fontSize: 14, fontWeight: 600,
+                cursor: currentPageComplete ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+              }}
             >Next →</button>
           ) : (
             <button
-              onClick={() => {
-                const unanswered = totalQ - totalAnswered
-                if (unanswered > 0) {
-                  if (!window.confirm(`You have ${unanswered} unanswered question${unanswered !== 1 ? 's' : ''}. Submit anyway?`)) return
-                }
-                handleSubmit()
-              }}
+              onClick={handleSubmit}
+              disabled={!allAnswered}
               style={{
                 padding: '11px 24px', borderRadius: 9, border: 'none',
-                background: '#1BBFB0', color: 'white',
-                fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                background: allAnswered ? '#1BBFB0' : '#B7E5DF',
+                color: 'white',
+                fontSize: 14, fontWeight: 600,
+                cursor: allAnswered ? 'pointer' : 'not-allowed',
                 transition: 'background 0.2s', fontFamily: 'inherit',
               }}
             >Submit Survey ✓</button>
           )}
         </div>
 
-        {!allAnswered && isLastPage && totalQ > 0 && (
-          <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#8898AA' }}>
-            {totalQ - totalAnswered} question{totalQ - totalAnswered !== 1 ? 's' : ''} still unanswered — you can still submit
+        {!currentPageComplete && totalQ > 0 && (
+          <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#E8563A' }}>
+            {currentRemaining} question{currentRemaining !== 1 ? 's' : ''} in this section still need{currentRemaining === 1 ? 's' : ''} an answer — all questions are required.
           </div>
         )}
       </div>
