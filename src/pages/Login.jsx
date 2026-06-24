@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import Turnstile from '../components/Turnstile'
 
@@ -32,10 +32,6 @@ function FluidSVG({ size = 100, id = 'fl' }) {
 export default function Login() {
   const navigate = useNavigate()
   const { user, role, loading: authLoading, signIn, signUp, signOut } = useAuth()
-
-  const [searchParams] = useSearchParams()
-  const verifiedParam  = searchParams.get('verified')
-  const errorParam     = searchParams.get('error')
 
   const [tab,            setTab]            = useState('password')
   const [email,          setEmail]          = useState('')
@@ -186,27 +182,6 @@ export default function Login() {
               </button>
             ))}
           </div>
-
-          {/* Email verification result banner */}
-          {verifiedParam && (
-            <div style={{ background: '#E0F7F5', border: '1px solid rgba(27,191,176,0.35)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 16, color: '#1BBFB0', flexShrink: 0 }}>✓</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: '#0A6B5E', marginBottom: 2 }}>Email confirmed!</div>
-                <div style={{ fontSize: 13, color: '#4A6380', lineHeight: 1.55 }}>Your email address has been verified. Sign in below to access your account.</div>
-              </div>
-            </div>
-          )}
-          {errorParam && (
-            <div style={{ background: '#FDE8E3', border: '1px solid rgba(232,86,58,0.25)', borderRadius: 10, padding: '14px 16px', marginBottom: 20, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <span style={{ fontSize: 16, color: '#E8563A', flexShrink: 0 }}>✕</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: '#C0392B', marginBottom: 2 }}>Verification failed</div>
-                <div style={{ fontSize: 13, color: '#4A6380', lineHeight: 1.55 }}>{decodeURIComponent(errorParam)}</div>
-              </div>
-            </div>
-          )}
-
 
           {/* Error */}
           {error && (

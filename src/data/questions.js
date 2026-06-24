@@ -82,7 +82,6 @@ export const questions = [
   { id: 'vr3', dimension: 'value_recognition', type: 'LIKERT', text: "I receive regular, honest feedback from my direct line manager that helps me understand how I am performing and where I can improve." },
   { id: 'vr4', dimension: 'value_recognition', type: 'LIKERT', text: "Appointments, promotions, recognition, rewards and development opportunities at DBN are based on transparent criteria, contribution and performance rather than personal relationships." },
   { id: 'vr5', dimension: 'value_recognition', type: 'LIKERT', text: "I believe DBN genuinely embraces diversity and inclusion across all dimensions, including but not limited to marginalised groups, disability, race, gender, religion and ethnicity." },
-  { id: 'vr_open', dimension: 'value_recognition', type: 'LONG_TEXT', text: "What improvements would you like to see in DBN's benefits, rewards, and remuneration, and what specific changes would make the most meaningful difference to you?" },
 
   // ── 07 · Listening and Learning ───────────────────────────
   { id: 'll1', dimension: 'listening_and_learning', type: 'LIKERT', text: "My direct line manager seeks to understand issues properly before drawing conclusions." },
@@ -140,4 +139,5 @@ export const questions = [
   { id: 'oq1', dimension: 'open_questions', type: 'LONG_TEXT', text: "What gets in the way of you doing your best work at DBN?" },
   { id: 'oq2', dimension: 'open_questions', type: 'LONG_TEXT', text: "What is one issue the Executive leadership may not fully see or understand, but needs to take seriously?" },
   { id: 'oq3', dimension: 'open_questions', type: 'LONG_TEXT', text: "What do you enjoy most about working for DBN?" },
+  { id: 'vr_open', dimension: 'open_questions', type: 'LONG_TEXT', text: "What improvements would you like to see in DBN's benefits, rewards, and remuneration, and what specific changes would make the most meaningful difference to you?" },
 ]

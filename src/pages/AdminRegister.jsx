@@ -75,7 +75,7 @@ export default function AdminRegister() {
               <div style={{ fontSize: 48, color: '#1BBFB0', marginBottom: 12 }}>✓</div>
               <div style={{ fontWeight: 700, fontSize: 18, color: 'white', marginBottom: 8 }}>Account Created</div>
               <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.7, marginBottom: 24 }}>
-                Check inbox at <strong style={{ color: 'white' }}>{email}</strong> to confirm, then sign in.
+                The account for <strong style={{ color: 'white' }}>{email}</strong> is ready. Sign in below.
               </div>
               <Link to="/login" style={{ display: 'block', padding: '12px', borderRadius: 9, background: '#1BBFB0', color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 14, textAlign: 'center' }}>
                 Go to Sign In →

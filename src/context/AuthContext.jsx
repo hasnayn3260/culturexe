@@ -85,12 +85,12 @@ export function AuthProvider({ children }) {
     if (data.user && data.user.identities && data.user.identities.length === 0) {
       throw new Error('An account with this email already exists. Please sign in instead.')
     }
-    // If email confirmation is disabled in Supabase (recommended), sign in immediately.
+    // No email verification step: sign the user in immediately after sign-up.
+    // (This requires "Confirm email" to be turned OFF in the Supabase Auth settings.)
     if (data.session) return data
-    // Auto sign-in so the user lands in the app without a confirmation step.
     const signInResult = await supabase.auth.signInWithPassword({ email, password })
-    if (!signInResult.error) return signInResult.data
-    return data
+    if (signInResult.error) throw signInResult.error
+    return signInResult.data
   }
 
   async function updateProfile(updates) {
