@@ -357,6 +357,7 @@ export default function ClientPortal() {
   const [submitErr,   setSubmitErr]   = useState('')
   const [showWelcome, setShowWelcome] = useState(true)
   const [triedNext,   setTriedNext]   = useState(false)
+  const [showIncomplete, setShowIncomplete] = useState(false)
   const autoSaveTimer = useRef(null)
 
   const countdown = useCountdown(survey?.live_end)
@@ -400,14 +401,20 @@ export default function ClientPortal() {
     for (let i = 0; i < questions.length; i += 6) pages.push({ label: `Part ${Math.floor(i / 6) + 1}`, qs: questions.slice(i, i + 6) })
   }
   const currentPage       = pages[page] || { label: '', qs: [] }
-  const isOptionalSection = currentPage.qs.length > 0 && currentPage.qs[0].dimension === 'About You'
-  const mandatoryQs       = questions.filter(q => q.dimension !== 'About You')
+  // "About You" is optional EXCEPT these two questions, which are compulsory.
+  const requiredAboutYou  = new Set([
+    'Which division or department do you work in?',
+    'What is your role level (job grade)?',
+  ])
+  const isRequired        = (q) => q.dimension !== 'About You' || requiredAboutYou.has(q.text)
+  const sectionAllOptional = currentPage.qs.length > 0 && currentPage.qs.every(q => !isRequired(q))
+  const mandatoryQs       = questions.filter(isRequired)
   const totalQ            = mandatoryQs.length
   const answered          = mandatoryQs.filter(q => isAnswered(q, answers[q.id])).length
   const progress          = totalQ > 0 ? Math.round((answered / totalQ) * 100) : 0
   const allAnswered       = totalQ > 0 && answered === totalQ
   const isLastPage        = page === pages.length - 1
-  const sectionDone       = isOptionalSection || currentPage.qs.every(q => isAnswered(q, answers[q.id]))
+  const sectionDone       = currentPage.qs.every(q => !isRequired(q) || isAnswered(q, answers[q.id]))
 
   async function handleSaveDraft() {
     setSaveState('saving')
@@ -694,26 +701,27 @@ export default function ClientPortal() {
                     <div style={{ marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #E8EFF5' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: '#1BBFB0', textTransform: 'uppercase', letterSpacing: '0.7px' }}>Section {page + 1} of {pages.length}</div>
-                        {isOptionalSection && <div style={{ fontSize: 10, fontWeight: 700, color: '#8A9BB0', textTransform: 'uppercase', letterSpacing: '0.8px', background: '#F0F5F8', borderRadius: 4, padding: '2px 7px' }}>Optional</div>}
+                        {sectionAllOptional && <div style={{ fontSize: 10, fontWeight: 700, color: '#8A9BB0', textTransform: 'uppercase', letterSpacing: '0.8px', background: '#F0F5F8', borderRadius: 4, padding: '2px 7px' }}>Optional</div>}
                       </div>
                       <div style={{ fontSize: 20, fontWeight: 700, color: '#0D1F3C', marginTop: 2 }}>{currentPage.label}</div>
-                      {isOptionalSection && <div style={{ fontSize: 13, color: '#8A9BB0', marginTop: 6, lineHeight: 1.55 }}>Helps us understand patterns across DBN — never used to identify individuals.</div>}
+                      {sectionAllOptional && <div style={{ fontSize: 13, color: '#8A9BB0', marginTop: 6, lineHeight: 1.55 }}>Helps us understand patterns across DBN — never used to identify individuals.</div>}
                     </div>
                   )}
 
                   {currentPage.qs.map((q, qi) => {
                     const qAnswered = isAnswered(q, answers[q.id])
-                    const showError = triedNext && !qAnswered
+                    const required  = isRequired(q)
+                    const showError = triedNext && required && !qAnswered
                     return (
                       <div key={q.id} style={{ padding: '20px 0', borderBottom: qi < currentPage.qs.length - 1 ? '1px solid #F0F5F8' : 'none' }}>
                         <div style={{ fontSize: 14.5, fontWeight: 600, color: '#0D1F3C', marginBottom: q.hint ? 4 : 12, lineHeight: 1.65 }}>
                           {!hasDimensions && <span style={{ color: '#A0B8C8', fontSize: 13, fontWeight: 500, marginRight: 6 }}>Q{page * 6 + qi + 1}.</span>}
                           {q.text}
-                          {!isOptionalSection && <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>}
+                          {required && <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>}
                         </div>
                         {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
-                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError && !isOptionalSection} />
-                        {showError && !isOptionalSection && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
+                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError} />
+                        {showError && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
                       </div>
                     )
                   })}
@@ -751,9 +759,12 @@ export default function ClientPortal() {
                     ) : (
                       <button
                         onClick={() => {
-                          const unanswered = totalQ - answered
-                          if (unanswered > 0) {
-                            if (!window.confirm(`You have ${unanswered} unanswered question${unanswered !== 1 ? 's' : ''}. Submit anyway?`)) return
+                          if (totalQ - answered > 0) {
+                            // Jump to the first section with a missing required answer
+                            const firstIdx = pages.findIndex(p => p.qs.some(q => isRequired(q) && !isAnswered(q, answers[q.id])))
+                            if (firstIdx !== -1) { setPage(firstIdx); setTriedNext(true) }
+                            setShowIncomplete(true)
+                            return
                           }
                           handleSubmit()
                         }}
@@ -768,7 +779,7 @@ export default function ClientPortal() {
 
                 {!allAnswered && isLastPage && (
                   <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#A0B0C0' }}>
-                    {totalQ - answered} question{totalQ - answered !== 1 ? 's' : ''} still unanswered
+                    {totalQ - answered} missing response{totalQ - answered !== 1 ? 's' : ''}
                   </div>
                 )}
               </>
@@ -776,6 +787,33 @@ export default function ClientPortal() {
           </>
         )}
       </div>
+
+      {/* Incomplete-submission modal — blocks submitting with missing responses */}
+      {showIncomplete && (
+        <div
+          onClick={() => setShowIncomplete(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(7,30,26,0.55)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'white', borderRadius: 18, padding: '32px 30px', maxWidth: 420, width: '100%', boxShadow: '0 12px 48px rgba(0,0,0,0.22)', textAlign: 'center' }}
+          >
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#FDECE7', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', fontSize: 26, color: '#E8563A' }}>!</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#0D1F3C', marginBottom: 8, letterSpacing: '-0.3px' }}>
+              You have {totalQ - answered} missing response{totalQ - answered !== 1 ? 's' : ''}
+            </div>
+            <div style={{ fontSize: 14, color: '#637082', lineHeight: 1.65, marginBottom: 26 }}>
+              Every question is required. Please answer the remaining question{totalQ - answered !== 1 ? 's' : ''} before submitting — we've taken you to the first one that needs a response.
+            </div>
+            <button
+              onClick={() => setShowIncomplete(false)}
+              style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              Review questions →
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
