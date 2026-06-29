@@ -49,6 +49,21 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
 
 function surveyUrl(token) { return `${window.location.origin}/assess/${token}` }
 
+function scoreColor(s) {
+  if (s == null) return 'var(--text3)'
+  if (s >= 70) return '#0A8A7E'
+  if (s >= 50) return '#7A6030'
+  return '#9A3825'
+}
+
+function ScoreBar({ score, height = 8 }) {
+  return (
+    <div className="dim-bar-bg" style={{ height }}>
+      <div style={{ height: '100%', borderRadius: 99, width: `${score ?? 0}%`, background: score >= 70 ? 'linear-gradient(90deg,#1BBFB0,#00D4C0)' : score >= 50 ? 'linear-gradient(90deg,#C9B882,#E0D09A)' : 'linear-gradient(90deg,#E8563A,#F47A65)' }} />
+    </div>
+  )
+}
+
 // ── Option sub-editors ─────────────────────────────────────
 
 function ChoicesEditor({ choices, onChange }) {
@@ -694,16 +709,27 @@ export default function ConsultantPortal() {
   const isClosed = survey?.status === 'closed'
   const isDraft  = survey?.status === 'draft'
 
+  const EXPECTED_TOTAL = 140
   const totalInvited   = respondents.length
   const totalResponded = respondents.filter(r => r.used).length
-  const totalPending   = totalInvited - totalResponded
-  const completionPct  = totalInvited > 0 ? Math.round((totalResponded / totalInvited) * 100) : 0
+  const totalPending   = EXPECTED_TOTAL - totalResponded
+  const completionPct  = Math.round((totalResponded / EXPECTED_TOTAL) * 100)
 
-  const departments = [...new Set(respondents.map(r => r.department).filter(Boolean))].sort()
+  // Detect which question represents "department" (first choice/dropdown/text Q whose text or dimension mentions "department")
+  const deptQuestion = questions.find(q =>
+    ['SINGLE_CHOICE', 'DROPDOWN', 'SHORT_TEXT', 'LONG_TEXT'].includes(q.question_type) &&
+    (q.text?.toLowerCase().includes('department') || q.dimension?.toLowerCase().includes('department'))
+  )
 
   const enrichedResponses = responses.map(resp => {
     const r = respondents.find(rd => rd.id === resp.respondent_id)
-    return { ...resp, _dept: r?.department, _title: r?.job_title, _name: r?.name }
+    const deptFromAnswer = deptQuestion ? (resp.answers?.[deptQuestion.id] ?? null) : null
+    return {
+      ...resp,
+      _dept:  deptFromAnswer || r?.department || null,
+      _title: r?.job_title,
+      _name:  r?.name,
+    }
   })
 
   const timingCounts = respondents.filter(r => r.used).reduce((acc, r) => {
@@ -712,9 +738,45 @@ export default function ConsultantPortal() {
     return acc
   }, {})
 
-  const deptBreakdown = departments.map(dept => {
-    const dr = respondents.filter(r => r.department === dept)
-    return { dept, total: dr.length, responded: dr.filter(r => r.used).length }
+  // Departments derived from actual response data (answer-based dept first)
+  const departments = deptQuestion
+    ? [...new Set(enrichedResponses.map(r => r._dept).filter(Boolean))].sort()
+    : [...new Set(respondents.map(r => r.department).filter(Boolean))].sort()
+
+  // When dept comes from answers, participation-by-dept isn't knowable for pending people —
+  // show count of responses per dept instead
+  const deptBreakdown = deptQuestion
+    ? departments.map(dept => {
+        const responded = enrichedResponses.filter(r => r._dept === dept).length
+        return { dept, total: totalResponded, responded, answerBased: true }
+      })
+    : departments.map(dept => {
+        const dr = respondents.filter(r => r.department === dept)
+        return { dept, total: dr.length, responded: dr.filter(r => r.used).length, answerBased: false }
+      })
+
+  const likertQs = questions.filter(q => ['LIKERT', 'likert'].includes(q.question_type))
+
+  function computeScore(answers) {
+    const nums = answers.map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 5)
+    return nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length / 5) * 100) : null
+  }
+
+  const overallScore = (() => {
+    const answers = enrichedResponses.flatMap(r => likertQs.map(q => r.answers?.[q.id]).filter(v => v != null))
+    return computeScore(answers)
+  })()
+
+  const dimensionScores = [...new Set(likertQs.map(q => q.dimension).filter(Boolean))].map(dim => {
+    const dimQs = likertQs.filter(q => q.dimension === dim)
+    const answers = enrichedResponses.flatMap(r => dimQs.map(q => r.answers?.[q.id]).filter(v => v != null))
+    return { dim, score: computeScore(answers), questionCount: dimQs.length }
+  }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+
+  const deptScores = deptBreakdown.map(({ dept, total, responded }) => {
+    const deptResps = enrichedResponses.filter(r => r._dept === dept)
+    const answers = deptResps.flatMap(r => likertQs.map(q => r.answers?.[q.id]).filter(v => v != null))
+    return { dept, total, responded, score: computeScore(answers) }
   })
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
@@ -891,12 +953,13 @@ export default function ConsultantPortal() {
                 <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
               </div>
 
-              <div className="grid-4 mb-28">
+              <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                 {[
-                  { label: 'Total Invited', value: totalInvited,   sub: 'Respondents added',     color: '#1BBFB0' },
-                  { label: 'Responded',     value: totalResponded, sub: 'Fully submitted',        color: '#0A8A7E' },
-                  { label: 'Pending',       value: totalPending,   sub: 'Yet to respond',         color: '#C9B882' },
-                  { label: 'Completion',    value: `${completionPct}%`, sub: `${totalInvited} invited`, color: '#1A3560' },
+                  { label: 'Signed Up',        value: totalInvited,        sub: `of ${EXPECTED_TOTAL} expected`,   color: '#1BBFB0' },
+                  { label: 'Responded',        value: totalResponded,      sub: 'Fully submitted',                 color: '#0A8A7E' },
+                  { label: 'Pending',          value: totalPending,        sub: `of ${EXPECTED_TOTAL} expected`,   color: '#C9B882' },
+                  { label: 'Completion Rate',  value: `${completionPct}%`, sub: `${totalResponded} of ${EXPECTED_TOTAL}`, color: '#1A3560' },
+                  { label: 'Overall Score',    value: overallScore != null ? `${overallScore}%` : '—', sub: likertQs.length ? `${likertQs.length} Likert question${likertQs.length !== 1 ? 's' : ''}` : 'No scored questions', color: scoreColor(overallScore) },
                 ].map(c => (
                   <div className="stat-card" key={c.label}>
                     <div className="stat-accent" style={{ background: c.color }} />
@@ -942,22 +1005,66 @@ export default function ConsultantPortal() {
                     )}
                   </div>
                   <div className="card">
-                    <div className="section-title mb-16">By Department</div>
-                    {deptBreakdown.length === 0 ? (
+                    <div className="section-title mb-2">By Department</div>
+                    {deptQuestion && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                        Grouped by answers to: <em>"{deptQuestion.text}"</em>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 16, marginBottom: 14, fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                      <span style={{ flex: 1 }}></span>
+                      <span style={{ minWidth: 72, textAlign: 'right' }}>{deptQuestion ? 'Responses' : 'Participation'}</span>
+                      {likertQs.length > 0 && <span style={{ minWidth: 52, textAlign: 'right' }}>Score</span>}
+                    </div>
+                    {deptScores.length === 0 ? (
                       <div style={{ color: 'var(--text3)', fontSize: 13 }}>No department data yet.</div>
-                    ) : deptBreakdown.map(({ dept, total, responded }) => {
+                    ) : deptScores.map(({ dept, total, responded, score, answerBased }) => {
                       const pct = total > 0 ? Math.round((responded / total) * 100) : 0
                       return (
-                        <div key={dept} style={{ marginBottom: 12 }}>
-                          <div className="dim-header"><span className="dim-name">{dept}</span><span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{responded}/{total}</span></div>
-                          <div className="dim-bar-bg"><div className={`dim-bar ${pct >= 70 ? 'bar-teal' : pct >= 40 ? 'bar-gold' : 'bar-coral'}`} style={{ width: `${pct}%` }} /></div>
+                        <div key={dept} style={{ marginBottom: 14 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                            <span className="dim-name" style={{ flex: 1 }}>{dept}</span>
+                            {answerBased
+                              ? <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 72, textAlign: 'right' }}>{responded} respondent{responded !== 1 ? 's' : ''}</span>
+                              : <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 72, textAlign: 'right' }}>{responded}/{total} <span style={{ color: 'var(--text3)' }}>({pct}%)</span></span>
+                            }
+                            {likertQs.length > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: scoreColor(score), minWidth: 52, textAlign: 'right' }}>{score != null ? `${score}%` : '—'}</span>}
+                          </div>
+                          {!answerBased && (
+                            <div className="dim-bar-bg" style={{ height: 6 }}>
+                              <div className={`dim-bar ${pct >= 70 ? 'bar-teal' : pct >= 40 ? 'bar-gold' : 'bar-coral'}`} style={{ width: `${pct}%`, height: '100%' }} />
+                            </div>
+                          )}
+                          {likertQs.length > 0 && score != null && (
+                            <ScoreBar score={score} height={answerBased ? 6 : 4} />
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 </div>
 
-                <div className="card">
+                <div>
+                {dimensionScores.length > 0 && overallScore != null && (
+                  <div className="card mb-20">
+                    <div className="section-title mb-4">Score by Dimension</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme</div>
+                    {dimensionScores.map(({ dim, score, questionCount }) => (
+                      <div key={dim} style={{ marginBottom: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>{dim}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 11, color: 'var(--text3)' }}>{questionCount}Q</span>
+                            <span style={{ fontSize: 14, fontWeight: 800, color: scoreColor(score) }}>{score != null ? `${score}%` : '—'}</span>
+                          </div>
+                        </div>
+                        {score != null && <ScoreBar score={score} height={7} />}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="card mb-20">
                   <div className="section-title mb-16">Quick Actions</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {[
@@ -978,6 +1085,7 @@ export default function ConsultantPortal() {
                       </button>
                     ))}
                   </div>
+                </div>
                 </div>
               </div>
 
@@ -1275,10 +1383,16 @@ export default function ConsultantPortal() {
                 <>
                   <div className="card mb-24" style={{ background: 'linear-gradient(135deg, #0D1F3C 0%, #0E3462 100%)', color: 'white', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, background: 'radial-gradient(circle, rgba(27,191,176,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
-                    <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative' }}>
-                      {[{ label: 'Responses', value: responses.length }, { label: 'Completion Rate', value: `${completionPct}%` }, { label: 'Questions', value: questions.length }].map(s => (
+                    <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
+                      {[
+                        { label: 'Responses', value: responses.length },
+                        { label: 'Completion Rate', value: `${completionPct}%` },
+                        ...(overallScore != null ? [{ label: 'Overall Score', value: `${overallScore}%`, highlight: true }] : []),
+                        { label: 'Questions', value: questions.length },
+                        ...(dimensionScores.length > 0 ? [{ label: 'Dimensions', value: dimensionScores.length }] : []),
+                      ].map(s => (
                         <div key={s.label} style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: 36, fontWeight: 800, color: '#1BBFB0' }}>{s.value}</div>
+                          <div style={{ fontSize: 36, fontWeight: 800, color: s.highlight ? scoreColor(overallScore) : '#1BBFB0' }}>{s.value}</div>
                           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</div>
                         </div>
                       ))}
@@ -1295,6 +1409,65 @@ export default function ConsultantPortal() {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Dept + Dimension summaries */}
+                  {(deptScores.length > 0 || dimensionScores.length > 0) && likertQs.length > 0 && (
+                    <div className="grid-2 mb-24">
+                      {deptScores.length > 0 && (
+                        <div className="card">
+                          <div className="section-title mb-2">Score by Department</div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+                            {deptQuestion ? <>Grouped by: <em>"{deptQuestion.text}"</em></> : 'Average Likert score · participation in brackets'}
+                          </div>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ textAlign: 'left', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>Department</th>
+                                <th style={{ textAlign: 'right', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>{deptQuestion ? 'Responses' : 'Participation'}</th>
+                                <th style={{ textAlign: 'right', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>Score</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...deptScores].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(({ dept, total, responded, score, answerBased }) => {
+                                const pct = total > 0 ? Math.round((responded / total) * 100) : 0
+                                return (
+                                  <tr key={dept}>
+                                    <td style={{ padding: '9px 0', fontWeight: 600, color: 'var(--navy)', borderBottom: '1px solid var(--border)' }}>{dept}</td>
+                                    <td style={{ padding: '9px 0', textAlign: 'right', color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
+                                      {answerBased
+                                        ? <>{responded}</>
+                                        : <>{responded}/{total} <span style={{ color: 'var(--text3)', fontSize: 11 }}>({pct}%)</span></>
+                                      }
+                                    </td>
+                                    <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: 800, fontSize: 15, color: scoreColor(score), borderBottom: '1px solid var(--border)' }}>{score != null ? `${score}%` : '—'}</td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {dimensionScores.length > 0 && (
+                        <div className="card">
+                          <div className="section-title mb-4">Score by Dimension</div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme · sorted high to low</div>
+                          {dimensionScores.map(({ dim, score, questionCount }) => (
+                            <div key={dim} style={{ marginBottom: 12 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                                <div>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>{dim}</span>
+                                  <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>{questionCount}Q</span>
+                                </div>
+                                <span style={{ fontSize: 14, fontWeight: 800, color: scoreColor(score) }}>{score != null ? `${score}%` : '—'}</span>
+                              </div>
+                              {score != null && <ScoreBar score={score} height={6} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 
