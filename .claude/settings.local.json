@@ -15,7 +15,9 @@
       "Bash(npm audit *)",
       "Bash(npx eslint *)",
       "Bash(npx --yes acorn --ecma2020 --module src/portals/ConsultantPortal.jsx)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(node -e \"console.log\\('jspdf-autotable', require\\('./node_modules/jspdf-autotable/package.json'\\).version\\); console.log\\('jspdf', require\\('./node_modules/jspdf/package.json'\\).version\\)\")",
+      "Bash(npm uninstall *)"
     ]
   }
 }

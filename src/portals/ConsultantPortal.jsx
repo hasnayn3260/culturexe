@@ -64,6 +64,106 @@ function ScoreBar({ score, height = 8 }) {
   )
 }
 
+// ── Export helpers (CSV / Excel / PDF) ─────────────────────
+
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = filename
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function cellToString(v) {
+  if (v == null) return ''
+  if (Array.isArray(v)) return v.join('; ')
+  if (typeof v === 'object') return Object.entries(v).map(([k, val]) => `${k}: ${val}`).join('; ')
+  return String(v)
+}
+
+function rowsToCSV(rows) {
+  if (!rows.length) return ''
+  const headers = Object.keys(rows[0])
+  const esc = (v) => { const s = cellToString(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+  return [headers.map(esc).join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\r\n')
+}
+
+// Real .xlsx via ExcelJS (so Excel doesn't warn about format/extension mismatch).
+async function downloadXLSX(rows, filename) {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Export')
+  const headers = Object.keys(rows[0])
+  ws.columns = headers.map(h => ({ header: h, key: h, width: Math.min(Math.max(h.length + 2, 12), 60) }))
+  rows.forEach(r => ws.addRow(headers.reduce((o, h) => { o[h] = cellToString(r[h]); return o }, {})))
+  const header = ws.getRow(1)
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3560' } }
+  header.alignment = { vertical: 'middle' }
+  const buf = await wb.xlsx.writeBuffer()
+  downloadBlob(filename, buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+}
+
+// Builds a real (text/vector) PDF using jsPDF + autotable — selectable text,
+// not an image snapshot. `buildPdf(doc, autoTable)` draws the content.
+async function exportToPDF(buildPdf, filename) {
+  const { default: jsPDF }     = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+  const doc = new jsPDF('p', 'mm', 'a4')
+  buildPdf(doc, autoTable)
+  doc.save(filename)
+}
+
+function ExportMenu({ filename = 'export', getRows, buildPdf }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  const date = new Date().toISOString().slice(0, 10)
+
+  async function run(kind) {
+    setOpen(false)
+    try {
+      setBusy(true)
+      if (kind === 'pdf') {
+        if (!buildPdf) { alert('Nothing to export yet.'); return }
+        await exportToPDF(buildPdf, `${filename}-${date}.pdf`)
+        return
+      }
+      const rows = getRows ? getRows() : []
+      if (!rows.length) { alert('Nothing to export yet.'); return }
+      if (kind === 'csv')   downloadBlob(`${filename}-${date}.csv`, '﻿' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
+      if (kind === 'excel') await downloadXLSX(rows, `${filename}-${date}.xlsx`)
+    } catch (e) {
+      console.error('Export error:', e); alert('Export failed: ' + (e.message || e))
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div ref={ref} className="export-toolbar" style={{ position: 'relative', display: 'inline-block' }}>
+      <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} disabled={busy}>
+        {busy ? 'Exporting…' : '⤓ Export ▾'}
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.14)', zIndex: 50, minWidth: 150, overflow: 'hidden' }}>
+          {[{ k: 'excel', label: 'Excel (.xlsx)' }, { k: 'csv', label: 'CSV (.csv)' }, { k: 'pdf', label: 'PDF (.pdf)' }].map(o => (
+            <button key={o.k} onClick={() => run(o.k)}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--navy)', fontFamily: 'inherit' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Option sub-editors ─────────────────────────────────────
 
 function ChoicesEditor({ choices, onChange }) {
@@ -679,6 +779,10 @@ export default function ConsultantPortal() {
 
   const [screen, setScreen] = useState('dashboard')
 
+  // Export targets (for PDF capture)
+  const dashboardRef = useRef(null)
+  const analyticsRef = useRef(null)
+
   // Survey form
   const [surveyForm, setSurveyForm]     = useState({ title: '', description: '', live_start: '', live_end: '' })
   const [savingSurvey, setSavingSurvey] = useState(false)
@@ -820,6 +924,105 @@ export default function ConsultantPortal() {
     { key: 'analytics', icon: '📊', label: 'Analytics'  },
     { key: 'settings',  icon: '⚙',  label: 'Settings'   },
   ]
+
+  // ── Export row builders ──────────────────────────────────
+  // Dashboard export = the participation summary + respondent list.
+  function buildDashboardRows() {
+    return respondents.map(r => ({
+      Name:           r.name || '',
+      Email:          r.email || '',
+      Department:     r.department || '',
+      Position:       r.job_title || '',
+      Responded:      hasResponded(r) ? 'Yes' : 'No',
+      Timing:         hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end) || '') : '',
+      'Submitted At': r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-ZA') : '',
+    }))
+  }
+
+  // Analytics export = one row per submitted response, a column per question.
+  function buildAnalyticsRows() {
+    return enrichedResponses.map(resp => {
+      const r = respondents.find(rd => rd.id === resp.respondent_id)
+      const row = {
+        Name:           resp._name || '',
+        Email:          r?.email || '',
+        Department:     resp._dept || '',
+        'Submitted At': resp.submitted_at ? new Date(resp.submitted_at).toLocaleString('en-ZA') : '',
+      }
+      questions.forEach(q => { row[`Q${q.order_num + 1}. ${q.text}`] = cellToString(resp.answers?.[q.id]) })
+      return row
+    })
+  }
+
+  // Per-question result summary (used in the Analytics PDF).
+  function analyticsSummaryRows() {
+    return questions.map(q => {
+      const ans = enrichedResponses.map(r => r.answers?.[q.id]).filter(v => v != null && v !== '')
+      const t = q.question_type
+      let result = '—'
+      if (['LIKERT', 'likert', 'RATING_SCALE'].includes(t)) {
+        const nums = ans.map(Number).filter(n => !isNaN(n))
+        if (nums.length) result = `Avg ${(nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2)}`
+      } else if (['SINGLE_CHOICE', 'DROPDOWN', 'MULTI_CHOICE'].includes(t)) {
+        const counts = {}
+        ans.forEach(a => (Array.isArray(a) ? a : [a]).forEach(x => { counts[x] = (counts[x] || 0) + 1 }))
+        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
+        if (top) result = `Top: ${top[0]} (${top[1]})`
+      } else {
+        result = `${ans.length} answered`
+      }
+      return [`Q${q.order_num + 1}`, q.text, t, result]
+    })
+  }
+
+  const NAVY = [26, 53, 96]
+  function pdfHeader(doc, subtitle) {
+    doc.setFontSize(15); doc.setTextColor(...NAVY)
+    doc.text(survey?.title || 'DBN Culture Survey', 14, 16)
+    doc.setFontSize(11); doc.setTextColor(90)
+    doc.text(subtitle, 14, 23)
+    doc.setFontSize(8.5); doc.setTextColor(140)
+    doc.text(`Generated ${new Date().toLocaleString('en-ZA')}`, 14, 28)
+    doc.setTextColor(0)
+  }
+
+  function buildDashboardPdf(doc, autoTable) {
+    pdfHeader(doc, 'Dashboard — Participation Summary')
+    autoTable(doc, {
+      startY: 33,
+      head: [['Registered', 'Completed Survey', 'Started — Not Done', 'Participation']],
+      body: [[String(totalRegistered), String(totalCompleted), String(totalInProgress), `${completionPct}%`]],
+      theme: 'grid', headStyles: { fillColor: NAVY }, styles: { halign: 'center', fontSize: 10 },
+    })
+    const rows = buildDashboardRows()
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 8,
+      head: [['Name', 'Email', 'Department', 'Position', 'Responded', 'Timing', 'Submitted At']],
+      body: rows.map(r => [r.Name, r.Email, r.Department, r.Position, r.Responded, r.Timing, r['Submitted At']]),
+      styles: { fontSize: 7.5, cellPadding: 1.5 }, headStyles: { fillColor: NAVY },
+      didDrawPage: () => pdfHeaderRepeat(doc),
+    })
+  }
+
+  function buildAnalyticsPdf(doc, autoTable) {
+    pdfHeader(doc, `Analytics — ${enrichedResponses.length} response${enrichedResponses.length !== 1 ? 's' : ''}`)
+    autoTable(doc, {
+      startY: 33,
+      head: [['#', 'Question', 'Type', 'Result']],
+      body: analyticsSummaryRows(),
+      styles: { fontSize: 8, cellPadding: 1.5, valign: 'middle' },
+      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 110 } },
+      headStyles: { fillColor: NAVY },
+    })
+  }
+
+  // Lightweight page-number footer for multi-page tables.
+  function pdfHeaderRepeat(doc) {
+    const n = doc.internal.getNumberOfPages()
+    doc.setFontSize(8); doc.setTextColor(150)
+    doc.text(`Page ${n}`, doc.internal.pageSize.getWidth() - 20, doc.internal.pageSize.getHeight() - 8)
+    doc.setTextColor(0)
+  }
 
   // ── Handlers ─────────────────────────────────────────────
 
@@ -978,7 +1181,10 @@ export default function ConsultantPortal() {
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
-            <div>
+            <div ref={dashboardRef}>
+              <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <ExportMenu filename="DBN-Dashboard" getRows={buildDashboardRows} buildPdf={buildDashboardPdf} />
+              </div>
               <div className="page-hero">
                 <div className="hero-title">Welcome back, {displayName}</div>
                 <div className="hero-sub">{survey ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : 'Draft — not yet live'}` : 'No survey found.'}</div>
@@ -1397,7 +1603,10 @@ export default function ConsultantPortal() {
 
           {/* ════════ ANALYTICS ════════ */}
           {screen === 'analytics' && (
-            <div>
+            <div ref={analyticsRef}>
+              <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <ExportMenu filename="DBN-Analytics" getRows={buildAnalyticsRows} buildPdf={buildAnalyticsPdf} />
+              </div>
               <div className="page-hero">
                 <div className="hero-title">Analytics</div>
                 <div className="hero-sub">Per-question analysis — scores, distributions, choices, and open responses.</div>
