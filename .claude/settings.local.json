@@ -13,7 +13,9 @@
       "Bash(Select-Object Mode, Name)",
       "Bash(xargs ls -lh)",
       "Bash(npm audit *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(npx --yes acorn --ecma2020 --module src/portals/ConsultantPortal.jsx)",
+      "Bash(npx vite *)"
     ]
   }
 }

@@ -410,7 +410,6 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
           <span style={{ fontSize: 14 }}>{info.icon}</span>
           <span className="badge badge-slate" style={{ fontSize: 10.5 }}>{info.label}</span>
           {q.dimension && <span className="badge badge-teal" style={{ fontSize: 10.5 }}>{q.dimension}</span>}
-          <span style={{ fontSize: 11.5, color: 'var(--text3)', marginLeft: 'auto' }}>{rawAnswers.length} response{rawAnswers.length !== 1 ? 's' : ''}</span>
         </div>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--navy)', lineHeight: 1.5 }}>Q{q.order_num + 1}. {q.text}</div>
         {q.hint && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{q.hint}</div>}
@@ -660,10 +659,23 @@ export default function ConsultantPortal() {
   const { profile, role } = useAuth()
   const { users, createUser, deactivateUser, organisations, loading: usersLoading } = useAdminData()
   const {
-    survey, questions, respondents, responses, loading, refetch,
+    survey, questions, respondents: rawRespondents, responses: rawResponses, loading, refetch,
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
   } = useSurvey()
+
+  // ── DBN-only filter ──────────────────────────────────────────────────────
+  // All participation metrics (signed up / started / submitted) and the Analytics
+  // tab count only real DBN participants — anyone whose email doesn't contain
+  // "dbn" (test/dummy accounts) is excluded. The raw lists are kept for the
+  // Survey-tab management table so those test entries stay visible & deletable.
+  const isDbn        = (email) => (email || '').toLowerCase().includes('dbn')
+  const respondents  = rawRespondents.filter(r => isDbn(r.email))
+  const rawRespById  = new Map(rawRespondents.map(r => [r.id, r]))
+  const responses    = rawResponses.filter(resp => {
+    const r = rawRespById.get(resp.respondent_id)
+    return r && isDbn(r.email)
+  })
 
   const [screen, setScreen] = useState('dashboard')
 
@@ -711,9 +723,29 @@ export default function ConsultantPortal() {
 
   const EXPECTED_TOTAL = 140
   const totalInvited   = respondents.length
-  const totalResponded = respondents.filter(r => r.used).length
+  // Single source of truth for "completed" = every submitted response (one row
+  // per respondent in survey_responses). This includes responses submitted
+  // against an earlier version of the survey: those participants are real and
+  // their data is still valuable, so they count. Because both the Dashboard and
+  // the Analytics tab derive their totals from this same `responses` list, the
+  // headline counts always match. (Per-question Analytics may legitimately show
+  // fewer answers for a question that was edited after some people responded —
+  // that's a per-question detail, not the overall total.)
+  const respondedIds   = new Set(responses.map(r => r.respondent_id))
+  const hasResponded   = (r) => respondedIds.has(r.id)
+  const totalResponded = respondedIds.size
   const totalPending   = EXPECTED_TOTAL - totalResponded
   const completionPct  = Math.round((totalResponded / EXPECTED_TOTAL) * 100)
+
+  // ── Registration & engagement funnel (client-requested metrics) ──────────
+  // "Registered" = a plain count of the profiles table. Nothing else — no role
+  // filter, no email filter.
+  const totalRegistered   = users.length
+  // "Completed" = respondents who fully submitted the survey.
+  const totalCompleted    = totalResponded
+  // "Started, not completed" = opened the survey link but never submitted.
+  const totalInProgress   = respondents.filter(r => !hasResponded(r) && r.started_at).length
+  const regCompletionPct  = totalRegistered > 0 ? Math.round((totalCompleted / totalRegistered) * 100) : 0
 
   // Detect which question represents "department" (first choice/dropdown/text Q whose text or dimension mentions "department")
   const deptQuestion = questions.find(q =>
@@ -732,7 +764,7 @@ export default function ConsultantPortal() {
     }
   })
 
-  const timingCounts = respondents.filter(r => r.used).reduce((acc, r) => {
+  const timingCounts = respondents.filter(hasResponded).reduce((acc, r) => {
     const t = r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)
     if (t) acc[t] = (acc[t] || 0) + 1
     return acc
@@ -752,7 +784,7 @@ export default function ConsultantPortal() {
       })
     : departments.map(dept => {
         const dr = respondents.filter(r => r.department === dept)
-        return { dept, total: dr.length, responded: dr.filter(r => r.used).length, answerBased: false }
+        return { dept, total: dr.length, responded: dr.filter(hasResponded).length, answerBased: false }
       })
 
   const likertQs = questions.filter(q => ['LIKERT', 'likert'].includes(q.question_type))
@@ -953,13 +985,11 @@ export default function ConsultantPortal() {
                 <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
               </div>
 
-              <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+              <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                 {[
-                  { label: 'Signed Up',        value: totalInvited,        sub: `of ${EXPECTED_TOTAL} expected`,   color: '#1BBFB0' },
-                  { label: 'Responded',        value: totalResponded,      sub: 'Fully submitted',                 color: '#0A8A7E' },
-                  { label: 'Pending',          value: totalPending,        sub: `of ${EXPECTED_TOTAL} expected`,   color: '#C9B882' },
-                  { label: 'Completion Rate',  value: `${completionPct}%`, sub: `${totalResponded} of ${EXPECTED_TOTAL}`, color: '#1A3560' },
-                  { label: 'Overall Score',    value: overallScore != null ? `${overallScore}%` : '—', sub: likertQs.length ? `${likertQs.length} Likert question${likertQs.length !== 1 ? 's' : ''}` : 'No scored questions', color: scoreColor(overallScore) },
+                  { label: 'Registered',          value: totalRegistered,  sub: 'Accounts created on the website',  color: '#1A6BAA' },
+                  { label: 'Completed Survey',    value: totalCompleted,   sub: 'Fully submitted',                  color: '#0A8A7E' },
+                  { label: 'Started — Not Done',  value: totalInProgress,  sub: 'Opened the survey, not submitted', color: '#C9B882' },
                 ].map(c => (
                   <div className="stat-card" key={c.label}>
                     <div className="stat-accent" style={{ background: c.color }} />
@@ -1107,8 +1137,8 @@ export default function ConsultantPortal() {
                             <td style={{ color: 'var(--text2)' }}>{r.email}</td>
                             <td>{r.department || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                             <td>{r.job_title  || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                            <td>{r.used ? <span className="tag tag-active">● Yes</span> : <span className="tag tag-pending">○ No</span>}</td>
-                            <td>{timingBadge(r.used ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)) : null)}</td>
+                            <td>{hasResponded(r) ? <span className="tag tag-active">● Yes</span> : <span className="tag tag-pending">○ No</span>}</td>
+                            <td>{timingBadge(hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)) : null)}</td>
                             <td style={{ fontSize: 12.5, color: 'var(--text3)' }}>{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                           </tr>
                         ))}
@@ -1273,7 +1303,7 @@ export default function ConsultantPortal() {
                     <tbody>
                       {inviteRows.map((row, idx) => {
                         const takenEmails = new Set([
-                          ...respondents.map(r => r.email),
+                          ...rawRespondents.map(r => r.email),
                           ...inviteRows.filter((_, i) => i !== idx).map(r => r.email).filter(Boolean),
                         ])
                         return (
@@ -1336,14 +1366,14 @@ export default function ConsultantPortal() {
                   {inviting ? 'Adding…' : `Add ${inviteRows.filter(r => r.email.trim()).length || ''} Respondent${inviteRows.filter(r => r.email.trim()).length !== 1 ? 's' : ''} →`}
                 </button>
 
-                {respondents.length > 0 && (
+                {rawRespondents.length > 0 && (
                   <div style={{ marginTop: 24 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 12 }}>Current Respondents ({respondents.length})</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 12 }}>Current Respondents ({rawRespondents.length})</div>
                     <div style={{ maxHeight: 320, overflowY: 'auto' }}>
                       <table>
                         <thead><tr><th>Name / Email</th><th>Department</th><th>Position</th><th>Status</th><th>Survey Link</th><th></th></tr></thead>
                         <tbody>
-                          {respondents.map(r => (
+                          {rawRespondents.map(r => (
                             <tr key={r.id}>
                               <td>
                                 <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name || '—'}</div>
@@ -1353,7 +1383,7 @@ export default function ConsultantPortal() {
                               <td style={{ fontSize: 13 }}>{r.job_title  || '—'}</td>
                               <td>{r.used ? <span className="tag tag-active">✓ Done</span> : <span className="tag tag-pending">Pending</span>}</td>
                               <td>{!r.used && <a href={surveyUrl(r.token)} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)', fontSize: 12, textDecoration: 'none' }}>Open Link ↗</a>}</td>
-                              <td>{!r.used && <button onClick={() => { if (window.confirm(`Remove ${r.email}?`)) removeRespondent(r.id) }} style={{ background: 'none', border: 'none', color: 'var(--coral)', cursor: 'pointer', fontSize: 12 }}>Remove</button>}</td>
+                              <td><button onClick={() => { if (window.confirm(r.used ? `Delete ${r.email} AND their submitted response? This permanently removes the test entry.` : `Remove ${r.email}?`)) removeRespondent(r.id) }} style={{ background: 'none', border: 'none', color: 'var(--coral)', cursor: 'pointer', fontSize: 12 }}>{r.used ? 'Delete' : 'Remove'}</button></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1385,7 +1415,7 @@ export default function ConsultantPortal() {
                     <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, background: 'radial-gradient(circle, rgba(27,191,176,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
                     <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
                       {[
-                        { label: 'Responses', value: responses.length },
+                        { label: 'Responses', value: enrichedResponses.length },
                         { label: 'Completion Rate', value: `${completionPct}%` },
                         ...(overallScore != null ? [{ label: 'Overall Score', value: `${overallScore}%`, highlight: true }] : []),
                         { label: 'Questions', value: questions.length },

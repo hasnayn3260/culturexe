@@ -37,3 +37,5 @@ database.sql
 # Prototype files
 consultant.html
 client.html
+.claude/settings.local.json
+sql files

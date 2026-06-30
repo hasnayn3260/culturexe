@@ -114,6 +114,13 @@ export function useSurvey() {
   }
 
   async function removeRespondent(id) {
+    // Remove any submitted responses first so completed/test entries can be
+    // deleted cleanly (and aren't left orphaned if there's no FK cascade).
+    const { error: respErr } = await supabase
+      .from('survey_responses')
+      .delete()
+      .eq('respondent_id', id)
+    if (respErr) throw respErr
     const { error: err } = await supabase
       .from('survey_respondents')
       .delete()
