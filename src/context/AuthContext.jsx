@@ -74,21 +74,44 @@ export function AuthProvider({ children }) {
     // Consultant / superadmin accounts are created exclusively via the
     // superadmin-gated create-user Edge Function.
     const safeRole = role === 'employee' ? 'employee' : 'client'
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName, job_title: jobTitle, role: safeRole, username, position },
-      },
-    })
-    if (error) throw error
-    if (data.user && data.user.identities && data.user.identities.length === 0) {
-      throw new Error('An account with this email already exists. Please sign in instead.')
+
+    // transformation@dbn.com.na is a shared inbox used by multiple people at
+    // that org. Supabase Auth requires unique emails, so when this exact
+    // address is submitted we silently mint a numbered variant
+    // (transformation1@dbn.com.na, transformation2@..., ...) behind the
+    // scenes so each person still gets their own account. The user always
+    // just types the shared address.
+    const trimmedEmail = email.trim()
+    const isSharedInbox = trimmedEmail.toLowerCase() === 'transformation@dbn.com.na'
+    const [local, domain] = trimmedEmail.split('@')
+
+    let signupEmail = trimmedEmail
+    let data, error
+    for (let n = 0; n <= 50; n++) {
+      if (n > 0) signupEmail = `${local}${n}@${domain}`
+      ;({ data, error } = await supabase.auth.signUp({
+        email: signupEmail,
+        password,
+        options: {
+          data: { full_name: fullName, job_title: jobTitle, role: safeRole, username, position },
+        },
+      }))
+      const alreadyExists = (error && /already registered/i.test(error.message)) ||
+        (data?.user && data.user.identities && data.user.identities.length === 0)
+      if (!alreadyExists) {
+        if (error) throw error
+        break
+      }
+      if (!isSharedInbox) {
+        throw new Error('An account with this email already exists. Please sign in instead.')
+      }
+      if (n === 50) throw new Error('Could not create account. Please try again.')
     }
+
     // No email verification step: sign the user in immediately after sign-up.
     // (This requires "Confirm email" to be turned OFF in the Supabase Auth settings.)
     if (data.session) return data
-    const signInResult = await supabase.auth.signInWithPassword({ email, password })
+    const signInResult = await supabase.auth.signInWithPassword({ email: signupEmail, password })
     if (signInResult.error) throw signInResult.error
     return signInResult.data
   }
