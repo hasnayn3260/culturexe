@@ -856,13 +856,26 @@ export default function ConsultantPortal() {
     ['SINGLE_CHOICE', 'DROPDOWN', 'SHORT_TEXT', 'LONG_TEXT'].includes(q.question_type) &&
     (q.text?.toLowerCase().includes('department') || q.dimension?.toLowerCase().includes('department'))
   )
+  const responseByRespId = new Map(responses.map(resp => [resp.respondent_id, resp]))
+
+  // Department for a respondent: prefer what they actually typed/selected on the
+  // "Which division or department do you work in?" survey question, then their
+  // linked profile's department (matched by email), then the invite-time value
+  // stored on survey_respondents.
+  function resolveDept(r) {
+    if (!r) return null
+    const resp = responseByRespId.get(r.id)
+    const fromAnswer = deptQuestion ? (resp?.answers?.[deptQuestion.id] ?? null) : null
+    if (fromAnswer) return fromAnswer
+    const profile = users.find(u => u.email === r.email)
+    return profile?.department || r.department || null
+  }
 
   const enrichedResponses = responses.map(resp => {
     const r = respondents.find(rd => rd.id === resp.respondent_id)
-    const deptFromAnswer = deptQuestion ? (resp.answers?.[deptQuestion.id] ?? null) : null
     return {
       ...resp,
-      _dept:  deptFromAnswer || r?.department || null,
+      _dept:  resolveDept(r),
       _title: r?.job_title,
       _name:  r?.name,
     }
@@ -931,7 +944,7 @@ export default function ConsultantPortal() {
     return respondents.map(r => ({
       Name:           r.name || '',
       Email:          r.email || '',
-      Department:     r.department || '',
+      Department:     resolveDept(r) || '',
       Position:       r.job_title || '',
       Responded:      hasResponded(r) ? 'Yes' : 'No',
       Timing:         hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end) || '') : '',
@@ -1341,7 +1354,7 @@ export default function ConsultantPortal() {
                           <tr key={r.id}>
                             <td style={{ fontWeight: 600 }}>{r.name || '—'}</td>
                             <td style={{ color: 'var(--text2)' }}>{r.email}</td>
-                            <td>{r.department || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                            <td>{resolveDept(r) || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                             <td>{r.job_title  || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                             <td>{hasResponded(r) ? <span className="tag tag-active">● Yes</span> : <span className="tag tag-pending">○ No</span>}</td>
                             <td>{timingBadge(hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)) : null)}</td>
