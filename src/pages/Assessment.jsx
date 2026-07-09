@@ -15,6 +15,18 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
   return 'on_time'
 }
 
+// Find the "About You" style questions that duplicate what the open-link
+// intake form already captured (department, tenure, job grade), so they can
+// be pre-filled and hidden rather than asked twice.
+function findAboutYouQuestions(questions) {
+  const find = re => (questions || []).find(q => re.test(q.text) && q.options?.choices?.length)
+  return {
+    deptQ:   find(/department|division/i),
+    tenureQ: find(/how long|worked at/i),
+    gradeQ:  find(/grade|role level/i),
+  }
+}
+
 function isAnswered(q, val) {
   if (val == null) return false
   if (Array.isArray(val)) return val.length > 0
@@ -415,6 +427,19 @@ export default function Assessment() {
 
         if (qErr) throw qErr
         setQuestions(qs || [])
+
+        // Open-link respondents already gave us department/tenure/job grade
+        // at intake — pre-fill the matching survey questions so they aren't
+        // asked again, but still submit the same values as real answers.
+        if (resp.source === 'open_link') {
+          const { deptQ, tenureQ, gradeQ } = findAboutYouQuestions(qs)
+          const prefill = {}
+          if (deptQ   && resp.department && deptQ.options.choices.includes(resp.department))   prefill[deptQ.id]   = resp.department
+          if (tenureQ && resp.tenure     && tenureQ.options.choices.includes(resp.tenure))       prefill[tenureQ.id] = resp.tenure
+          if (gradeQ  && resp.job_grade  && gradeQ.options.choices.includes(resp.job_grade))     prefill[gradeQ.id]  = resp.job_grade
+          if (Object.keys(prefill).length) setAnswers(prefill)
+        }
+
         setPhase('survey')
 
         // Mark the moment this respondent first opened the survey, so the
@@ -433,27 +458,35 @@ export default function Assessment() {
     init()
   }, [token])
 
+  // Questions already answered at open-link intake (department/tenure/job
+  // grade) are hidden here so they aren't asked twice.
+  const { deptQ, tenureQ, gradeQ } = findAboutYouQuestions(questions)
+  const hiddenIds = respondent?.source === 'open_link'
+    ? new Set([deptQ, tenureQ, gradeQ].filter(Boolean).filter(q => isAnswered(q, answers[q.id])).map(q => q.id))
+    : new Set()
+  const visibleQuestions = questions.filter(q => !hiddenIds.has(q.id))
+
   // Paging: group by dimension if present, otherwise flat pages of 5
-  const dimensions = [...new Set(questions.map(q => q.dimension || '').filter(Boolean))]
+  const dimensions = [...new Set(visibleQuestions.map(q => q.dimension || '').filter(Boolean))]
   const hasDimensions = dimensions.length > 0
 
   let pages = []
   if (hasDimensions) {
-    const noDim = questions.filter(q => !q.dimension)
+    const noDim = visibleQuestions.filter(q => !q.dimension)
     for (const dim of dimensions) {
-      pages.push({ label: dim, qs: questions.filter(q => q.dimension === dim) })
+      pages.push({ label: dim, qs: visibleQuestions.filter(q => q.dimension === dim) })
     }
     if (noDim.length) pages.push({ label: 'Other', qs: noDim })
   } else {
     const chunkSize = 5
-    for (let i = 0; i < questions.length; i += chunkSize) {
-      pages.push({ label: `Questions ${i + 1}–${Math.min(i + chunkSize, questions.length)}`, qs: questions.slice(i, i + chunkSize) })
+    for (let i = 0; i < visibleQuestions.length; i += chunkSize) {
+      pages.push({ label: `Questions ${i + 1}–${Math.min(i + chunkSize, visibleQuestions.length)}`, qs: visibleQuestions.slice(i, i + chunkSize) })
     }
   }
 
   const currentPage = pages[page] || { label: '', qs: [] }
-  const totalQ = questions.length
-  const totalAnswered = questions.filter(q => isAnswered(q, answers[q.id])).length
+  const totalQ = visibleQuestions.length
+  const totalAnswered = visibleQuestions.filter(q => isAnswered(q, answers[q.id])).length
   const progress = totalQ > 0 ? Math.round((totalAnswered / totalQ) * 100) : 0
   const allAnswered = totalQ > 0 && totalAnswered === totalQ
   const isLastPage = page === pages.length - 1

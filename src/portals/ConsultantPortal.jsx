@@ -801,6 +801,7 @@ export default function ConsultantPortal() {
   const [inviteMsg, setInviteMsg]     = useState(null)
   const [reminderMsg, setReminderMsg] = useState(null)
   const [reminderSending, setReminderSending] = useState(false)
+  const [openLinkCopied, setOpenLinkCopied] = useState(false)
 
   // Analytics filter
   const [filterDept, setFilterDept]   = useState('')
@@ -1060,6 +1061,17 @@ export default function ConsultantPortal() {
   async function handleReopen() {
     if (!window.confirm('Reopen the survey as draft for editing?')) return
     try { await updateSurvey({ status: 'draft' }) } catch (e) { alert('Error: ' + e.message) }
+  }
+
+  async function handleToggleOpenLink() {
+    try { await updateSurvey({ open_link_enabled: !survey?.open_link_enabled }) } catch (e) { alert('Error: ' + e.message) }
+  }
+
+  function handleCopyOpenLink() {
+    const url = `${window.location.origin}/assess/open/${survey?.open_link_token}`
+    navigator.clipboard.writeText(url)
+    setOpenLinkCopied(true)
+    setTimeout(() => setOpenLinkCopied(false), 1800)
   }
 
   async function handleAddQuestion(form) {
@@ -1348,12 +1360,13 @@ export default function ConsultantPortal() {
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table>
-                      <thead><tr><th>Name</th><th>Email</th><th>Department</th><th>Position</th><th>Responded</th><th>Timing</th><th>Submitted</th></tr></thead>
+                      <thead><tr><th>Name</th><th>Email</th><th>Source</th><th>Department</th><th>Position</th><th>Responded</th><th>Timing</th><th>Submitted</th></tr></thead>
                       <tbody>
                         {respondents.map(r => (
                           <tr key={r.id}>
                             <td style={{ fontWeight: 600 }}>{r.name || '—'}</td>
-                            <td style={{ color: 'var(--text2)' }}>{r.email}</td>
+                            <td style={{ color: 'var(--text2)' }}>{r.source === 'open_link' ? <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>no email</span> : r.email}</td>
+                            <td>{r.source === 'open_link' ? <span className="tag" style={{ background: 'var(--teal-light)', color: 'var(--teal)' }}>Open Link</span> : <span className="tag tag-pending">Invited</span>}</td>
                             <td>{resolveDept(r) || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                             <td>{r.job_title  || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                             <td>{hasResponded(r) ? <span className="tag tag-active">● Yes</span> : <span className="tag tag-pending">○ No</span>}</td>
@@ -1430,6 +1443,28 @@ export default function ConsultantPortal() {
                     <div style={{ fontSize: 12, color: 'var(--teal)', wordBreak: 'break-all', background: 'var(--teal-light)', padding: '8px 12px', borderRadius: 8 }}>
                       {window.location.origin}/assess/[token]
                     </div>
+                  </div>
+
+                  {/* Open / walk-in link for workers with no company email */}
+                  <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 16 }}>
+                    <div className="flex-between" style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text2)' }}>Open Link (no email required)</div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: 'var(--text3)' }}>
+                        <input type="checkbox" checked={!!survey?.open_link_enabled} onChange={handleToggleOpenLink} disabled={!survey} />
+                        {survey?.open_link_enabled ? 'Enabled' : 'Disabled'}
+                      </label>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 10, lineHeight: 1.5 }}>
+                      Anyone with this link can self-register (name, department, job title) and take the survey — no invite or company email needed. Only works while the survey is live.
+                    </div>
+                    {survey?.open_link_enabled && (
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <div style={{ fontSize: 12, color: 'var(--teal)', wordBreak: 'break-all', background: 'var(--teal-light)', padding: '8px 12px', borderRadius: 8, flex: 1 }}>
+                          {window.location.origin}/assess/open/{survey.open_link_token}
+                        </div>
+                        <button className="btn btn-outline btn-sm" onClick={handleCopyOpenLink}>{openLinkCopied ? 'Copied ✓' : 'Copy'}</button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

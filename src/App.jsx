@@ -8,6 +8,7 @@ import Login           from './pages/Login'
 import Signup          from './pages/Signup'
 import AdminRegister   from './pages/AdminRegister'
 import Assessment      from './pages/Assessment'
+import OpenAssessmentEntry from './pages/OpenAssessmentEntry'
 import ForgotPassword  from './pages/ForgotPassword'
 import ResetPassword   from './pages/ResetPassword'
 import ConsultantPortal from './portals/ConsultantPortal'
@@ -39,6 +40,7 @@ export default function App() {
               } />
 
               <Route path="/assess/:token"  element={<Assessment />} />
+              <Route path="/assess/open/:openToken" element={<OpenAssessmentEntry />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/how-to-guide" element={<HowToGuide />} />

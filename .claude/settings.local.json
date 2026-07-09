@@ -17,7 +17,15 @@
       "Bash(npx --yes acorn --ecma2020 --module src/portals/ConsultantPortal.jsx)",
       "Bash(npx vite *)",
       "Bash(node -e \"console.log\\('jspdf-autotable', require\\('./node_modules/jspdf-autotable/package.json'\\).version\\); console.log\\('jspdf', require\\('./node_modules/jspdf/package.json'\\).version\\)\")",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(powershell -Command \"Get-Content 'C:\\\\Users\\\\ITafr\\\\Downloads\\\\supabase_logs.csv' -TotalCount 5\")",
+      "Bash(powershell -Command \"Import-Csv 'C:\\\\Users\\\\ITafr\\\\Downloads\\\\supabase_logs.csv' | Where-Object { \\\\$_.level -eq 'error' } | Select-Object -First 40 timestamp,status,event_message | Format-Table -Wrap -AutoSize\")",
+      "Bash(grep -rn \"position_check\\\\|CHECK.*position\\\\|position.*CHECK\" \"sql files\")",
+      "Bash(grep -rln \"position\" \"sql files\"/*.sql src/pages/AdminRegister.jsx)",
+      "Bash(cat .env)",
+      "Bash(cat .env.local)",
+      "Bash(curl *)",
+      "Bash(git stash *)"
     ]
   }
 }
