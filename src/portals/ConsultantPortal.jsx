@@ -764,18 +764,10 @@ export default function ConsultantPortal() {
     addRespondents, removeRespondent, sendReminders,
   } = useSurvey()
 
-  // ── DBN-only filter ──────────────────────────────────────────────────────
   // All participation metrics (signed up / started / submitted) and the Analytics
-  // tab count only real DBN participants — anyone whose email doesn't contain
-  // "dbn" (test/dummy accounts) is excluded. The raw lists are kept for the
-  // Survey-tab management table so those test entries stay visible & deletable.
-  const isDbn        = (email) => (email || '').toLowerCase().includes('dbn')
-  const respondents  = rawRespondents.filter(r => isDbn(r.email))
-  const rawRespById  = new Map(rawRespondents.map(r => [r.id, r]))
-  const responses    = rawResponses.filter(resp => {
-    const r = rawRespById.get(resp.respondent_id)
-    return r && isDbn(r.email)
-  })
+  // tab count every respondent and every row in survey_responses — no filtering.
+  const respondents  = rawRespondents
+  const responses    = rawResponses
 
   const [screen, setScreen] = useState('dashboard')
 
