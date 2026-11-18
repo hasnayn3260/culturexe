@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 // Internal-only registration page for consultants and admins.
 // Not linked from any public UI. Not indexed by search engines.
@@ -35,7 +36,8 @@ export default function AdminRegister() {
     e.preventDefault()
     setError('')
     if (!fullName.trim()) { setError('Please enter a full name.'); return }
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) { setError(`Password must contain: ${passwordError.toLowerCase()}.`); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     setSubmitting(true)
     try {

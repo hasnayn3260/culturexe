@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 export default function ResetPassword() {
   const navigate = useNavigate()
@@ -39,7 +40,8 @@ export default function ResetPassword() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) { setError(`Password must contain: ${passwordError.toLowerCase()}.`); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     setSubmitting(true)
     try {

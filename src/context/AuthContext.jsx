@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { validatePassword } from '../lib/passwordPolicy'
 
 const AuthContext = createContext(null)
 
@@ -68,6 +69,8 @@ export function AuthProvider({ children }) {
   }
 
   async function signUp(email, password, fullName, jobTitle = '', role = 'client', username = '', position = '') {
+    validatePassword(password)
+
     // Self-service sign-up may NEVER mint a privileged account. Even though the
     // database trigger (handle_new_user) clamps this server-side, we also clamp
     // here so the public client can only ever request a non-privileged role.
@@ -139,6 +142,7 @@ export function AuthProvider({ children }) {
   }
 
   async function updatePassword(newPassword) {
+    validatePassword(newPassword)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) throw error
   }

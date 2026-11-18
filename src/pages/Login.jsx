@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import Turnstile from '../components/Turnstile'
+import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 const ROLE_REDIRECTS = {
   superadmin: '/app',
@@ -36,6 +38,7 @@ export default function Login() {
   const [tab,            setTab]            = useState('password')
   const [email,          setEmail]          = useState('')
   const [password,       setPassword]       = useState('')
+  const [showPassword,   setShowPassword]   = useState(false)
   const [submitting,     setSubmitting]     = useState(false)
   const [error,          setError]          = useState('')
   const [signInToken,    setSignInToken]    = useState(null)
@@ -46,6 +49,7 @@ export default function Login() {
   const [lastName,   setLastName]   = useState('')
   const [username,   setUsername]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [jobTitle,   setJobTitle]   = useState('')
   const [position,   setPosition]   = useState('')
   const [signUpDone, setSignUpDone] = useState(false)
@@ -85,7 +89,8 @@ export default function Login() {
     if (!lastName.trim())  { setError('Please enter your surname.'); return }
     if (!username.trim())  { setError('Please choose a username.'); return }
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters and contain only letters, numbers, or underscores.'); return }
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) { setError(`Password must contain: ${passwordError.toLowerCase()}.`); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
     if (!position)              { setError('Please select your position.'); return }
     if (!jobTitle.trim())       { setError('Please enter your job title.'); return }
@@ -204,7 +209,18 @@ export default function Login() {
                     Forgot password?
                   </Link>
                 </div>
-                <input className="form-input" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, border: 'none', borderRadius: 7, background: 'transparent', color: '#8A9BB0', cursor: 'pointer' }}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               <Turnstile resetKey={signInReset} onVerify={setSignInToken} />
               <button type="submit" className="btn btn-teal" disabled={submitting || !signInToken} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting || !signInToken ? 0.7 : 1, cursor: submitting || !signInToken ? 'not-allowed' : 'pointer', marginTop: 8 }}>
@@ -251,11 +267,33 @@ export default function Login() {
               </div>
               <div className="form-group">
                 <label className="form-label">Password *</label>
-                <input className="form-input" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
+                    style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, border: 'none', borderRadius: 7, background: 'transparent', color: '#8A9BB0', cursor: 'pointer' }}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Confirm Password *</label>
-                <input className="form-input" type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showConfirmPw ? 'text' : 'password'} placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw(current => !current)}
+                    aria-label={showConfirmPw ? 'Hide confirmed password' : 'Show confirmed password'}
+                    aria-pressed={showConfirmPw}
+                    style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, border: 'none', borderRadius: 7, background: 'transparent', color: '#8A9BB0', cursor: 'pointer' }}
+                  >
+                    {showConfirmPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
               <button type="submit" className="btn btn-teal" disabled={submitting} style={{ width: '100%', padding: '13px', fontSize: 15, justifyContent: 'center', opacity: submitting ? 0.7 : 1, cursor: submitting ? 'not-allowed' : 'pointer', marginTop: 8 }}>
                 {submitting ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><span style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Creating account…</span> : 'Create Account →'}

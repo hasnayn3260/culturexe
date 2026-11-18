@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 function FluidSVG({ size = 60, id = 'su' }) {
   return (
@@ -32,6 +34,8 @@ export default function Signup() {
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [department, setDepartment] = useState('')
   const [jobTitle,   setJobTitle]   = useState('')
   const [position,   setPosition]   = useState('')
@@ -46,7 +50,8 @@ export default function Signup() {
     if (!lastName.trim())  { setError('Please enter your surname.'); return }
     if (!username.trim())  { setError('Please choose a username.'); return }
     if (!/^[a-zA-Z0-9_]{3,30}$/.test(username.trim())) { setError('Username must be 3–30 characters: letters, numbers, or underscores only.'); return }
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+    const passwordError = getPasswordValidationError(password)
+    if (passwordError) { setError(`Password must contain: ${passwordError.toLowerCase()}.`); return }
     if (password !== confirmPw) { setError('Passwords do not match.'); return }
 
     setSubmitting(true)
@@ -160,14 +165,36 @@ export default function Signup() {
 
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Password *</label>
-                  <input style={fieldStyle} type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required
-                    onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                  <div style={{ position: 'relative' }}>
+                    <input style={{ ...fieldStyle, paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required
+                      onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(current => !current)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, border: 'none', borderRadius: 7, background: 'transparent', color: '#8A9BB0', cursor: 'pointer' }}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ marginBottom: 24 }}>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Confirm Password *</label>
-                  <input style={fieldStyle} type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required
-                    onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                  <div style={{ position: 'relative' }}>
+                    <input style={{ ...fieldStyle, paddingRight: 44 }} type={showConfirmPw ? 'text' : 'password'} placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required
+                      onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw(current => !current)}
+                      aria-label={showConfirmPw ? 'Hide confirmed password' : 'Show confirmed password'}
+                      aria-pressed={showConfirmPw}
+                      style={{ position: 'absolute', top: '50%', right: 10, transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, padding: 0, border: 'none', borderRadius: 7, background: 'transparent', color: '#8A9BB0', cursor: 'pointer' }}
+                    >
+                      {showConfirmPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
