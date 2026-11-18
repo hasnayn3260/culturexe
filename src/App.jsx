@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
+import RequireMfa from './routes/guards/RequireMfa'
 import Home            from './pages/Home'
 import Login           from './pages/Login'
 import Signup          from './pages/Signup'
@@ -29,7 +30,9 @@ export default function App() {
 
               <Route path="/app" element={
                 <ProtectedRoute requiredRole={['consultant', 'superadmin']}>
-                  <ConsultantPortal />
+                  <RequireMfa>
+                    <ConsultantPortal />
+                  </RequireMfa>
                 </ProtectedRoute>
               } />
 
