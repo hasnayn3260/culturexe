@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import PasswordRequirements from '../components/PasswordRequirements'
 import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 // Internal-only registration page for consultants and admins.
@@ -14,6 +15,7 @@ export default function AdminRegister() {
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [confirmPw,  setConfirmPw]  = useState('')
+  const [passwordFocused, setPasswordFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState('')
   const [done,       setDone]       = useState(false)
@@ -105,7 +107,10 @@ export default function AdminRegister() {
                 </div>
                 <div style={{ marginBottom: 14 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Password</label>
-                  <input style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+                  <div style={{ position: 'relative' }}>
+                    <input style={{ ...fieldStyle, background: 'rgba(255,255,255,0.06)', border: '1.5px solid rgba(255,255,255,0.1)', color: 'white' }} type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required />
+                    <PasswordRequirements password={password} visible={passwordFocused} />
+                  </div>
                 </div>
                 <div style={{ marginBottom: 24 }}>
                   <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.8px' }}>Confirm Password</label>

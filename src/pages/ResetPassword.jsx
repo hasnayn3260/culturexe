@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
+import PasswordRequirements from '../components/PasswordRequirements'
 import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 export default function ResetPassword() {
@@ -12,6 +13,7 @@ export default function ResetPassword() {
   const [invalid,     setInvalid]     = useState(false)  // link expired/bad
   const [password,    setPassword]    = useState('')
   const [confirmPw,   setConfirmPw]   = useState('')
+  const [passwordFocused, setPasswordFocused] = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
   const [done,        setDone]        = useState(false)
   const [error,       setError]       = useState('')
@@ -100,7 +102,10 @@ export default function ResetPassword() {
             <form onSubmit={handleSubmit}>
               <div className="form-group">
                 <label className="form-label">New password</label>
-                <input className="form-input" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required autoFocus />
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required autoFocus />
+                  <PasswordRequirements password={password} visible={passwordFocused} />
+                </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Confirm new password</label>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import PasswordRequirements from '../components/PasswordRequirements'
 import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 function FluidSVG({ size = 60, id = 'su' }) {
@@ -36,6 +37,7 @@ export default function Signup() {
   const [confirmPw,  setConfirmPw]  = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPw, setShowConfirmPw] = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
   const [department, setDepartment] = useState('')
   const [jobTitle,   setJobTitle]   = useState('')
   const [position,   setPosition]   = useState('')
@@ -167,7 +169,7 @@ export default function Signup() {
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5568', marginBottom: 5 }}>Password *</label>
                   <div style={{ position: 'relative' }}>
                     <input style={{ ...fieldStyle, paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required
-                      onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E2E8F0'} />
+                      onFocus={e => { e.target.style.borderColor = '#1BBFB0'; setPasswordFocused(true) }} onBlur={e => { e.target.style.borderColor = '#E2E8F0'; setPasswordFocused(false) }} />
                     <button
                       type="button"
                       onClick={() => setShowPassword(current => !current)}
@@ -177,6 +179,7 @@ export default function Signup() {
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
+                    <PasswordRequirements password={password} visible={passwordFocused} />
                   </div>
                 </div>
 

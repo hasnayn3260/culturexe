@@ -6,6 +6,23 @@ export const PASSWORD_REQUIREMENTS = [
   'At least one symbol',
 ] as const
 
+export type PasswordRequirementStatus = {
+  label: (typeof PASSWORD_REQUIREMENTS)[number]
+  met: boolean
+}
+
+export function getPasswordRequirementStatuses(
+  password: string,
+): PasswordRequirementStatus[] {
+  return [
+    { label: PASSWORD_REQUIREMENTS[0], met: password.length >= 8 },
+    { label: PASSWORD_REQUIREMENTS[1], met: /[A-Z]/.test(password) },
+    { label: PASSWORD_REQUIREMENTS[2], met: /[a-z]/.test(password) },
+    { label: PASSWORD_REQUIREMENTS[3], met: /\d/.test(password) },
+    { label: PASSWORD_REQUIREMENTS[4], met: /[^A-Za-z0-9\s]/.test(password) },
+  ]
+}
+
 export function getPasswordValidationError(password: string): string | null {
   if (password.length < 8) return PASSWORD_REQUIREMENTS[0]
   if (!/[A-Z]/.test(password)) return PASSWORD_REQUIREMENTS[1]

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import Turnstile from '../components/Turnstile'
+import PasswordRequirements from '../components/PasswordRequirements'
 import { getPasswordValidationError } from '../lib/passwordPolicy'
 
 const ROLE_REDIRECTS = {
@@ -39,6 +40,7 @@ export default function Login() {
   const [email,          setEmail]          = useState('')
   const [password,       setPassword]       = useState('')
   const [showPassword,   setShowPassword]   = useState(false)
+  const [passwordFocused, setPasswordFocused] = useState(false)
   const [submitting,     setSubmitting]     = useState(false)
   const [error,          setError]          = useState('')
   const [signInToken,    setSignInToken]    = useState(null)
@@ -268,7 +270,7 @@ export default function Login() {
               <div className="form-group">
                 <label className="form-label">Password *</label>
                 <div style={{ position: 'relative' }}>
-                  <input className="form-input" style={{ paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required />
                   <button
                     type="button"
                     onClick={() => setShowPassword(current => !current)}
@@ -278,6 +280,7 @@ export default function Login() {
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
+                  <PasswordRequirements password={password} visible={passwordFocused} />
                 </div>
               </div>
               <div className="form-group">
