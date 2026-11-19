@@ -4,7 +4,8 @@ import { useAuth } from '../hooks/useAuth'
 import { useAdminData } from '../hooks/useAdminData'
 import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
-import UserMenu from '../components/UserMenu'
+import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -922,14 +923,6 @@ export default function ConsultantPortal() {
   })
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
-  const initials = profile?.full_name ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'C'
-
-  const NAV = [
-    { key: 'dashboard', icon: '◉',  label: 'Dashboard'  },
-    { key: 'survey',    icon: '📋', label: 'Survey'     },
-    { key: 'analytics', icon: '📊', label: 'Analytics'  },
-    { key: 'settings',  icon: '⚙',  label: 'Settings'   },
-  ]
 
   // ── Export row builders ──────────────────────────────────
   // Dashboard export = the participation summary + respondent list.
@@ -1146,34 +1139,31 @@ export default function ConsultantPortal() {
 
   return (
     <div className="portal-c">
-      {/* ── SIDEBAR ─────────────────────────── */}
-      <aside className="sidebar">
-        <div className="logo-wrap">
-          <div className="fluid-breathe"><FluidSVG size={38} id="cp-logo" /></div>
-          <div>
-            <div className="logo-wordmark"><span className="logo-cx">Culture</span><span className="logo-xe">Xe</span></div>
-            <div className="logo-sub">by Africa International Advisors</div>
-          </div>
-        </div>
-        <nav className="nav">
-          {NAV.map(item => (
-            <div key={item.key} className={`nav-item${screen === item.key ? ' active' : ''}`} onClick={() => setScreen(item.key)}>
-              <span className="nav-icon">{item.icon}</span>{item.label}
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="aia-badge">
-            <div className="aia-badge-name">Africa International Advisors</div>
-            <div className="aia-badge-role">Consultant Portal · {role === 'superadmin' ? 'Super Admin' : 'Consultant'}</div>
-          </div>
-        </div>
-      </aside>
+      <SidebarProvider
+        style={{
+          '--sidebar-width': '228px',
+          '--sidebar-width-icon': '64px',
+          '--sidebar': '#0D1F3C',
+          '--sidebar-foreground': '#FFFFFF',
+          '--sidebar-accent': 'rgba(27,191,176,0.13)',
+          '--sidebar-accent-foreground': '#FFFFFF',
+          '--sidebar-border': 'rgba(255,255,255,0.10)',
+          '--sidebar-ring': '#1BBFB0',
+        }}
+      >
+        <ConsultantSidebar
+          screen={screen}
+          onScreenChange={setScreen}
+          logo={<span className="fluid-breathe"><FluidSVG size={38} id="cp-logo" /></span>}
+        />
 
-      {/* ── MAIN ────────────────────────────── */}
-      <div className="main">
-        <div className="topbar">
-          <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Survey', analytics: 'Analytics', settings: 'Settings' }[screen]}</div>
+        {/* ── MAIN ────────────────────────────── */}
+        <SidebarInset className="consultant-main bg-[var(--bg)]">
+        <div className="consultant-topbar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
+            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Survey', analytics: 'Analytics', settings: 'Settings' }[screen]}</div>
+          </div>
           <div className="topbar-right">
             {role && role !== 'client' && role !== 'consultant' && (
               <select
@@ -1190,11 +1180,10 @@ export default function ConsultantPortal() {
                 {isLive ? '● Live' : isClosed ? '✓ Closed' : '◷ Draft'}
               </span>
             )}
-            <UserMenu initials={initials} displayName={profile?.full_name || displayName} />
           </div>
         </div>
 
-        <div className="content">
+        <div className="consultant-content">
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
@@ -1820,10 +1809,11 @@ export default function ConsultantPortal() {
           )}
 
         </div>
-      </div>
+        </SidebarInset>
 
-      {/* CSV Import Modal */}
-      {showCSV && <CSVImportModal onImport={handleCSVImport} onClose={() => setShowCSV(false)} />}
+        {/* CSV Import Modal */}
+        {showCSV && <CSVImportModal onImport={handleCSVImport} onClose={() => setShowCSV(false)} />}
+      </SidebarProvider>
     </div>
   )
 }

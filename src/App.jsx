@@ -4,6 +4,7 @@ import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequireMfa from './routes/guards/RequireMfa'
+import { TooltipProvider } from './components/ui/tooltip'
 import Home            from './pages/Home'
 import Login           from './pages/Login'
 import Signup          from './pages/Signup'
@@ -21,8 +22,9 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <ToastProvider>
-          <BrowserRouter>
-            <Routes>
+          <TooltipProvider>
+            <BrowserRouter>
+              <Routes>
               <Route path="/"               element={<Home />} />
               <Route path="/login"          element={<Login />} />
               <Route path="/signup"         element={<Signup />} />
@@ -47,8 +49,9 @@ export default function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/how-to-guide" element={<HowToGuide />} />
-            </Routes>
-          </BrowserRouter>
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
         </ToastProvider>
       </AuthProvider>
     </ErrorBoundary>
