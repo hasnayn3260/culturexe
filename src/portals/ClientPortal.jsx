@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useClientSurvey } from '../hooks/useClientSurvey'
+import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import supabase from '../lib/supabaseClient'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -346,7 +347,7 @@ function ProfileScreen({ profile, respondent, onSave, onBack }) {
 export default function ClientPortal() {
   const navigate = useNavigate()
   const { user, profile, role, signOut } = useAuth()
-  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id)
+  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id)
 
   const [screen,      setScreen]      = useState('survey')
   const [answers,     setAnswers]     = useState({})
@@ -362,8 +363,9 @@ export default function ClientPortal() {
 
   const countdown = useCountdown(survey?.live_end)
   const timer     = formatCountdown(countdown)
-  const isLive    = survey?.status === 'live'
-  const isClosed  = survey?.status === 'closed'
+  const surveyStatus = getEffectiveSurveyStatus(survey)
+  const isLive    = surveyStatus === 'live'
+  const isClosed  = surveyStatus === 'closed'
 
   // Seed answers from existing response or draft
   useEffect(() => {

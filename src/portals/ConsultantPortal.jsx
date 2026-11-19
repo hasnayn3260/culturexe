@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useAdminData } from '../hooks/useAdminData'
 import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
+import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
@@ -759,16 +760,22 @@ export default function ConsultantPortal() {
   const navigate = useNavigate()
   const { profile, role } = useAuth()
   const { users, createUser, deactivateUser, organisations, loading: usersLoading } = useAdminData()
+  // Until the client selector is added, use the signed-in user's organisation
+  // when available and otherwise fall back to the first organisation they can
+  // access. The selected organisation will replace this fallback later.
+  const activeOrganisationId = profile?.org_id || organisations[0]?.id || null
   const {
     survey, questions, respondents: rawRespondents, responses: rawResponses, loading, refetch,
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
-  } = useSurvey()
+  } = useSurvey(activeOrganisationId)
 
-  // All participation metrics (signed up / started / submitted) and the Analytics
-  // tab count every respondent and every row in survey_responses — no filtering.
+  // Every response must belong to a respondent in the organisation-scoped survey.
+  // Keeping that comparison here prevents a mismatched response row from
+  // affecting Dashboard, Analytics, exports, or reminders.
   const respondents  = rawRespondents
-  const responses    = rawResponses
+  const respondentIds = new Set(respondents.map(respondent => respondent.id))
+  const responses    = rawResponses.filter(response => respondentIds.has(response.respondent_id))
 
   const [screen, setScreen] = useState('dashboard')
 
@@ -815,11 +822,15 @@ export default function ConsultantPortal() {
     }
   }, [survey])
 
-  const isLive   = survey?.status === 'live'
-  const isClosed = survey?.status === 'closed'
-  const isDraft  = survey?.status === 'draft'
+  // The stored status can remain `live` after the scheduled closing time. Use
+  // the dates as the authority so the UI never presents an expired survey as
+  // live while the database cleanup catches up.
+  const surveyStatus = getEffectiveSurveyStatus(survey)
+  const isLive       = surveyStatus === 'live'
+  const isClosed     = surveyStatus === 'closed'
+  const isDraft      = surveyStatus === 'draft'
+  const isScheduled  = surveyStatus === 'scheduled'
 
-  const EXPECTED_TOTAL = 140
   const totalInvited   = respondents.length
   // Single source of truth for "completed" = every submitted response (one row
   // per respondent in survey_responses). This includes responses submitted
@@ -832,8 +843,10 @@ export default function ConsultantPortal() {
   const respondedIds   = new Set(responses.map(r => r.respondent_id))
   const hasResponded   = (r) => respondedIds.has(r.id)
   const totalResponded = respondedIds.size
-  const totalPending   = EXPECTED_TOTAL - totalResponded
-  const completionPct  = Math.round((totalResponded / EXPECTED_TOTAL) * 100)
+  const totalPending   = respondents.filter(r => !hasResponded(r)).length
+  const completionPct  = totalInvited > 0
+    ? Math.round((totalResponded / totalInvited) * 100)
+    : 0
 
   // ── Registration & engagement funnel (client-requested metrics) ──────────
   // "Registered" = a plain count of the profiles table. Nothing else — no role
@@ -843,7 +856,6 @@ export default function ConsultantPortal() {
   const totalCompleted    = totalResponded
   // "Started, not completed" = opened the survey link but never submitted.
   const totalInProgress   = respondents.filter(r => !hasResponded(r) && r.started_at).length
-  const regCompletionPct  = totalRegistered > 0 ? Math.round((totalCompleted / totalRegistered) * 100) : 0
 
   // Detect which question represents "department" (first choice/dropdown/text Q whose text or dimension mentions "department")
   const deptQuestion = questions.find(q =>
@@ -1034,12 +1046,16 @@ export default function ConsultantPortal() {
   }
 
   async function handleLaunch() {
+    if (survey?.live_end && new Date(survey.live_end).getTime() <= Date.now()) {
+      alert('Choose a closing date in the future before launching the survey.')
+      return
+    }
     if (!window.confirm('Make this survey live? Respondents can now access it.')) return
     try { await updateSurvey({ status: 'live' }) } catch (e) { alert('Error: ' + e.message) }
   }
 
   async function handleStop() {
-    if (!window.confirm('Stop the survey? No further responses will be accepted.')) return
+    if (!window.confirm('Stop the survey now? This closes it immediately, replaces the scheduled closing time with the current time, and prevents further responses.')) return
     try { await updateSurvey({ status: 'closed', live_end: new Date().toISOString() }) } catch (e) { alert('Error: ' + e.message) }
   }
 
@@ -1177,7 +1193,7 @@ export default function ConsultantPortal() {
             )}
             {survey && (
               <span className={`badge ${isLive ? 'badge-teal' : isClosed ? 'badge-slate' : 'badge-gold'}`}>
-                {isLive ? '● Live' : isClosed ? '✓ Closed' : '◷ Draft'}
+                {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
               </span>
             )}
           </div>
@@ -1193,7 +1209,7 @@ export default function ConsultantPortal() {
               </div>
               <div className="page-hero">
                 <div className="hero-title">Welcome back, {displayName}</div>
-                <div className="hero-sub">{survey ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : 'Draft — not yet live'}` : 'No survey found.'}</div>
+                <div className="hero-sub">{survey ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : isScheduled ? 'Survey scheduled' : 'Draft — not yet live'}` : 'No survey found.'}</div>
                 <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
               </div>
 
@@ -1313,7 +1329,7 @@ export default function ConsultantPortal() {
                       { label: 'Build Survey', desc: 'Add or edit questions', action: () => setScreen('survey'), disabled: false },
                       { label: 'Add Respondents', desc: 'Invite employees to participate', action: () => setScreen('survey'), disabled: false },
                       { label: 'Send Reminders', desc: 'Nudge non-respondents', action: handleSendReminders, disabled: !isLive || totalPending === 0 },
-                      { label: isLive ? 'Stop Survey' : isDraft ? 'Launch Survey' : 'Reopen Survey', desc: isLive ? 'Manually close' : isDraft ? 'Make live' : 'Reopen as draft', action: isLive ? handleStop : isDraft ? handleLaunch : handleReopen, disabled: !survey },
+                      { label: isLive ? 'Stop Survey' : isDraft ? 'Launch Survey' : isScheduled ? 'Return to Draft' : 'Reopen Survey', desc: isLive ? 'Manually close' : isDraft ? 'Make live' : isScheduled ? 'Edit before launch' : 'Reopen as draft', action: isLive ? handleStop : isDraft ? handleLaunch : handleReopen, disabled: !survey },
                       { label: 'View Analytics', desc: 'Per-question analysis', action: () => setScreen('analytics'), disabled: responses.length === 0 },
                     ].map(item => (
                       <button key={item.label} onClick={item.action} disabled={item.disabled} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, cursor: item.disabled ? 'not-allowed' : 'pointer', opacity: item.disabled ? 0.4 : 1, fontFamily: 'inherit', textAlign: 'left', transition: 'border-color 0.15s' }}
@@ -1407,7 +1423,7 @@ export default function ConsultantPortal() {
                     <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Current Status</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <span className={`badge ${isLive ? 'badge-teal' : isClosed ? 'badge-slate' : 'badge-gold'}`} style={{ fontSize: 13 }}>
-                        {isLive ? '● Live' : isClosed ? '✓ Closed' : '◷ Draft'}
+                        {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
                       </span>
                       {survey?.live_start && <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>Opens: {new Date(survey.live_start).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                       {survey?.live_end   && <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>· Closes: {new Date(survey.live_end).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
@@ -1415,6 +1431,7 @@ export default function ConsultantPortal() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {isDraft  && <button className="btn btn-teal"    style={{ width: '100%', justifyContent: 'center' }} onClick={handleLaunch}>Launch Survey → Make Live</button>}
+                    {isScheduled && <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={handleReopen}>Return to Draft</button>}
                     {isLive   && <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={handleSendReminders} disabled={reminderSending || totalPending === 0}>{reminderSending ? 'Sending…' : `Send Reminders (${totalPending} pending)`}</button>}
                     {isLive   && <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center', color: 'var(--coral)', borderColor: 'rgba(232,86,58,0.4)' }} onClick={handleStop}>Stop Survey Manually</button>}
                     {isClosed && <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={handleReopen}>Reopen as Draft</button>}
@@ -1616,9 +1633,9 @@ export default function ConsultantPortal() {
                               </td>
                               <td style={{ fontSize: 13 }}>{r.department || '—'}</td>
                               <td style={{ fontSize: 13 }}>{r.job_title  || '—'}</td>
-                              <td>{r.used ? <span className="tag tag-active">✓ Done</span> : <span className="tag tag-pending">Pending</span>}</td>
-                              <td>{!r.used && <a href={surveyUrl(r.token)} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)', fontSize: 12, textDecoration: 'none' }}>Open Link ↗</a>}</td>
-                              <td><button onClick={() => { if (window.confirm(r.used ? `Delete ${r.email} AND their submitted response? This permanently removes the test entry.` : `Remove ${r.email}?`)) removeRespondent(r.id) }} style={{ background: 'none', border: 'none', color: 'var(--coral)', cursor: 'pointer', fontSize: 12 }}>{r.used ? 'Delete' : 'Remove'}</button></td>
+                              <td>{hasResponded(r) ? <span className="tag tag-active">✓ Done</span> : <span className="tag tag-pending">Pending</span>}</td>
+                              <td>{!hasResponded(r) && <a href={surveyUrl(r.token)} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)', fontSize: 12, textDecoration: 'none' }}>Open Link ↗</a>}</td>
+                              <td><button onClick={() => { if (window.confirm(hasResponded(r) ? `Delete ${r.email} AND their submitted response? This permanently removes the test entry.` : `Remove ${r.email}?`)) removeRespondent(r.id) }} style={{ background: 'none', border: 'none', color: 'var(--coral)', cursor: 'pointer', fontSize: 12 }}>{hasResponded(r) ? 'Delete' : 'Remove'}</button></td>
                             </tr>
                           ))}
                         </tbody>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
+import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
 
 const SCALE = [1, 2, 3, 4, 5]
 const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
@@ -414,7 +415,7 @@ export default function Assessment() {
         if (resp.used) { setPhase('used'); return }
 
         const sv = resp.survey
-        if (sv?.status !== 'live') { setPhase('not_live'); return }
+        if (!isSurveyAcceptingResponses(sv)) { setPhase('not_live'); return }
 
         setRespondent(resp)
         setSurvey(sv)
@@ -516,6 +517,9 @@ export default function Assessment() {
     setSubmitError('')
     setPhase('submitting')
     try {
+      if (!isSurveyAcceptingResponses(survey)) {
+        throw new Error('This survey is closed and is no longer accepting responses.')
+      }
       const now = new Date().toISOString()
       const timing = calcTiming(now, survey?.live_start, survey?.live_end)
 

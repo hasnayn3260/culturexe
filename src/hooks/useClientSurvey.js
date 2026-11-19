@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
 
 function calcTiming(submittedAt, liveStart, liveEnd) {
   const sub = new Date(submittedAt).getTime()
@@ -11,7 +12,7 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
   return 'on_time'
 }
 
-export function useClientSurvey(userEmail, userId) {
+export function useClientSurvey(userEmail, userId, orgId) {
   const [survey,           setSurvey]           = useState(null)
   const [questions,        setQuestions]        = useState([])
   const [respondent,       setRespondent]       = useState(null)
@@ -20,12 +21,26 @@ export function useClientSurvey(userEmail, userId) {
   const [error,            setError]            = useState(null)
 
   const load = useCallback(async () => {
-    if (!userEmail) return
+    if (!userEmail || !orgId) {
+      setSurvey(null)
+      setQuestions([])
+      setRespondent(null)
+      setExistingResponse(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const { data: sv, error: svErr } = await supabase
-        .from('survey').select('*').limit(1).maybeSingle()
+        .from('survey')
+        .select('*')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
       if (svErr) throw svErr
       setSurvey(sv)
       if (!sv) { setLoading(false); return }
@@ -64,7 +79,7 @@ export function useClientSurvey(userEmail, userId) {
     } finally {
       setLoading(false)
     }
-  }, [userEmail, userId])
+  }, [userEmail, userId, orgId])
 
   useEffect(() => { load() }, [load])
 
@@ -80,6 +95,9 @@ export function useClientSurvey(userEmail, userId) {
 
   async function submitResponse(answers) {
     if (!respondent || !survey) throw new Error('Unable to save your response — please refresh the page and try again.')
+    if (!isSurveyAcceptingResponses(survey)) {
+      throw new Error('This survey is closed and is no longer accepting responses.')
+    }
     const now = new Date().toISOString()
     const timing = calcTiming(now, survey.live_start, survey.live_end)
 

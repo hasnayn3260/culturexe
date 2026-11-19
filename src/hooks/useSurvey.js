@@ -1,22 +1,34 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import supabase from '../lib/supabaseClient'
 
-export function useSurvey() {
+export function useSurvey(orgId) {
   const [survey, setSurvey]           = useState(null)
   const [questions, setQuestions]     = useState([])
   const [respondents, setRespondents] = useState([])
   const [responses, setResponses]     = useState([])
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
+  const refreshTimerRef               = useRef(null)
 
-  const refetch = useCallback(async () => {
-    setLoading(true)
+  const refetch = useCallback(async ({ silent = false } = {}) => {
+    if (!orgId) {
+      setSurvey(null)
+      setQuestions([])
+      setRespondents([])
+      setResponses([])
+      setError(null)
+      setLoading(false)
+      return
+    }
+
+    if (!silent) setLoading(true)
     setError(null)
     try {
       const { data: sv, error: svErr } = await supabase
         .from('survey')
         .select('*')
-        .order('created_at', { ascending: true })
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (svErr) throw svErr
@@ -41,9 +53,51 @@ export function useSurvey() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [orgId])
 
   useEffect(() => { refetch() }, [refetch])
+
+  useEffect(() => {
+    if (!survey?.id) return undefined
+
+    const surveyId = survey.id
+    const queueRefresh = () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = setTimeout(() => {
+        void refetch({ silent: true })
+      }, 150)
+    }
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') queueRefresh()
+    }
+
+    const channel = supabase
+      .channel(`survey-participation-${surveyId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'survey_responses', filter: `survey_id=eq.${surveyId}` },
+        queueRefresh,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'survey_respondents', filter: `survey_id=eq.${surveyId}` },
+        queueRefresh,
+      )
+      .subscribe()
+
+    window.addEventListener('focus', queueRefresh)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+      window.removeEventListener('focus', queueRefresh)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      void supabase.removeChannel(channel)
+    }
+  }, [survey?.id, refetch])
 
   async function updateSurvey(updates) {
     const { error: err } = await supabase
@@ -130,7 +184,8 @@ export function useSurvey() {
   }
 
   async function sendReminders() {
-    const pending = respondents.filter(r => !r.used)
+    const completedRespondentIds = new Set(responses.map(response => response.respondent_id))
+    const pending = respondents.filter(r => !completedRespondentIds.has(r.id))
     if (!pending.length) return 0
     const { error: err } = await supabase
       .from('survey_respondents')

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
+import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
 
 // Fallback choice lists — used only if the live "About You" questions can't
 // be read (e.g. survey builder hasn't set them up yet). Mirrors the current
@@ -85,12 +86,12 @@ export default function OpenAssessmentEntry() {
       if (!openToken) { setPhase('invalid'); return }
       const { data, error: err } = await supabase
         .from('survey')
-        .select('id, title, description, status, open_link_enabled')
+        .select('id, title, description, status, open_link_enabled, live_start, live_end')
         .eq('open_link_token', openToken)
         .eq('open_link_enabled', true)
         .maybeSingle()
 
-      if (err || !data || data.status !== 'live') { setPhase('invalid'); return }
+      if (err || !data || !isSurveyAcceptingResponses(data)) { setPhase('invalid'); return }
       setSurvey(data)
 
       // Pull the exact same choice lists as the live "About You" questions,
