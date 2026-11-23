@@ -205,6 +205,8 @@ Configuration
 └── Users
 ```
 
+The entire Configuration navigation group is visible to super administrators only. Consultants, organisation owners and employees must not see or access the Organisations or Clients/User Management configuration routes.
+
 ### Global organisation selector
 
 The header should contain the active organisation selector. Once selected, the dashboard, surveys, analytics, users and configuration views must all use the same organisation context.
@@ -321,6 +323,24 @@ Super administrators and authorised consultants may correct these fields. Organi
 
 Do not expose Supabase service-role credentials in the frontend. Bulk authentication-user creation must run on the backend.
 
+### User management data sources
+
+The super-admin Clients/User Management page combines two data sources:
+
+- Supabase Auth users for UID, authentication email and phone, providers, provider type, account creation time and last sign-in time.
+- `public.profiles` for organisation, full name, platform role, active status, department, job title, manager, hire date, username, position, branch and location/site.
+
+Supabase Auth users are not a normal browser-readable public table. A trusted backend function must read and mutate Auth account details with the Supabase Admin API, then return only the fields the super-admin page needs. The frontend must never receive the Supabase secret/service-role key.
+
+Use `profiles.full_name` as the authoritative display name and `profiles.email` as the application copy of the Auth email. Any email update must update Auth and the profile together.
+
+Current role inventory confirmed on 20 November 2026:
+
+- `client`: 146 profiles.
+- `superadmin`: 4 profiles.
+
+The first CRUD implementation must preserve these current values. A later versioned migration will map them to the final role vocabulary, such as `employee` and `super_admin`, when the related routing, RLS and permission code are ready.
+
 ### Respondent account invitation
 
 Requirement: when a consultant uploads respondent details and assigns the respondent to a survey, the respondent must receive access to the pre-populated profile and the assigned survey.
@@ -331,16 +351,17 @@ Recommended flow:
 2. A trusted backend function creates or identifies the Supabase Auth user.
 3. The backend links `profiles.id` to the Auth user ID and preserves the imported organisation, manager, department, location and job details.
 4. The backend creates the `survey_respondents` assignment for the selected survey.
-5. For a new account, Supabase generates a one-time invitation link.
-6. CultureXe sends an account invitation through the authentication email flow, directing the respondent to choose their own password.
-7. After account setup, the redirect returns the respondent to the assigned survey.
-8. For an existing account, CultureXe sends a normal survey invitation linking to the assigned survey.
+5. For a new account, the trusted backend generates a strong temporary password and creates a confirmed Supabase Auth user.
+6. CultureXe sends the username and temporary password through the Postmark `tempaccess` template with link tracking disabled.
+7. The account is marked `must_change_password = true` and cannot enter a protected portal until the password is replaced.
+8. After password setup, CultureXe clears the temporary-access flag and sends the respondent to the correct portal.
+9. For an existing account, CultureXe sends a normal survey invitation linking to the assigned survey.
 
-Do not email reusable temporary passwords. A one-time, expiring invitation link provides the same first-access experience without exposing credentials in an inbox or requiring custom forced-password-change logic.
+Temporary passwords are generated only in memory, are never stored or logged, and must be replaced on first login. Account creation is rolled back if the Postmark template cannot be sent.
 
 Proposed email types:
 
-- `account-invitation`: new respondent account claim and password setup.
+- `tempaccess`: new managed account credentials and required password replacement.
 - `survey-invitation`: existing user assigned to a survey.
 - `survey-reminder`: assigned respondent has not submitted.
 - `survey-completed`: confirmation after successful submission.
@@ -353,6 +374,7 @@ Authentication invitation and recovery links must have link tracking disabled so
 
 Initial templates:
 
+- `tempaccess`
 - `survey-invitation`
 - `survey-reminder`
 - `survey-completed`
@@ -412,7 +434,7 @@ Schema migrations and database backups solve different problems and both are req
 - Commit migration files to Git.
 - Migrations contain schema changes, constraints, functions, triggers and RLS policies; they are not copies of production data.
 - Capture the current remote database as the initial baseline before making more remote SQL Editor changes.
-- After the baseline is established, make new schema changes through local migration files and deploy them with the Supabase CLI.
+- Preferred project workflow after the baseline: apply an approved change through the Supabase SQL Editor, immediately run `supabase db pull --remote`, register the generated migration as applied, review it and commit it to Git. Never leave a remote SQL Editor change uncaptured.
 
 Current repository state on 20 November 2026:
 
@@ -457,7 +479,7 @@ The Postmark templates have been created and are ready for the later email integ
 
 - [x] Confirm Supabase managed backup availability and retention.
 - [ ] Take a private logical backup of roles, schema and data.
-- [ ] Capture the current remote schema as the initial migration baseline.
+- [x] Capture the current remote schema as the initial migration baseline.
 - [ ] Create `organisation_memberships`.
 - [ ] Define and migrate role values.
 - [ ] Decide which existing users are super administrators, consultants, organisation owners and employees.
@@ -494,10 +516,12 @@ The Postmark templates have been created and are ready for the later email integ
 
 ### Phase 5 Imports and communication
 
-- [ ] Add downloadable user-import template.
-- [ ] Add validation and preview.
-- [ ] Add backend bulk user import.
-- [ ] Add manager relationship resolution.
+- [x] Add downloadable user-import template.
+- [x] Add validation and preview.
+- [x] Add backend bulk user import.
+- [x] Add manager relationship resolution.
+- [x] Add temporary-password account creation and the Postmark `tempaccess` sender.
+- [x] Force temporary-password replacement before protected portal access.
 - [ ] Add bulk participant assignment.
 - [ ] Add Postmark survey invitation template and sender.
 - [ ] Implement CXW-7 survey reminders.
@@ -521,8 +545,7 @@ These are implementation notes and do not change Jira statuses automatically.
 
 - Whether consultants may access every organisation or only assigned organisations. The architecture assumes assigned access.
 - Whether organisation owners can see small-group analytics that might identify individuals. A minimum reporting-group size should be defined.
-- Whether employees use password accounts, magic links or invitation-based account setup.
-- Respondent onboarding recommendation is an expiring account invitation that leads to password setup. Confirm this before implementation; emailing temporary passwords is not recommended.
+- Employees use password accounts. New managed users receive a generated temporary password through Postmark and must replace it immediately after first login.
 - Whether several surveys may be live simultaneously for one organisation. The architecture supports this and employee access must be assignment-based.
 - Whether deleting organisations is ever allowed. Deactivation is recommended.
 - Required retention rules for respondent identities, responses and email delivery records.
@@ -531,11 +554,18 @@ These are implementation notes and do not change Jira statuses automatically.
 
 ### 20 November 2026
 
+- Implemented temporary-password account creation, Postmark `tempaccess` delivery and forced first-login password replacement.
+- Added organisation logo/banner storage paths and onboarding delivery metadata to the migration history.
 - Recorded that the four Postmark templates have been created.
 - Prioritised standalone organisation CRUD, user CRUD and survey modules before backend email integration.
 - Split delivery into a standalone module stage followed by multi-organisation and multi-survey orchestration.
 - Recorded the organisation profile fields and the missing registration number.
 - Recorded the missing migration baseline and backup prerequisites.
+- Captured and registered `20261120065558_remote_schema.sql` as the production migration baseline.
+- Recorded the dashboard-first migration workflow: SQL Editor change, immediate remote pull, migration-history update and Git commit.
+- Restricted the Configuration navigation group to super administrators.
+- Recorded the Auth plus profile user-management data model and the current `client` and `superadmin` role inventory.
+- Added the root Vercel `api/users` server endpoint for secured super-admin user CRUD; the browser now calls it through `src/features/users/services/usersClient.ts` and no longer targets a Supabase Edge Function for this workflow.
 
 ### 19 November 2026
 

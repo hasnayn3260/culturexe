@@ -6,6 +6,7 @@ import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
+import UsersPage from '../features/users/pages/UsersPage'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
 
@@ -1178,7 +1179,7 @@ export default function ConsultantPortal() {
         <div className="consultant-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
-            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Survey', analytics: 'Analytics', settings: 'Settings' }[screen]}</div>
+            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Survey', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', settings: 'Settings' }[screen]}</div>
           </div>
           <div className="topbar-right">
             {role && role !== 'client' && role !== 'consultant' && (
@@ -1199,7 +1200,7 @@ export default function ConsultantPortal() {
           </div>
         </div>
 
-        <div className="consultant-content">
+        <div className={`consultant-content ${screen === 'clients' ? '!p-0' : ''}`}>
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
@@ -1763,6 +1764,9 @@ export default function ConsultantPortal() {
               )}
             </div>
           )}
+
+          {/* ════════ CLIENTS / USER MANAGEMENT ════════ */}
+          {screen === 'clients' && <UsersPage />}
 
           {/* ════════ SETTINGS ════════ */}
           {screen === 'settings' && (

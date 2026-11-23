@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   BarChart3,
   Blocks,
+  Building2,
   ChevronUp,
   ChevronsUpDown,
   ClipboardList,
@@ -9,7 +10,9 @@ import {
   LayoutDashboard,
   LogOut,
   Settings,
+  SlidersHorizontal,
   UserRound,
+  UsersRound,
 } from 'lucide-react'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -43,7 +46,13 @@ import ProfileDialog from '@/features/profile/components/ProfileDialog'
 import SecurityTab from '@/features/profile/components/SecurityTab'
 import { useAuth } from '@/hooks/useAuth'
 
-export type ConsultantScreen = 'dashboard' | 'survey' | 'analytics' | 'settings'
+export type ConsultantScreen =
+  | 'dashboard'
+  | 'survey'
+  | 'analytics'
+  | 'organisations'
+  | 'clients'
+  | 'settings'
 
 type ConsultantSidebarProps = {
   screen: ConsultantScreen
@@ -76,10 +85,20 @@ const NAVIGATION_GROUPS = [
       { key: 'analytics', label: 'Analytics', icon: BarChart3 },
     ],
   },
+  {
+    key: 'configuration',
+    label: 'Configuration',
+    icon: SlidersHorizontal,
+    items: [
+      { key: 'organisations', label: 'Organisations', icon: Building2 },
+      { key: 'clients', label: 'Clients', icon: UsersRound },
+    ],
+  },
 ] as const
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Super Admin',
+  super_admin: 'Super Admin',
   consultant: 'Consultant',
   client: 'Client',
   employee: 'Employee',
@@ -109,11 +128,13 @@ export default function ConsultantSidebar({
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'consultant-dashboard': true,
     'survey-management': true,
+    configuration: true,
   })
 
   const fullName = auth.profile?.full_name || 'CultureXe User'
   const email = auth.profile?.email || ''
   const roleLabel = auth.role ? ROLE_LABELS[auth.role] || auth.role : ''
+  const isSuperAdmin = auth.role === 'superadmin' || auth.role === 'super_admin'
   const isCollapsed = state === 'collapsed' && !isMobile
 
   return (
@@ -142,7 +163,9 @@ export default function ConsultantSidebar({
         </SidebarHeader>
 
         <SidebarContent className={isCollapsed ? 'gap-1 py-3' : 'gap-1 py-4'}>
-          {NAVIGATION_GROUPS.map((group) => {
+          {NAVIGATION_GROUPS.filter(
+            (group) => group.key !== 'configuration' || isSuperAdmin,
+          ).map((group) => {
             const groupOpen = openGroups[group.key] !== false
             const GroupIcon = group.icon
 

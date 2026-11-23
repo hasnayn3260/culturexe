@@ -125,8 +125,23 @@ export function AuthProvider({ children }) {
     // own profile. These are owned by superadmins (via the create-user Edge
     // Function / admin tools) and enforced again by RLS + a DB trigger.
     // Stripping them here is defence-in-depth so the UI never even attempts it.
-    const { role, org_id, active, id, email, ...safeUpdates } = updates || {}
+    const {
+      role,
+      org_id,
+      active,
+      id,
+      email,
+      must_change_password,
+      temporary_password_issued_at,
+      onboarding_completed_at,
+      onboarding_email_message_id,
+      onboarding_email_sent_at,
+      ...safeUpdates
+    } = updates || {}
     void role; void org_id; void active; void id; void email
+    void must_change_password; void temporary_password_issued_at
+    void onboarding_completed_at; void onboarding_email_message_id
+    void onboarding_email_sent_at
     const { data, error } = await supabase
       .from('profiles').update(safeUpdates).eq('id', user.id).select().single()
     if (error) throw error
@@ -145,6 +160,46 @@ export function AuthProvider({ children }) {
     validatePassword(newPassword)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) throw error
+
+    if (user && profile?.must_change_password) {
+      const { data, error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          must_change_password: false,
+          temporary_password_issued_at: null,
+          onboarding_completed_at: new Date().toISOString(),
+        })
+        .eq('id', user.id)
+        .select()
+        .single()
+      if (profileError) throw profileError
+      setProfile(data)
+    }
+  }
+
+  async function completeTemporaryPasswordChange(newPassword) {
+    if (!user) throw new Error('Not authenticated')
+    validatePassword(newPassword)
+
+    const { error: passwordError } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    if (passwordError) throw passwordError
+
+    const { data, error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        must_change_password: false,
+        temporary_password_issued_at: null,
+        onboarding_completed_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+      .select()
+      .single()
+
+    if (profileError) throw profileError
+    setProfile(data)
+    return data
   }
 
   async function signOut() {
@@ -153,7 +208,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, role, loading, signIn, signInWithMagicLink, signUp, updateProfile, resetPasswordForEmail, updatePassword, signOut }}>
+    <AuthContext.Provider value={{ user, profile, role, loading, signIn, signInWithMagicLink, signUp, updateProfile, resetPasswordForEmail, updatePassword, completeTemporaryPasswordChange, signOut }}>
       {children}
     </AuthContext.Provider>
   )

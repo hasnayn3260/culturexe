@@ -34,7 +34,7 @@ function FluidSVG({ size = 100, id = 'fl' }) {
 
 export default function Login() {
   const navigate = useNavigate()
-  const { user, role, loading: authLoading, signIn, signUp, signOut } = useAuth()
+  const { user, profile, role, loading: authLoading, signIn, signUp } = useAuth()
 
   const [tab,            setTab]            = useState('password')
   const [email,          setEmail]          = useState('')
@@ -58,9 +58,13 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && user && role) {
+      if (profile?.must_change_password) {
+        navigate('/change-temporary-password', { replace: true })
+        return
+      }
       navigate(ROLE_REDIRECTS[role] || '/app', { replace: true })
     }
-  }, [authLoading, user, role, navigate])
+  }, [authLoading, user, profile, role, navigate])
 
   const noProfile = !authLoading && user && !role
   if (noProfile) console.warn('[Login] Signed in but no profile/role found for', user?.email)

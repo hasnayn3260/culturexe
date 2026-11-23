@@ -32,10 +32,13 @@ function LoadingScreen() {
 // requiredRole accepts a string or an array of strings.
 // superadmin implicitly satisfies any 'consultant' requirement.
 export default function ProtectedRoute({ children, requiredRole }) {
-  const { user, role, loading } = useAuth()
+  const { user, profile, role, loading } = useAuth()
 
   if (loading) return <LoadingScreen />
   if (!user)   return <Navigate to="/login" replace />
+  if (profile?.must_change_password) {
+    return <Navigate to="/change-temporary-password" replace />
+  }
 
   if (requiredRole) {
     const allowed = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
