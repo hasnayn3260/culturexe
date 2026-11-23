@@ -1,8 +1,8 @@
 import { createClient, type User } from '@supabase/supabase-js'
 
-import { sendTemporaryAccessEmail } from '../email/postmark'
-import { generateTemporaryPassword } from './temporaryPassword'
-import { availableUsername } from './username'
+import { sendTemporaryAccessEmail } from '../email/postmark.js'
+import { generateTemporaryPassword } from './temporaryPassword.js'
+import { availableUsername } from './username.js'
 
 type PlatformRole = 'client' | 'superadmin'
 
