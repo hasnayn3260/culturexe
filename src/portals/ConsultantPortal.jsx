@@ -6,6 +6,7 @@ import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
+import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import UsersPage from '../features/users/pages/UsersPage'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
@@ -1226,7 +1227,7 @@ export default function ConsultantPortal() {
           </div>
         </div>
 
-        <div className={`consultant-content ${screen === 'clients' ? '!p-0' : ''}`}>
+        <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' ? '!p-0' : ''}`}>
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
@@ -1789,6 +1790,9 @@ export default function ConsultantPortal() {
               )}
             </div>
           )}
+
+          {/* ════════ ORGANISATION MANAGEMENT ════════ */}
+          {screen === 'organisations' && <OrganisationsPage />}
 
           {/* ════════ CLIENTS / USER MANAGEMENT ════════ */}
           {screen === 'clients' && <UsersPage />}

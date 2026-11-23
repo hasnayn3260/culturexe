@@ -10,6 +10,7 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 function localApiPlugin() {
   const routes = new Map([
+    ['/api/organisations', '/api/organisations/index.ts'],
     ['/api/users', '/api/users/index.ts'],
     ['/api/users/import', '/api/users/import.ts'],
     ['/api/surveys/invitations', '/api/surveys/invitations.ts'],
