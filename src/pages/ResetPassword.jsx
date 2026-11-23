@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import supabase from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import PasswordRequirements from '../components/PasswordRequirements'
@@ -13,6 +14,8 @@ export default function ResetPassword() {
   const [invalid,     setInvalid]     = useState(false)  // link expired/bad
   const [password,    setPassword]    = useState('')
   const [confirmPw,   setConfirmPw]   = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [passwordFocused, setPasswordFocused] = useState(false)
   const [submitting,  setSubmitting]  = useState(false)
   const [done,        setDone]        = useState(false)
@@ -103,13 +106,31 @@ export default function ResetPassword() {
               <div className="form-group">
                 <label className="form-label">New password</label>
                 <div style={{ position: 'relative' }}>
-                  <input className="form-input" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required autoFocus />
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPasswordFocused(true)} onBlur={() => setPasswordFocused(false)} required autoFocus />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(current => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    style={{ position: 'absolute', top: 7, right: 8, width: 32, height: 32, border: 0, borderRadius: 8, background: 'transparent', color: '#8A9BB0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  >
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
                   <PasswordRequirements password={password} visible={passwordFocused} />
                 </div>
               </div>
               <div className="form-group">
                 <label className="form-label">Confirm new password</label>
-                <input className="form-input" type="password" placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+                <div style={{ position: 'relative' }}>
+                  <input className="form-input" style={{ paddingRight: 44 }} type={showConfirmPw ? 'text' : 'password'} placeholder="Repeat your password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} required />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPw(current => !current)}
+                    aria-label={showConfirmPw ? 'Hide confirmed password' : 'Show confirmed password'}
+                    style={{ position: 'absolute', top: 7, right: 8, width: 32, height: 32, border: 0, borderRadius: 8, background: 'transparent', color: '#8A9BB0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                  >
+                    {showConfirmPw ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
               </div>
               <button
                 type="submit"
