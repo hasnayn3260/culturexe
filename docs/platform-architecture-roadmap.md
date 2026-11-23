@@ -1,6 +1,6 @@
 # CultureXe Platform Architecture and Roadmap
 
-Last updated: 20 November 2026
+Last updated: 23 November 2026
 
 ## Purpose
 
@@ -375,7 +375,7 @@ Authentication invitation and recovery links must have link tracking disabled so
 Initial templates:
 
 - `tempaccess`
-- `survey-invitation`
+- `survey`
 - `survey-reminder`
 - `survey-completed`
 
@@ -523,10 +523,10 @@ The Postmark templates have been created and are ready for the later email integ
 - [x] Add temporary-password account creation and the Postmark `tempaccess` sender.
 - [x] Force temporary-password replacement before protected portal access.
 - [ ] Add bulk participant assignment.
-- [ ] Add Postmark survey invitation template and sender.
-- [ ] Implement CXW-7 survey reminders.
-- [ ] Implement CXW-8 completion receipts.
-- [ ] Record email delivery results and Postmark message IDs.
+- [x] Add Postmark survey invitation template and sender.
+- [x] Implement CXW-7 survey reminders.
+- [x] Implement CXW-8 completion receipts.
+- [ ] Add first-party email analytics later; Postmark remains the current analytics source.
 
 ## Jira work tracking notes
 
@@ -535,8 +535,8 @@ These are implementation notes and do not change Jira statuses automatically.
 | Issue | Working state | Notes |
 | --- | --- | --- |
 | CXW-6 | In progress | Organisation IDs and initial scoping exist; organisation selector, memberships, survey list and RLS remain. |
-| CXW-7 | Planned | Current reminder action updates `reminded_at`; it does not yet send an email. |
-| CXW-8 | Planned | Reuse the backend Postmark email service after reminders. |
+| CXW-7 | Implemented, acceptance deferred | Sends Postmark reminders only to incomplete invited respondents, records successful sends in `reminded_at`, and blocks non-live or closed surveys. End-to-end acceptance waits for organisation and multi-survey selection. |
+| CXW-8 | Implemented, acceptance deferred | A secret-protected database webhook sends an idempotent Postmark receipt after a new response is committed. End-to-end acceptance waits for organisation and multi-survey selection. |
 | CXW-9 | Implemented, needs acceptance | Response counts use actual survey respondents and response rows. |
 | CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
 | CXW-15 | Implemented, needs acceptance | Expired live surveys are treated as closed and manual-stop behaviour is clearer. |
@@ -551,6 +551,16 @@ These are implementation notes and do not change Jira statuses automatically.
 - Required retention rules for respondent identities, responses and email delivery records.
 
 ## Change log
+
+### 23 November 2026
+
+- Added the authenticated survey-invitation API using the Postmark `survey` template.
+- Added unique respondent survey links, organisation branding, Johannesburg opening and closing dates, closed-survey protection and per-recipient send results.
+- Updated the consultant invitation action to report the actual number accepted by Postmark and retain failed rows for correction.
+- Added CXW-7 reminder delivery through the Postmark `reminder` template with incomplete-respondent filtering and actual send totals.
+- Added CXW-8 Postmark survey receipts through a secret-protected database webhook with duplicate-send protection.
+- Deferred end-to-end invitation, reminder and receipt testing until organisation management and explicit multi-survey selection are in place.
+- Deferred first-party email event analytics until the client-required workflows are complete; Postmark remains the current analytics source.
 
 ### 20 November 2026
 

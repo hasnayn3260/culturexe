@@ -1114,9 +1114,26 @@ export default function ConsultantPortal() {
     if (!valid.length) return
     setInviting(true); setInviteMsg(null)
     try {
-      await addRespondents(valid)
-      setInviteMsg({ type: 'ok', text: `${valid.length} respondent${valid.length !== 1 ? 's' : ''} added.` })
-      setInviteRows([{ email: '', name: '', department: '', job_title: '' }])
+      const result = await addRespondents(valid)
+      const details = [
+        `${result.sent} invitation${result.sent !== 1 ? 's' : ''} sent`,
+        result.failed ? `${result.failed} failed` : null,
+        result.skipped ? `${result.skipped} skipped` : null,
+      ].filter(Boolean).join(', ')
+      setInviteMsg({
+        type: result.sent > 0 ? 'ok' : 'err',
+        text: `${details}.`,
+      })
+
+      const failedEmails = new Set(
+        (result.results || [])
+          .filter(item => item.status === 'failed')
+          .map(item => item.email),
+      )
+      const failedRows = valid.filter(row => failedEmails.has(row.email.trim().toLowerCase()))
+      setInviteRows(failedRows.length > 0
+        ? failedRows
+        : [{ email: '', name: '', department: '', job_title: '' }])
     } catch (e) { setInviteMsg({ type: 'err', text: e.message }) }
     finally { setInviting(false) }
   }
@@ -1124,8 +1141,17 @@ export default function ConsultantPortal() {
   async function handleSendReminders() {
     setReminderSending(true); setReminderMsg(null)
     try {
-      const count = await sendReminders()
-      setReminderMsg(count > 0 ? `Reminder timestamp updated for ${count} pending respondent${count !== 1 ? 's' : ''}.` : 'No pending respondents to remind.')
+      const result = await sendReminders()
+      if (result.sent === 0 && result.failed === 0) {
+        setReminderMsg('No pending respondents to remind.')
+      } else {
+        const details = [
+          `${result.sent} reminder${result.sent !== 1 ? 's' : ''} sent`,
+          result.failed ? `${result.failed} failed` : null,
+          result.skipped ? `${result.skipped} already completed` : null,
+        ].filter(Boolean).join(', ')
+        setReminderMsg(`${details}.`)
+      }
     } catch (e) { setReminderMsg('Error: ' + e.message) }
     finally { setReminderSending(false) }
   }
@@ -1538,8 +1564,8 @@ export default function ConsultantPortal() {
               <div className="card">
                 <div className="flex-between mb-16">
                   <div>
-                    <div className="section-title">Add Respondents</div>
-                    <div className="section-sub">Select from registered users — then fill in their department and position.</div>
+                    <div className="section-title">Invite Respondents</div>
+                    <div className="section-sub">Select registered users and email each person their unique survey link.</div>
                   </div>
                   <button className="btn btn-outline btn-sm" onClick={() => setInviteRows(p => [...p, { email: '', name: '', department: '', job_title: '' }])}>+ Row</button>
                 </div>
@@ -1556,7 +1582,6 @@ export default function ConsultantPortal() {
                     <tbody>
                       {inviteRows.map((row, idx) => {
                         const takenEmails = new Set([
-                          ...rawRespondents.map(r => r.email),
                           ...inviteRows.filter((_, i) => i !== idx).map(r => r.email).filter(Boolean),
                         ])
                         return (
@@ -1616,7 +1641,7 @@ export default function ConsultantPortal() {
                 </div>
 
                 <button className="btn btn-teal" style={{ width: '100%', justifyContent: 'center' }} onClick={handleInvite} disabled={inviting || inviteRows.every(r => !r.email.trim())}>
-                  {inviting ? 'Adding…' : `Add ${inviteRows.filter(r => r.email.trim()).length || ''} Respondent${inviteRows.filter(r => r.email.trim()).length !== 1 ? 's' : ''} →`}
+                  {inviting ? 'Sending…' : `Send ${inviteRows.filter(r => r.email.trim()).length || ''} Invitation${inviteRows.filter(r => r.email.trim()).length !== 1 ? 's' : ''} →`}
                 </button>
 
                 {rawRespondents.length > 0 && (

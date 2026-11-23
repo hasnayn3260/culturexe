@@ -25,6 +25,39 @@ type TemporaryAccessTemplateModel = {
   support_email: string
 }
 
+export type SurveyInvitationTemplateModel = {
+  organisation_name: string
+  survey_title: string
+  organisation_logo_url: string
+  organisation_banner_url: string
+  recipient_name: string
+  opening_date: string
+  closing_date: string
+  survey_url: string
+  support_email: string
+}
+
+export type SurveyReminderTemplateModel = {
+  survey_title: string
+  closing_date: string
+  organisation_logo_url: string
+  organisation_name: string
+  organisation_banner_url: string
+  recipient_name: string
+  survey_url: string
+  support_email: string
+}
+
+export type SurveyReceiptTemplateModel = {
+  survey_title: string
+  organisation_logo_url: string
+  organisation_name: string
+  organisation_banner_url: string
+  recipient_name: string
+  submitted_at: string
+  support_email: string
+}
+
 type SendPostmarkTemplateEmailInput = {
   category: PostmarkEmailCategory
   to: string
@@ -38,6 +71,31 @@ type SendPostmarkTemplateEmailInput = {
 type SendTemporaryAccessEmailInput = {
   to: string
   model: TemporaryAccessTemplateModel
+}
+
+type SendSurveyInvitationEmailInput = {
+  to: string
+  model: SurveyInvitationTemplateModel
+  organisationId: string
+  surveyId: string
+  respondentId: string
+}
+
+type SendSurveyReminderEmailInput = {
+  to: string
+  model: SurveyReminderTemplateModel
+  organisationId: string
+  surveyId: string
+  respondentId: string
+}
+
+type SendSurveyReceiptEmailInput = {
+  to: string
+  model: SurveyReceiptTemplateModel
+  organisationId: string
+  surveyId: string
+  respondentId: string
+  responseId: string
 }
 
 type PostmarkTemplateResponse = {
@@ -153,6 +211,74 @@ export function sendTemporaryAccessEmail({
     tag: 'temporary-access',
     metadata: {
       email_type: 'temporary-access',
+    },
+  })
+}
+
+export function sendSurveyInvitationEmail({
+  to,
+  model,
+  organisationId,
+  surveyId,
+  respondentId,
+}: SendSurveyInvitationEmailInput): Promise<string> {
+  return sendPostmarkTemplateEmail({
+    category: 'surveys',
+    to,
+    templateAlias: env('POSTMARK_SURVEY_INVITATION_TEMPLATE_ALIAS') || 'survey',
+    model,
+    tag: 'survey-invitation',
+    metadata: {
+      email_type: 'survey-invitation',
+      organisation_id: organisationId,
+      survey_id: surveyId,
+      respondent_id: respondentId,
+    },
+  })
+}
+
+export function sendSurveyReminderEmail({
+  to,
+  model,
+  organisationId,
+  surveyId,
+  respondentId,
+}: SendSurveyReminderEmailInput): Promise<string> {
+  return sendPostmarkTemplateEmail({
+    category: 'reminders',
+    to,
+    templateAlias: env('POSTMARK_SURVEY_REMINDER_TEMPLATE_ALIAS') || 'reminder',
+    model,
+    tag: 'survey-reminder',
+    metadata: {
+      email_type: 'survey-reminder',
+      organisation_id: organisationId,
+      survey_id: surveyId,
+      respondent_id: respondentId,
+    },
+  })
+}
+
+export function sendSurveyReceiptEmail({
+  to,
+  model,
+  organisationId,
+  surveyId,
+  respondentId,
+  responseId,
+}: SendSurveyReceiptEmailInput): Promise<string> {
+  return sendPostmarkTemplateEmail({
+    category: 'notifications',
+    to,
+    templateAlias: env('POSTMARK_SURVEY_RECEIPT_TEMPLATE_ALIAS') || 'receipt',
+    model,
+    tag: 'survey-receipt',
+    metadata: {
+      email_type: 'survey-receipt',
+      organisation_id: organisationId,
+      survey_id: surveyId,
+      respondent_id: respondentId,
+      response_id: responseId,
     },
   })
 }

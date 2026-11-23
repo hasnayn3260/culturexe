@@ -159,12 +159,26 @@ export function useSurvey(orgId) {
   }
 
   async function addRespondents(rows) {
-    const toInsert = rows.map(r => ({ ...r, survey_id: survey.id }))
-    const { error: err } = await supabase
-      .from('survey_respondents')
-      .upsert(toInsert, { onConflict: 'survey_id,email' })
-    if (err) throw err
+    if (!survey?.id) throw new Error('Select a survey before inviting respondents.')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Your session has expired. Sign in again.')
+
+    const response = await fetch('/api/surveys/invitations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ surveyId: survey.id, rows }),
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error || 'Survey invitations could not be sent.')
+    }
+
     await refetch()
+    return body
   }
 
   async function removeRespondent(id) {
@@ -184,16 +198,26 @@ export function useSurvey(orgId) {
   }
 
   async function sendReminders() {
-    const completedRespondentIds = new Set(responses.map(response => response.respondent_id))
-    const pending = respondents.filter(r => !completedRespondentIds.has(r.id))
-    if (!pending.length) return 0
-    const { error: err } = await supabase
-      .from('survey_respondents')
-      .update({ reminded_at: new Date().toISOString() })
-      .in('id', pending.map(r => r.id))
-    if (err) throw err
+    if (!survey?.id) throw new Error('Select a survey before sending reminders.')
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error('Your session has expired. Sign in again.')
+
+    const response = await fetch('/api/surveys/reminders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ surveyId: survey.id }),
+    })
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(body?.error || 'Survey reminders could not be sent.')
+    }
+
     await refetch()
-    return pending.length
+    return body
   }
 
   return {

@@ -297,6 +297,9 @@ export type Database = {
         Row: {
           answers: Json
           id: string
+          receipt_email_attempted_at: string | null
+          receipt_email_message_id: string | null
+          receipt_email_sent_at: string | null
           respondent_id: string
           submitted_at: string | null
           survey_id: string
@@ -304,6 +307,9 @@ export type Database = {
         Insert: {
           answers?: Json
           id?: string
+          receipt_email_attempted_at?: string | null
+          receipt_email_message_id?: string | null
+          receipt_email_sent_at?: string | null
           respondent_id: string
           submitted_at?: string | null
           survey_id: string
@@ -311,6 +317,9 @@ export type Database = {
         Update: {
           answers?: Json
           id?: string
+          receipt_email_attempted_at?: string | null
+          receipt_email_message_id?: string | null
+          receipt_email_sent_at?: string | null
           respondent_id?: string
           submitted_at?: string | null
           survey_id?: string

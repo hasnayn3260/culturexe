@@ -12,6 +12,9 @@ function localApiPlugin() {
   const routes = new Map([
     ['/api/users', '/api/users/index.ts'],
     ['/api/users/import', '/api/users/import.ts'],
+    ['/api/surveys/invitations', '/api/surveys/invitations.ts'],
+    ['/api/surveys/reminders', '/api/surveys/reminders.ts'],
+    ['/api/surveys/receipt', '/api/surveys/receipt.ts'],
   ])
 
   return {
