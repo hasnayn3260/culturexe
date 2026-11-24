@@ -466,14 +466,18 @@ export default function ClientPortal() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {role && role !== 'client' && (
-            <select
-              value="client"
-              onChange={e => { if (e.target.value === 'consultant') navigate('/app') }}
-              style={{ padding: '6px 30px 6px 12px', borderRadius: 8, border: '1.5px solid #E0E8F0', background: 'white', color: '#1A2E44', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', outline: 'none', appearance: 'none', backgroundImage: "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238898AA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e\")", backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: 16 }}
-            >
-              <option value="client">Client View</option>
-              <option value="consultant">Consultant View</option>
-            </select>
+            <>
+              <span style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid rgba(27,191,176,0.25)', background: '#F0FAFA', color: '#0A8A7E', fontSize: 12.5, fontWeight: 700 }}>
+                Client Portal Preview
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate('/app')}
+                style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #E0E8F0', background: 'white', color: '#1A2E44', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Back to consultant portal
+              </button>
+            </>
           )}
           {isLive && timer && (
             <div style={{ padding: '5px 12px', borderRadius: 20, background: timer.urgent ? '#FFF0EE' : '#F0FAFA', border: `1px solid ${timer.urgent ? 'rgba(232,86,58,0.2)' : 'rgba(27,191,176,0.2)'}`, fontSize: 12.5, fontWeight: 600, color: timer.urgent ? '#C0392B' : '#0A8A7E', display: 'flex', alignItems: 'center', gap: 5 }}>

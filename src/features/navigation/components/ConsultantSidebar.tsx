@@ -10,6 +10,7 @@ import {
   Files,
   LayoutDashboard,
   LogOut,
+  MonitorUp,
   Settings,
   SlidersHorizontal,
   UserRound,
@@ -95,6 +96,12 @@ const NAVIGATION_GROUPS = [
     items: [
       { key: 'organisations', label: 'Organisations', icon: Building2 },
       { key: 'clients', label: 'Clients', icon: UsersRound },
+      {
+        key: 'client-portal-preview',
+        label: 'Client Portal Preview',
+        icon: MonitorUp,
+        href: '/client?preview=1',
+      },
     ],
   },
 ] as const
@@ -213,14 +220,28 @@ export default function ConsultantSidebar({
                       {group.items
                         .filter((item) =>
                           item.key !== 'survey-templates' || isSuperAdmin)
-                        .map((item) => (
+                        .map((item) => {
+                          const isExternalLink = 'href' in item
+
+                          return (
                           <SidebarMenuItem key={item.key} className="w-full!">
                             <SidebarMenuButton
                               type="button"
                               size="lg"
                               tooltip={item.label}
-                              isActive={screen === item.key}
-                              onClick={() => onScreenChange(item.key)}
+                              isActive={!isExternalLink && screen === item.key}
+                              onClick={() => {
+                                if (isExternalLink) {
+                                  window.open(
+                                    item.href,
+                                    '_blank',
+                                    'noopener,noreferrer',
+                                  )
+                                  return
+                                }
+
+                                onScreenChange(item.key)
+                              }}
                               className={`${
                                 isCollapsed
                                   ? 'mx-auto size-10! justify-center p-0!'
@@ -231,7 +252,8 @@ export default function ConsultantSidebar({
                               {!isCollapsed && <span>{item.label}</span>}
                             </SidebarMenuButton>
                           </SidebarMenuItem>
-                        ))}
+                          )
+                        })}
                     </SidebarMenu>
                   </div>
                 </SidebarGroupContent>
