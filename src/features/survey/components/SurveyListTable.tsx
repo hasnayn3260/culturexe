@@ -4,6 +4,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   ClipboardList,
+  ExternalLink,
   MoreHorizontal,
   Settings2,
   SlidersHorizontal,
@@ -152,6 +153,14 @@ export default function SurveyListTable({
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
     onOpenSurvey(survey, 'builder')
+  }
+
+  function previewSurvey(survey: SurveyListItem) {
+    window.open(
+      `/app/surveys/${encodeURIComponent(survey.id)}/preview`,
+      '_blank',
+      'noopener,noreferrer',
+    )
   }
 
   return (
@@ -394,6 +403,13 @@ export default function SurveyListTable({
                       className="w-44 rounded-xl bg-white p-1.5 text-[#0D1F3C] shadow-[0_12px_36px_rgba(13,31,60,0.16)] ring-[#E2E8F0]"
                     >
                       <DropdownMenuGroup>
+                        <DropdownMenuItem
+                          onClick={() => previewSurvey(survey)}
+                          className="gap-2 rounded-lg px-2 py-2 text-[13px] focus:bg-[#F3F8FA] focus:text-[#0D1F3C]"
+                        >
+                          <ExternalLink className="text-[#0A8A7E]" />
+                          Preview survey
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => onOpenSurvey(survey, 'builder')}
                           className="gap-2 rounded-lg px-2 py-2 text-[13px] focus:bg-[#F3F8FA] focus:text-[#0D1F3C]"

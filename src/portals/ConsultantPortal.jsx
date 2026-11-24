@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import {
+  ALL_ORGANISATIONS,
+  useOrganisationScope,
+} from '../context/OrganisationScopeContext'
 import { useAdminData } from '../hooks/useAdminData'
 import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
@@ -761,18 +764,14 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
 // ── Main Portal ────────────────────────────────────────────
 
 export default function ConsultantPortal() {
-  const navigate = useNavigate()
   const { profile, role } = useAuth()
+  const { organisationScope, setOrganisationScope } = useOrganisationScope()
   const { users, createUser, deactivateUser, organisations, loading: usersLoading } = useAdminData()
-  // Until the client selector is added, use the signed-in user's organisation
-  // when available and otherwise fall back to the first organisation they can
-  // access. The selected organisation will replace this fallback later.
-  const activeOrganisationId = profile?.org_id || organisations[0]?.id || null
   const {
-    survey, questions, respondents: rawRespondents, responses: rawResponses, loading, refetch,
+    survey, surveys, questions, respondents: rawRespondents, responses: rawResponses, loading, refetch,
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
-  } = useSurvey(activeOrganisationId)
+  } = useSurvey(organisationScope)
 
   // Every response must belong to a respondent in the organisation-scoped survey.
   // Keeping that comparison here prevents a mismatched response row from
@@ -783,6 +782,16 @@ export default function ConsultantPortal() {
 
   const [screen, setScreen] = useState('dashboard')
   const isSuperAdmin = role === 'superadmin' || role === 'super_admin'
+
+  useEffect(() => {
+    if (
+      usersLoading ||
+      organisationScope === ALL_ORGANISATIONS ||
+      organisations.some(({ id }) => id === organisationScope)
+    ) return
+
+    setOrganisationScope(ALL_ORGANISATIONS)
+  }, [organisationScope, organisations, setOrganisationScope, usersLoading])
 
   useEffect(() => {
     if (screen === 'survey-templates' && !isSuperAdmin) {
@@ -862,7 +871,10 @@ export default function ConsultantPortal() {
   // ── Registration & engagement funnel (client-requested metrics) ──────────
   // "Registered" = a plain count of the profiles table. Nothing else — no role
   // filter, no email filter.
-  const totalRegistered   = users.length
+  const scopedUsers = organisationScope === ALL_ORGANISATIONS
+    ? users
+    : users.filter(user => user.org_id === organisationScope)
+  const totalRegistered   = scopedUsers.length
   // "Completed" = respondents who fully submitted the survey.
   const totalCompleted    = totalResponded
   // "Started, not completed" = opened the survey link but never submitted.
@@ -884,8 +896,8 @@ export default function ConsultantPortal() {
     const resp = responseByRespId.get(r.id)
     const fromAnswer = deptQuestion ? (resp?.answers?.[deptQuestion.id] ?? null) : null
     if (fromAnswer) return fromAnswer
-    const profile = users.find(u => u.email === r.email)
-    return profile?.department || r.department || null
+    const respondentProfile = scopedUsers.find(u => u.email === r.email)
+    return respondentProfile?.department || r.department || null
   }
 
   const enrichedResponses = responses.map(resp => {
@@ -1218,17 +1230,24 @@ export default function ConsultantPortal() {
             <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Surveys', 'survey-templates': 'Survey Templates', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', settings: 'Settings' }[screen]}</div>
           </div>
           <div className="topbar-right">
-            {role && role !== 'client' && role !== 'consultant' && (
-              <select
-                value="consultant"
-                onChange={e => { if (e.target.value === 'client') navigate('/client') }}
-                style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#f8fafc', cursor: 'pointer' }}
-              >
-                <option value="consultant">Consultant View</option>
-                <option value="client">Client View</option>
-              </select>
-            )}
-            {!['survey', 'survey-templates'].includes(screen) && survey && (
+            <label className="sr-only" htmlFor="global-organisation-scope">
+              Filter dashboard and analytics by organisation
+            </label>
+            <select
+              id="global-organisation-scope"
+              value={organisationScope}
+              onChange={event => setOrganisationScope(event.target.value)}
+              disabled={usersLoading}
+              className="h-10 max-w-[280px] rounded-[10px] border border-[#CBD7E5] bg-white px-3 text-sm font-semibold text-[#0D1F3C] outline-none transition focus:border-[#1BBFB0] focus:ring-3 focus:ring-[#1BBFB0]/20 disabled:cursor-wait disabled:text-[#8A9BB0]"
+            >
+              <option value={ALL_ORGANISATIONS}>All organisations</option>
+              {organisations.map(organisation => (
+                <option key={organisation.id} value={organisation.id}>
+                  {organisation.name}
+                </option>
+              ))}
+            </select>
+            {organisationScope !== ALL_ORGANISATIONS && !['survey', 'survey-templates'].includes(screen) && survey && (
               <span className={`badge ${isLive ? 'badge-teal' : isClosed ? 'badge-slate' : 'badge-gold'}`}>
                 {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
               </span>
@@ -1246,7 +1265,13 @@ export default function ConsultantPortal() {
               </div>
               <div className="page-hero">
                 <div className="hero-title">Welcome back, {displayName}</div>
-                <div className="hero-sub">{survey ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : isScheduled ? 'Survey scheduled' : 'Draft — not yet live'}` : 'No survey found.'}</div>
+                <div className="hero-sub">
+                  {organisationScope === ALL_ORGANISATIONS
+                    ? `${surveys.length} organisation survey${surveys.length !== 1 ? 's' : ''} included`
+                    : survey
+                      ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : isScheduled ? 'Survey scheduled' : 'Draft — not yet live'}`
+                      : 'No survey found for this organisation.'}
+                </div>
                 <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
               </div>
 

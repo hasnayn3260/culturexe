@@ -176,11 +176,11 @@ export async function listSurveyTemplates(
   }
   if (options.activeOnly) query.set('activeOnly', 'true')
 
-  const response = await templateRequest<TemplatesResponse>({
+  const response = await templateRequest<TemplatesResponse | null>({
     query,
     signal: options.signal,
   })
-  return response.templates
+  return Array.isArray(response?.templates) ? response.templates : []
 }
 
 export async function getSurveyTemplate(

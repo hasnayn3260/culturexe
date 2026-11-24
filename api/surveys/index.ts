@@ -31,6 +31,7 @@ type TemplateRow = {
   id: string
   org_id: string | null
   description: string | null
+  active: boolean
 }
 
 type TemplateQuestionRow = {
@@ -261,7 +262,7 @@ async function templateContent(
 ): Promise<{ template: TemplateRow; questions: TemplateQuestionRow[] }> {
   const { data: templateData, error: templateError } = await admin
     .from('survey_templates')
-    .select('id, org_id, description')
+    .select('id, org_id, description, active')
     .eq('id', templateId)
     .maybeSingle()
 
@@ -269,6 +270,11 @@ async function templateContent(
   if (!templateData) throw new Error('Survey template not found.')
 
   const template = templateData as TemplateRow
+  if (!template.active) {
+    throw new Error(
+      'This survey template is inactive and cannot be used for a new survey.',
+    )
+  }
   if (template.org_id && template.org_id !== organisationId) {
     throw new Error('This survey template belongs to a different organisation.')
   }

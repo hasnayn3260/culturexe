@@ -46,7 +46,7 @@ function inputStyle(answered) {
 
 // ── Question renderers ─────────────────────────────────────
 
-function QuestionRenderer({ q, value, onChange, respondentId }) {
+function QuestionRenderer({ q, value, onChange, respondentId, previewMode = false }) {
   const type = q.question_type
   const answered = isAnswered(q, value)
 
@@ -260,6 +260,14 @@ function QuestionRenderer({ q, value, onChange, respondentId }) {
 
   // FILE
   if (type === 'FILE') {
+    if (previewMode) {
+      return (
+        <div style={{ padding: '12px 20px', borderRadius: 9, border: '1.5px dashed #D1D9E6', background: '#FAFBFD', fontSize: 14, color: '#8898AA' }}>
+          📎 File upload field — uploads are disabled in preview mode.
+        </div>
+      )
+    }
+
     return (
       <div>
         <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFileChange} />
@@ -387,8 +395,8 @@ function SpinPage({ msg }) {
 
 // ── Main ───────────────────────────────────────────────────
 
-export default function Assessment() {
-  const { token } = useParams()
+export default function Assessment({ previewMode = false }) {
+  const { token, surveyId } = useParams()
   const navigate  = useNavigate()
 
   const [phase, setPhase]               = useState('loading')
@@ -402,6 +410,36 @@ export default function Assessment() {
 
   useEffect(() => {
     async function init() {
+      if (previewMode) {
+        if (!surveyId) { setPhase('invalid'); return }
+
+        try {
+          const { data: previewSurvey, error: surveyError } = await supabase
+            .from('survey')
+            .select('*')
+            .eq('id', surveyId)
+            .maybeSingle()
+
+          if (surveyError) throw surveyError
+          if (!previewSurvey) { setPhase('invalid'); return }
+
+          const { data: previewQuestions, error: questionError } = await supabase
+            .from('survey_questions')
+            .select('*')
+            .eq('survey_id', surveyId)
+            .order('order_num')
+
+          if (questionError) throw questionError
+          setSurvey(previewSurvey)
+          setQuestions(previewQuestions || [])
+          setRespondent({ id: null, source: 'preview' })
+          setPhase('survey')
+        } catch {
+          setPhase('invalid')
+        }
+        return
+      }
+
       if (!token) { setPhase('invalid'); return }
       try {
         const { data: resp, error: rErr } = await supabase
@@ -457,7 +495,7 @@ export default function Assessment() {
       }
     }
     init()
-  }, [token])
+  }, [previewMode, surveyId, token])
 
   // Questions already answered at open-link intake (department/tenure/job
   // grade) are hidden here so they aren't asked twice.
@@ -496,10 +534,11 @@ export default function Assessment() {
   const pageComplete = (i) => (pages[i]?.qs || []).every(q => isAnswered(q, answers[q.id]))
   // A section is reachable only when every earlier section is complete.
   const canAccess = (i) => {
+    if (previewMode) return true
     for (let j = 0; j < i; j++) if (!pageComplete(j)) return false
     return true
   }
-  const currentPageComplete = pageComplete(page)
+  const currentPageComplete = previewMode || pageComplete(page)
   const currentRemaining = currentPage.qs.filter(q => !isAnswered(q, answers[q.id])).length
 
   function handleAnswer(qId, val) {
@@ -553,9 +592,13 @@ export default function Assessment() {
       <PageShell>
         <div style={{ textAlign: 'center', padding: '80px 20px' }}>
           <div style={{ fontSize: 52, marginBottom: 20 }}>⚠</div>
-          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>This link is invalid or has expired</div>
+          <div style={{ fontWeight: 700, fontSize: 22, color: '#0B1D3E', marginBottom: 12 }}>
+            {previewMode ? 'Survey preview unavailable' : 'This link is invalid or has expired'}
+          </div>
           <div style={{ fontSize: 14, color: '#637082', maxWidth: 400, margin: '0 auto', lineHeight: 1.7 }}>
-            Please check the link you received and try again, or contact your HR team for a new invitation.
+            {previewMode
+              ? 'The survey could not be loaded. Return to the consultant portal and try again.'
+              : 'Please check the link you received and try again, or contact your HR team for a new invitation.'}
           </div>
         </div>
       </PageShell>
@@ -676,7 +719,21 @@ export default function Assessment() {
   const hasLikertOnPage = currentPage.qs.some(q => q.question_type === 'likert' || q.question_type === 'LIKERT')
 
   return (
-    <PageShell surveyTitle={survey?.title} progress={progress}>
+    <PageShell
+      surveyTitle={survey?.title}
+      progress={previewMode && pages.length > 0
+        ? Math.round(((page + 1) / pages.length) * 100)
+        : progress}
+    >
+
+      {previewMode && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 16px', background: '#E7F9F7', border: '1px solid #9FE4DD', borderRadius: 10, color: '#087C72', fontSize: 13, marginBottom: 18 }}>
+          <span><strong>Preview mode</strong> — responses and uploads will not be saved.</span>
+          <button onClick={() => window.close()} style={{ border: 0, background: 'transparent', color: '#087C72', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            Close preview
+          </button>
+        </div>
+      )}
 
       {submitError && (
         <div style={{ padding: '12px 16px', background: '#FFF0EE', border: '1px solid rgba(232,86,58,0.2)', borderRadius: 10, color: '#E8563A', fontSize: 13, marginBottom: 16 }}>
@@ -750,6 +807,7 @@ export default function Assessment() {
               value={answers[q.id]}
               onChange={val => handleAnswer(q.id, val)}
               respondentId={respondent?.id}
+              previewMode={previewMode}
             />
           </div>
         ))}
@@ -765,7 +823,7 @@ export default function Assessment() {
           {!isLastPage ? (
             <button
               onClick={() => {
-                if (!currentPageComplete) {
+                if (!previewMode && !currentPageComplete) {
                   setNavError('Please answer every question in this section before continuing.')
                   return
                 }
@@ -773,7 +831,7 @@ export default function Assessment() {
                 setPage(i => i + 1)
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
-              disabled={!currentPageComplete}
+              disabled={!previewMode && !currentPageComplete}
               style={{
                 padding: '11px 24px', borderRadius: 9, border: 'none',
                 background: currentPageComplete ? '#1BBFB0' : '#B7E5DF',
@@ -781,6 +839,15 @@ export default function Assessment() {
                 cursor: currentPageComplete ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
               }}
             >Next →</button>
+          ) : previewMode ? (
+            <button
+              onClick={() => window.close()}
+              style={{
+                padding: '11px 24px', borderRadius: 9, border: 'none',
+                background: '#1BBFB0', color: 'white', fontSize: 14,
+                fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >Close Preview</button>
           ) : (
             <button
               onClick={handleSubmit}
@@ -797,7 +864,7 @@ export default function Assessment() {
           )}
         </div>
 
-        {!currentPageComplete && totalQ > 0 && (
+        {!previewMode && !currentPageComplete && totalQ > 0 && (
           <div style={{ textAlign: 'right', marginTop: 10, fontSize: 12, color: '#E8563A' }}>
             {currentRemaining} question{currentRemaining !== 1 ? 's' : ''} in this section still need{currentRemaining === 1 ? 's' : ''} an answer — all questions are required.
           </div>

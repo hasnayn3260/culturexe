@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
+import { OrganisationScopeProvider } from './context/OrganisationScopeContext'
 import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -34,7 +35,9 @@ export default function App() {
               <Route path="/app" element={
                 <ProtectedRoute requiredRole={['consultant', 'superadmin']}>
                   <RequireMfa>
-                    <ConsultantPortal />
+                    <OrganisationScopeProvider>
+                      <ConsultantPortal />
+                    </OrganisationScopeProvider>
                   </RequireMfa>
                 </ProtectedRoute>
               } />
@@ -47,6 +50,13 @@ export default function App() {
 
               <Route path="/assess/:token"  element={<Assessment />} />
               <Route path="/assess/open/:openToken" element={<OpenAssessmentEntry />} />
+              <Route path="/app/surveys/:surveyId/preview" element={
+                <ProtectedRoute requiredRole={['superadmin']}>
+                  <RequireMfa>
+                    <Assessment previewMode />
+                  </RequireMfa>
+                </ProtectedRoute>
+              } />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/change-temporary-password" element={<ChangeTemporaryPassword />} />

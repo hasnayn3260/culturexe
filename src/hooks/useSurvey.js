@@ -3,6 +3,7 @@ import supabase from '../lib/supabaseClient'
 
 export function useSurvey(orgId) {
   const [survey, setSurvey]           = useState(null)
+  const [surveys, setSurveys]         = useState([])
   const [questions, setQuestions]     = useState([])
   const [respondents, setRespondents] = useState([])
   const [responses, setResponses]     = useState([])
@@ -13,6 +14,7 @@ export function useSurvey(orgId) {
   const refetch = useCallback(async ({ silent = false } = {}) => {
     if (!orgId) {
       setSurvey(null)
+      setSurveys([])
       setQuestions([])
       setRespondents([])
       setResponses([])
@@ -24,21 +26,46 @@ export function useSurvey(orgId) {
     if (!silent) setLoading(true)
     setError(null)
     try {
-      const { data: sv, error: svErr } = await supabase
+      let surveyQuery = supabase
         .from('survey')
         .select('*')
-        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+
+      if (orgId !== 'all') {
+        surveyQuery = surveyQuery.eq('org_id', orgId).limit(1)
+      }
+
+      const { data: surveyRows, error: svErr } = await surveyQuery
       if (svErr) throw svErr
-      if (!sv) { setSurvey(null); setQuestions([]); setRespondents([]); setResponses([]); return }
-      setSurvey(sv)
+
+      const availableSurveys = surveyRows || []
+      const scopedSurveys = orgId === 'all'
+        ? availableSurveys.filter((candidate, index, rows) =>
+            rows.findIndex(row => row.org_id === candidate.org_id) === index,
+          )
+        : availableSurveys
+
+      if (!scopedSurveys.length) {
+        setSurvey(null)
+        setSurveys([])
+        setQuestions([])
+        setRespondents([])
+        setResponses([])
+        return
+      }
+
+      setSurvey(scopedSurveys[0])
+      setSurveys(scopedSurveys)
+      const surveyIds = scopedSurveys.map(item => item.id)
+
+      const scopeQuery = (query) => surveyIds.length === 1
+        ? query.eq('survey_id', surveyIds[0])
+        : query.in('survey_id', surveyIds)
 
       const [qRes, rRes, respRes] = await Promise.all([
-        supabase.from('survey_questions').select('*').eq('survey_id', sv.id).order('order_num'),
-        supabase.from('survey_respondents').select('*').eq('survey_id', sv.id).order('invited_at', { ascending: false }),
-        supabase.from('survey_responses').select('*').eq('survey_id', sv.id),
+        scopeQuery(supabase.from('survey_questions').select('*')).order('order_num'),
+        scopeQuery(supabase.from('survey_respondents').select('*')).order('invited_at', { ascending: false }),
+        scopeQuery(supabase.from('survey_responses').select('*')),
       ])
 
       if (qRes.error) throw qRes.error
@@ -58,9 +85,9 @@ export function useSurvey(orgId) {
   useEffect(() => { refetch() }, [refetch])
 
   useEffect(() => {
-    if (!survey?.id) return undefined
+    if (!surveys.length) return undefined
 
-    const surveyId = survey.id
+    const surveyIds = surveys.map(item => item.id)
     const queueRefresh = () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       refreshTimerRef.current = setTimeout(() => {
@@ -71,16 +98,24 @@ export function useSurvey(orgId) {
       if (document.visibilityState === 'visible') queueRefresh()
     }
 
+    const responseSubscription = {
+      event: '*', schema: 'public', table: 'survey_responses',
+      ...(surveyIds.length === 1 ? { filter: `survey_id=eq.${surveyIds[0]}` } : {}),
+    }
+    const respondentSubscription = {
+      event: '*', schema: 'public', table: 'survey_respondents',
+      ...(surveyIds.length === 1 ? { filter: `survey_id=eq.${surveyIds[0]}` } : {}),
+    }
     const channel = supabase
-      .channel(`survey-participation-${surveyId}`)
+      .channel(`survey-participation-${orgId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'survey_responses', filter: `survey_id=eq.${surveyId}` },
+        responseSubscription,
         queueRefresh,
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'survey_respondents', filter: `survey_id=eq.${surveyId}` },
+        respondentSubscription,
         queueRefresh,
       )
       .subscribe()
@@ -97,7 +132,7 @@ export function useSurvey(orgId) {
       document.removeEventListener('visibilitychange', refreshWhenVisible)
       void supabase.removeChannel(channel)
     }
-  }, [survey?.id, refetch])
+  }, [orgId, refetch, surveys])
 
   async function updateSurvey(updates) {
     const { error: err } = await supabase
@@ -221,7 +256,7 @@ export function useSurvey(orgId) {
   }
 
   return {
-    survey, questions, respondents, responses, loading, error, refetch,
+    survey, surveys, questions, respondents, responses, loading, error, refetch,
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
   }

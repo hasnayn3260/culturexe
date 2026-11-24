@@ -121,7 +121,7 @@ export default function SurveyManagementPage() {
 
   return (
     <div className="min-w-0">
-      <div className="border-b border-[#DFE6EE] bg-white px-5 pt-3 md:px-7">
+      <div className="border-b border-[#DFE6EE] bg-white px-5 py-3 md:px-7">
         <SurveyManagementTabs
           activeTab={activeTab}
           hasSelection={hasSelection}

@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertCircle, ClipboardPlus, LoaderCircle } from 'lucide-react'
+import {
+  AlertCircle,
+  Building2,
+  ClipboardPlus,
+  Globe2,
+  Layers3,
+  LoaderCircle,
+} from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -183,6 +190,16 @@ export default function SurveyFormDialog({
     ),
     [templates, values.organisationId],
   )
+  const selectedTemplate = useMemo(
+    () => templates.find(({ id }) => id === values.templateId) || null,
+    [templates, values.templateId],
+  )
+  const selectedTemplateOrganisation = useMemo(() => {
+    if (!selectedTemplate?.organisationId) return null
+    return organisations.find(
+      ({ id }) => id === selectedTemplate.organisationId,
+    ) || null
+  }, [organisations, selectedTemplate])
 
   function update<Key extends keyof DialogValues>(
     key: Key,
@@ -253,8 +270,8 @@ export default function SurveyFormDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-h-[90vh] gap-0 overflow-hidden rounded-[18px] bg-white p-0 text-[#0D1F3C] shadow-[0_24px_64px_rgba(13,31,60,0.20)] ring-0 sm:max-w-[720px]">
-        <DialogHeader className="border-b border-[#E8EDF3] px-7 py-6 pr-16">
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden rounded-[18px] bg-white p-0 text-[#0D1F3C] shadow-[0_24px_64px_rgba(13,31,60,0.20)] ring-0 sm:max-w-[720px]">
+        <DialogHeader className="shrink-0 border-b border-[#E8EDF3] px-5 py-5 pr-16 sm:px-7 sm:py-6">
           <div className="flex items-start gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-[12px] bg-[#E5F8F6] text-[#0A8A7E]">
               <ClipboardPlus className="size-5" />
@@ -272,8 +289,12 @@ export default function SurveyFormDialog({
           </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} noValidate className="min-h-0 overflow-y-auto">
-          <div className="grid gap-5 px-7 py-6 sm:grid-cols-2">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-5 py-5 sm:grid-cols-2 sm:px-7 sm:py-6">
             {submitError && (
               <Alert className="border-[#F2B8AE] bg-[#FFF4F1] text-[#A23D2D] sm:col-span-2">
                 <AlertCircle />
@@ -372,11 +393,41 @@ export default function SurveyFormDialog({
                   <option value="">Blank survey</option>
                   {availableTemplates.map((template) => (
                     <option key={template.id} value={template.id}>
-                      {template.name} · {template.questionCount} questions
+                      {template.name} · {template.scope === 'global' ? 'Global' : 'Organisation'} · {template.questionCount} {template.questionCount === 1 ? 'question' : 'questions'}
                     </option>
                   ))}
                 </select>
                 <FieldError message={errors.templateId} />
+                {selectedTemplate && (
+                  <div className="mt-3 rounded-[12px] border border-[#DCE4EE] bg-[#F8FAFC] p-3.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E5F8F6] px-2.5 py-1 text-[11px] font-bold text-[#0A8A7E]">
+                        {selectedTemplate.scope === 'global' ? (
+                          <Globe2 className="size-3.5" />
+                        ) : (
+                          <Building2 className="size-3.5" />
+                        )}
+                        {selectedTemplate.scope === 'global'
+                          ? 'Global template'
+                          : selectedTemplateOrganisation?.tradingName
+                            || selectedTemplateOrganisation?.name
+                            || 'Organisation template'}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EAF4FB] px-2.5 py-1 text-[11px] font-bold text-[#2479AF]">
+                        <Layers3 className="size-3.5" />
+                        {selectedTemplate.questionCount}{' '}
+                        {selectedTemplate.questionCount === 1
+                          ? 'question'
+                          : 'questions'}
+                      </span>
+                    </div>
+                    {selectedTemplate.description && (
+                      <p className="mt-2 text-xs leading-5 text-[#6F8299]">
+                        {selectedTemplate.description}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="mt-1 text-[11px] text-[#8A9BB0]">
                   Templates copy questionnaire content only. Dates, respondents and responses are never copied.
                 </p>
@@ -436,7 +487,7 @@ export default function SurveyFormDialog({
             </label>
           </div>
 
-          <DialogFooter className="m-0 border-t border-[#E8EDF3] bg-[#F8FAFC] px-7 py-4">
+          <DialogFooter className="m-0 shrink-0 rounded-none border-t border-[#E8EDF3] bg-[#F8FAFC] px-5 py-4 sm:px-7">
             <Button
               type="button"
               variant="outline"
