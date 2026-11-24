@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useAvailableSurveyTemplates } from '@/features/survey-templates/hooks/useAvailableSurveyTemplates'
 
 import SurveyFormDialog from '../components/SurveyFormDialog'
 import SurveyListTable from '../components/SurveyListTable'
@@ -101,6 +102,10 @@ export default function SurveyListPage() {
     organisations,
     error: organisationLoadError,
   } = useOrganisations()
+  const {
+    templates: availableTemplates,
+    error: templateLoadError,
+  } = useAvailableSurveyTemplates()
   const [filters, setFilters] = useState<SurveyListFilters>({
     ...DEFAULT_SURVEY_LIST_FILTERS,
   })
@@ -139,7 +144,10 @@ export default function SurveyListPage() {
     () => organisationReferences(organisations),
     [organisations],
   )
-  const pageError = surveyLoadError || organisationLoadError || mutations.error
+  const pageError = surveyLoadError
+    || organisationLoadError
+    || templateLoadError
+    || mutations.error
 
   function openCreateDialog() {
     mutations.clearError()
@@ -256,6 +264,7 @@ export default function SurveyListPage() {
         onOpenChange={setFormOpen}
         mode="create"
         organisations={availableOrganisations}
+        templates={availableTemplates}
         submitting={mutations.submittingForm}
         onSubmit={submitSurvey}
       />

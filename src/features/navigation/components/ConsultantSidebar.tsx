@@ -6,6 +6,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   ClipboardList,
+  FileStack,
   Files,
   LayoutDashboard,
   LogOut,
@@ -49,6 +50,7 @@ import { useAuth } from '@/hooks/useAuth'
 export type ConsultantScreen =
   | 'dashboard'
   | 'survey'
+  | 'survey-templates'
   | 'analytics'
   | 'organisations'
   | 'clients'
@@ -81,7 +83,8 @@ const NAVIGATION_GROUPS = [
     label: 'Survey Management',
     icon: Files,
     items: [
-      { key: 'survey', label: 'Survey', icon: ClipboardList },
+      { key: 'survey', label: 'Surveys', icon: ClipboardList },
+      { key: 'survey-templates', label: 'Survey Templates', icon: FileStack },
       { key: 'analytics', label: 'Analytics', icon: BarChart3 },
     ],
   },
@@ -207,25 +210,28 @@ export default function ConsultantSidebar({
                     }
                   >
                     <SidebarMenu className="w-full! gap-1.5">
-                      {group.items.map((item) => (
-                        <SidebarMenuItem key={item.key} className="w-full!">
-                          <SidebarMenuButton
-                            type="button"
-                            size="lg"
-                            tooltip={item.label}
-                            isActive={screen === item.key}
-                            onClick={() => onScreenChange(item.key)}
-                            className={`${
-                              isCollapsed
-                                ? 'mx-auto size-10! justify-center p-0!'
-                                : 'h-10 w-full! px-3'
-                            } rounded-[9px] text-[13.5px] font-medium text-white/65 hover:bg-white/[0.07] hover:text-white data-active:bg-[#16B8C1] data-active:font-semibold data-active:text-white [&_svg]:text-white/65 data-active:[&_svg]:text-white`}
-                          >
-                            <item.icon />
-                            {!isCollapsed && <span>{item.label}</span>}
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      ))}
+                      {group.items
+                        .filter((item) =>
+                          item.key !== 'survey-templates' || isSuperAdmin)
+                        .map((item) => (
+                          <SidebarMenuItem key={item.key} className="w-full!">
+                            <SidebarMenuButton
+                              type="button"
+                              size="lg"
+                              tooltip={item.label}
+                              isActive={screen === item.key}
+                              onClick={() => onScreenChange(item.key)}
+                              className={`${
+                                isCollapsed
+                                  ? 'mx-auto size-10! justify-center p-0!'
+                                  : 'h-10 w-full! px-3'
+                              } rounded-[9px] text-[13.5px] font-medium text-white/65 hover:bg-white/[0.07] hover:text-white data-active:bg-[#16B8C1] data-active:font-semibold data-active:text-white [&_svg]:text-white/65 data-active:[&_svg]:text-white`}
+                            >
+                              <item.icon />
+                              {!isCollapsed && <span>{item.label}</span>}
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        ))}
                     </SidebarMenu>
                   </div>
                 </SidebarGroupContent>

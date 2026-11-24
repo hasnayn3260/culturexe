@@ -179,7 +179,6 @@ export default function SurveyFormDialog({
     () => templates.filter(
       (template) =>
         !template.organisationId ||
-        !values.organisationId ||
         template.organisationId === values.organisationId,
     ),
     [templates, values.organisationId],
@@ -189,7 +188,24 @@ export default function SurveyFormDialog({
     key: Key,
     value: DialogValues[Key],
   ) {
-    setValues((current) => ({ ...current, [key]: value }))
+    setValues((current) => {
+      const nextValues = { ...current, [key]: value }
+
+      if (key === 'organisationId' && current.templateId) {
+        const selectedTemplate = templates.find(
+          ({ id }) => id === current.templateId,
+        )
+
+        if (
+          selectedTemplate?.organisationId &&
+          selectedTemplate.organisationId !== value
+        ) {
+          nextValues.templateId = ''
+        }
+      }
+
+      return nextValues
+    })
     setErrors((current) => ({ ...current, [key]: undefined }))
     setSubmitError(null)
   }

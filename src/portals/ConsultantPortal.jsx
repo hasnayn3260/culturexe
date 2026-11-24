@@ -8,6 +8,7 @@ import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
+import SurveyTemplatesPage from '../features/survey-templates/pages/SurveyTemplatesPage'
 import UsersPage from '../features/users/pages/UsersPage'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
@@ -781,6 +782,13 @@ export default function ConsultantPortal() {
   const responses    = rawResponses.filter(response => respondentIds.has(response.respondent_id))
 
   const [screen, setScreen] = useState('dashboard')
+  const isSuperAdmin = role === 'superadmin' || role === 'super_admin'
+
+  useEffect(() => {
+    if (screen === 'survey-templates' && !isSuperAdmin) {
+      setScreen('dashboard')
+    }
+  }, [isSuperAdmin, screen])
 
   // Export targets (for PDF capture)
   const dashboardRef = useRef(null)
@@ -1207,7 +1215,7 @@ export default function ConsultantPortal() {
         <div className="consultant-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
-            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Survey', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', settings: 'Settings' }[screen]}</div>
+            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Surveys', 'survey-templates': 'Survey Templates', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', settings: 'Settings' }[screen]}</div>
           </div>
           <div className="topbar-right">
             {role && role !== 'client' && role !== 'consultant' && (
@@ -1220,7 +1228,7 @@ export default function ConsultantPortal() {
                 <option value="client">Client View</option>
               </select>
             )}
-            {screen !== 'survey' && survey && (
+            {!['survey', 'survey-templates'].includes(screen) && survey && (
               <span className={`badge ${isLive ? 'badge-teal' : isClosed ? 'badge-slate' : 'badge-gold'}`}>
                 {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
               </span>
@@ -1228,7 +1236,7 @@ export default function ConsultantPortal() {
           </div>
         </div>
 
-        <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' || screen === 'survey' ? '!p-0' : ''}`}>
+        <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' || screen === 'survey' || screen === 'survey-templates' ? '!p-0' : ''}`}>
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
@@ -1410,6 +1418,9 @@ export default function ConsultantPortal() {
 
           {/* ════════ SURVEY ════════ */}
           {screen === 'survey' && <SurveyManagementPage />}
+
+          {/* ════════ SURVEY TEMPLATES ════════ */}
+          {screen === 'survey-templates' && isSuperAdmin && <SurveyTemplatesPage />}
 
           {/* Legacy single-survey screen retained temporarily for the dashboard
               and analytics extraction cleanup, but it is no longer rendered. */}
