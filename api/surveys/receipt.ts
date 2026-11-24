@@ -35,6 +35,8 @@ type SurveyRow = {
   id: string
   org_id: string
   title: string
+  email_receipts_enabled: boolean
+  reminder_timezone: string
 }
 
 type OrganisationRow = {
@@ -89,12 +91,20 @@ function createAdminClient() {
   })
 }
 
-function formatSubmittedAt(value: string): string {
-  return new Intl.DateTimeFormat('en-ZA', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-    timeZone: 'Africa/Johannesburg',
-  }).format(new Date(value))
+function formatSubmittedAt(value: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-ZA', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+      timeZone,
+    }).format(new Date(value))
+  } catch {
+    return new Intl.DateTimeFormat('en-ZA', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+      timeZone: 'Africa/Johannesburg',
+    }).format(new Date(value))
+  }
 }
 
 function publicAssetUrl(
@@ -171,6 +181,20 @@ async function route(request: Request): Promise<Response> {
       return json({ skipped: 'Receipt already sent.' })
     }
 
+    const { data: surveyData, error: surveyError } = await admin
+      .from('survey')
+      .select('id, org_id, title, email_receipts_enabled, reminder_timezone')
+      .eq('id', surveyId)
+      .maybeSingle()
+    if (surveyError) throw surveyError
+    if (!surveyData) return json({ error: 'Survey not found.' }, 404)
+    const survey = surveyData as SurveyRow
+    if (!survey.email_receipts_enabled) {
+      return json({
+        skipped: 'Email completion receipts are disabled for this survey.',
+      })
+    }
+
     const claimedAt = new Date().toISOString()
     const { data: claim, error: claimError } = await admin
       .from('survey_responses')
@@ -186,26 +210,16 @@ async function route(request: Request): Promise<Response> {
     }
 
     try {
-      const [respondentResult, surveyResult] = await Promise.all([
-        admin
-          .from('survey_respondents')
-          .select('id, email, name')
-          .eq('id', respondentId)
-          .eq('survey_id', surveyId)
-          .maybeSingle(),
-        admin
-          .from('survey')
-          .select('id, org_id, title')
-          .eq('id', surveyId)
-          .maybeSingle(),
-      ])
+      const respondentResult = await admin
+        .from('survey_respondents')
+        .select('id, email, name')
+        .eq('id', respondentId)
+        .eq('survey_id', surveyId)
+        .maybeSingle()
       if (respondentResult.error) throw respondentResult.error
-      if (surveyResult.error) throw surveyResult.error
       if (!respondentResult.data) throw new Error('Survey respondent not found.')
-      if (!surveyResult.data) throw new Error('Survey not found.')
 
       const respondent = respondentResult.data as RespondentRow
-      const survey = surveyResult.data as SurveyRow
       if (!EMAIL_PATTERN.test(respondent.email)) {
         throw new Error('The respondent email address is invalid.')
       }
@@ -237,7 +251,7 @@ async function route(request: Request): Promise<Response> {
           organisation_name: organisation.name,
           organisation_banner_url: bannerUrl,
           recipient_name: respondent.name || respondent.email,
-          submitted_at: formatSubmittedAt(submittedAt),
+          submitted_at: formatSubmittedAt(submittedAt, survey.reminder_timezone),
           support_email: env('SUPPORT_EMAIL') || 'support@stratxe.com',
         },
       })

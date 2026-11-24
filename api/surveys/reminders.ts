@@ -9,6 +9,10 @@ type SurveyRow = {
   status: string
   live_start: string | null
   live_end: string | null
+  email_reminders_enabled: boolean
+  reminder_frequency_days: number
+  reminder_max_sends: number
+  reminder_timezone: string
 }
 
 type OrganisationRow = {
@@ -25,6 +29,8 @@ type RespondentRow = {
   token: string
   submitted_at: string | null
   invited_at: string | null
+  reminded_at: string | null
+  reminder_count: number
 }
 
 type ReminderResult = {
@@ -119,12 +125,20 @@ async function requireSurveyManager(request: Request) {
   return { ok: true as const, admin, profile }
 }
 
-function formatSurveyDate(value: string): string {
-  return new Intl.DateTimeFormat('en-ZA', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-    timeZone: 'Africa/Johannesburg',
-  }).format(new Date(value))
+function formatSurveyDate(value: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-ZA', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+      timeZone,
+    }).format(new Date(value))
+  } catch {
+    return new Intl.DateTimeFormat('en-ZA', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+      timeZone: 'Africa/Johannesburg',
+    }).format(new Date(value))
+  }
 }
 
 function publicAssetUrl(
@@ -159,7 +173,7 @@ async function route(request: Request): Promise<Response> {
 
     const { data: surveyData, error: surveyError } = await auth.admin
       .from('survey')
-      .select('id, org_id, title, status, live_start, live_end')
+      .select('id, org_id, title, status, live_start, live_end, email_reminders_enabled, reminder_frequency_days, reminder_max_sends, reminder_timezone')
       .eq('id', surveyId)
       .maybeSingle()
     if (surveyError) throw surveyError
@@ -171,6 +185,13 @@ async function route(request: Request): Promise<Response> {
       auth.profile.org_id !== survey.org_id
     ) {
       return json({ error: 'You cannot manage this organisation’s survey.' }, 403)
+    }
+
+    if (!survey.email_reminders_enabled) {
+      return json(
+        { error: 'Email reminders are disabled in this survey’s settings.' },
+        409,
+      )
     }
 
     if (!survey.live_start || !survey.live_end) {
@@ -207,7 +228,7 @@ async function route(request: Request): Promise<Response> {
 
     const { data: respondentData, error: respondentError } = await auth.admin
       .from('survey_respondents')
-      .select('id, email, name, token, submitted_at, invited_at')
+      .select('id, email, name, token, submitted_at, invited_at, reminded_at, reminder_count')
       .eq('survey_id', survey.id)
       .not('invited_at', 'is', null)
     if (respondentError) throw respondentError
@@ -231,6 +252,7 @@ async function route(request: Request): Promise<Response> {
     const logoUrl = publicAssetUrl(auth.admin, 'Company Logos', organisation.logo_path)
     const bannerUrl = publicAssetUrl(auth.admin, 'Company Banners', organisation.banner_path)
     const results: ReminderResult[] = []
+    const minimumReminderGap = survey.reminder_frequency_days * 24 * 60 * 60 * 1_000
 
     for (const respondent of respondents) {
       if (respondent.submitted_at || completedIds.has(respondent.id)) {
@@ -243,17 +265,73 @@ async function route(request: Request): Promise<Response> {
         continue
       }
 
-      if (!EMAIL_PATTERN.test(respondent.email)) {
+      if (respondent.reminder_count >= survey.reminder_max_sends) {
         results.push({
           email: respondent.email,
           respondentId: respondent.id,
-          status: 'failed',
-          message: 'The respondent email address is invalid.',
+          status: 'skipped',
+          message: `The maximum of ${survey.reminder_max_sends} reminders has been reached.`,
         })
         continue
       }
 
+      const lastReminderTime = respondent.reminded_at
+        ? new Date(respondent.reminded_at).getTime()
+        : Number.NaN
+      if (
+        Number.isFinite(lastReminderTime) &&
+        now - lastReminderTime < minimumReminderGap
+      ) {
+        const nextEligibleAt = new Date(lastReminderTime + minimumReminderGap)
+        results.push({
+          email: respondent.email,
+          respondentId: respondent.id,
+          status: 'skipped',
+          message: `The next reminder may be sent after ${formatSurveyDate(nextEligibleAt.toISOString(), survey.reminder_timezone)}.`,
+        })
+        continue
+      }
+
+      if (!EMAIL_PATTERN.test(respondent.email)) {
+        const attemptedAt = new Date().toISOString()
+        const errorMessage = 'The respondent email address is invalid.'
+        const { error: trackingError } = await auth.admin
+          .from('survey_respondents')
+          .update({
+            last_reminder_attempted_at: attemptedAt,
+            last_reminder_error: errorMessage,
+          })
+          .eq('id', respondent.id)
+          .eq('survey_id', survey.id)
+        if (trackingError) {
+          console.error('Invalid reminder attempt could not be recorded', {
+            respondentId: respondent.id,
+            error: trackingError,
+          })
+        }
+        results.push({
+          email: respondent.email,
+          respondentId: respondent.id,
+          status: 'failed',
+          message: errorMessage,
+        })
+        continue
+      }
+
+      const attemptedAt = new Date().toISOString()
       try {
+        const { error: attemptError } = await auth.admin
+          .from('survey_respondents')
+          .update({
+            last_reminder_attempted_at: attemptedAt,
+            last_reminder_error: null,
+          })
+          .eq('id', respondent.id)
+          .eq('survey_id', survey.id)
+        if (attemptError) {
+          throw new Error('The reminder attempt could not be recorded, so no email was sent.')
+        }
+
         await sendSurveyReminderEmail({
           to: respondent.email,
           organisationId: organisation.id,
@@ -261,7 +339,7 @@ async function route(request: Request): Promise<Response> {
           respondentId: respondent.id,
           model: {
             survey_title: survey.title,
-            closing_date: formatSurveyDate(survey.live_end),
+            closing_date: formatSurveyDate(survey.live_end, survey.reminder_timezone),
             organisation_logo_url: logoUrl,
             organisation_name: organisation.name,
             organisation_banner_url: bannerUrl,
@@ -273,8 +351,14 @@ async function route(request: Request): Promise<Response> {
 
         const { error: timestampError } = await auth.admin
           .from('survey_respondents')
-          .update({ reminded_at: new Date().toISOString() })
+          .update({
+            reminded_at: attemptedAt,
+            reminder_count: respondent.reminder_count + 1,
+            last_reminder_attempted_at: attemptedAt,
+            last_reminder_error: null,
+          })
           .eq('id', respondent.id)
+          .eq('survey_id', survey.id)
         if (timestampError) {
           console.error('Survey reminder timestamp update failed', {
             respondentId: respondent.id,
@@ -291,11 +375,28 @@ async function route(request: Request): Promise<Response> {
             : 'Reminder sent.',
         })
       } catch (error) {
+        const errorMessage = error instanceof Error
+          ? error.message
+          : 'Reminder could not be sent.'
+        const { error: trackingError } = await auth.admin
+          .from('survey_respondents')
+          .update({
+            last_reminder_attempted_at: attemptedAt,
+            last_reminder_error: errorMessage.slice(0, 2_000),
+          })
+          .eq('id', respondent.id)
+          .eq('survey_id', survey.id)
+        if (trackingError) {
+          console.error('Failed reminder attempt could not be recorded', {
+            respondentId: respondent.id,
+            error: trackingError,
+          })
+        }
         results.push({
           email: respondent.email,
           respondentId: respondent.id,
           status: 'failed',
-          message: error instanceof Error ? error.message : 'Reminder could not be sent.',
+          message: errorMessage,
         })
       }
     }

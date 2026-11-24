@@ -16,6 +16,7 @@ type SurveyRow = {
   status: string
   live_start: string | null
   live_end: string | null
+  email_invitations_enabled: boolean
 }
 
 type OrganisationRow = {
@@ -209,7 +210,7 @@ async function route(request: Request): Promise<Response> {
 
     const { data: surveyData, error: surveyError } = await auth.admin
       .from('survey')
-      .select('id, org_id, title, status, live_start, live_end')
+      .select('id, org_id, title, status, live_start, live_end, email_invitations_enabled')
       .eq('id', surveyId)
       .maybeSingle()
     if (surveyError) throw surveyError
@@ -221,6 +222,13 @@ async function route(request: Request): Promise<Response> {
       auth.profile.org_id !== survey.org_id
     ) {
       return json({ error: 'You cannot manage this organisation’s survey.' }, 403)
+    }
+
+    if (!survey.email_invitations_enabled) {
+      return json(
+        { error: 'Email invitations are disabled in this survey’s settings.' },
+        409,
+      )
     }
 
     const now = Date.now()

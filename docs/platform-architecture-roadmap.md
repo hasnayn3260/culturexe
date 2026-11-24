@@ -489,6 +489,10 @@ The Postmark templates have been created and are ready for the later email integ
 
 ### Phase 2 Multi-survey application state
 
+- [ ] Add reusable `survey_templates` and `survey_template_questions` tables.
+- [ ] Restrict template creation, editing and deletion to super administrators.
+- [ ] Allow templates to be global or scoped to one organisation.
+- [ ] Clone template content only: description, sections, questions, ordering and answer options; never clone respondents, dates, responses or delivery history.
 - [ ] Create `useSurveys(organisationId)`.
 - [ ] Change `useSurvey` to load by `surveyId`.
 - [ ] Create organisation context.
@@ -501,7 +505,8 @@ The Postmark templates have been created and are ready for the later email integ
 - [ ] Add the global organisation selector.
 - [ ] Add the organisation dashboard or clients view.
 - [ ] Add the surveys list.
-- [ ] Separate Survey Builder and Survey Controls.
+- [ ] Split survey management into Survey List, Survey Builder, Survey Controls and Survey Settings tabs.
+- [ ] Lock questionnaire structure after a survey becomes live; allow lifecycle controls to remain editable.
 - [ ] Scope Dashboard and Analytics to the selected survey.
 - [ ] Add organisation management.
 - [ ] Add user management scoped to the selected organisation.
@@ -509,10 +514,12 @@ The Postmark templates have been created and are ready for the later email integ
 ### Phase 4 Organisation owner interface
 
 - [ ] Add the `organisation_owner` role.
+- [ ] Add `organisations.owner_profile_id`, referencing `profiles.id`, and require the selected owner profile to belong to that organisation.
+- [ ] Assign and change the organisation owner from the super-admin organisation form.
 - [ ] Make dashboard and analytics read-only.
-- [ ] Remove identifiable respondent data.
+- [ ] Expose only anonymised responses and aggregate analytics; never expose respondent identity mappings to organisation owners.
+- [ ] Enforce the owner boundary in RLS/backend queries rather than relying on hidden frontend fields.
 - [ ] Add read-only question viewing.
-- [ ] Add question comments.
 
 ### Phase 5 Imports and communication
 
@@ -561,6 +568,9 @@ These are implementation notes and do not change Jira statuses automatically.
 - Added CXW-8 Postmark survey receipts through a secret-protected database webhook with duplicate-send protection.
 - Deferred end-to-end invitation, reminder and receipt testing until organisation management and explicit multi-survey selection are in place.
 - Deferred first-party email event analytics until the client-required workflows are complete; Postmark remains the current analytics source.
+- Confirmed that survey templates are managed by super administrators only.
+- Confirmed the four-tab survey structure: Survey List, Survey Builder, Survey Controls and Survey Settings.
+- Confirmed organisation owners will be assigned through an explicit organisation owner profile ID and will have read-only access to anonymised responses and analytics only.
 
 ### 20 November 2026
 
