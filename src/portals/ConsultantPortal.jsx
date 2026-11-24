@@ -7,6 +7,7 @@ import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
+import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
 import UsersPage from '../features/users/pages/UsersPage'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
@@ -1219,7 +1220,7 @@ export default function ConsultantPortal() {
                 <option value="client">Client View</option>
               </select>
             )}
-            {survey && (
+            {screen !== 'survey' && survey && (
               <span className={`badge ${isLive ? 'badge-teal' : isClosed ? 'badge-slate' : 'badge-gold'}`}>
                 {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
               </span>
@@ -1227,7 +1228,7 @@ export default function ConsultantPortal() {
           </div>
         </div>
 
-        <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' ? '!p-0' : ''}`}>
+        <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' || screen === 'survey' ? '!p-0' : ''}`}>
 
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
@@ -1408,7 +1409,11 @@ export default function ConsultantPortal() {
           )}
 
           {/* ════════ SURVEY ════════ */}
-          {screen === 'survey' && (
+          {screen === 'survey' && <SurveyManagementPage />}
+
+          {/* Legacy single-survey screen retained temporarily for the dashboard
+              and analytics extraction cleanup, but it is no longer rendered. */}
+          {false && screen === 'survey' && (
             <div>
               <div className="page-hero">
                 <div className="hero-title">Survey Builder</div>
