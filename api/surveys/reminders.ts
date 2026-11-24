@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto'
+
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyReminderEmail } from '../email/postmark.js'
@@ -84,6 +86,13 @@ function bearerToken(request: Request): string | null {
   return match?.[1]?.trim() || null
 }
 
+function secureEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  return leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+}
+
 async function requireSurveyManager(request: Request) {
   const token = bearerToken(request)
   if (!token) {
@@ -94,6 +103,15 @@ async function requireSurveyManager(request: Request) {
   }
 
   const admin = createAdminClient()
+  const cronSecret = env('CRON_SECRET')
+  if (cronSecret && secureEqual(token, cronSecret)) {
+    return {
+      ok: true as const,
+      admin,
+      profile: { role: 'superadmin', active: true, org_id: null },
+    }
+  }
+
   const {
     data: { user },
     error: authError,
@@ -150,7 +168,7 @@ function publicAssetUrl(
   return admin.storage.from(bucket).getPublicUrl(path).data.publicUrl
 }
 
-async function route(request: Request): Promise<Response> {
+export async function route(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed.' }, 405)
   }
