@@ -1165,7 +1165,7 @@ export default function ConsultantPortal() {
     try {
       const result = await sendReminders()
       if (result.sent === 0 && result.failed === 0) {
-        setReminderMsg('No pending respondents to remind.')
+        setReminderMsg('No pending users to remind.')
       } else {
         const details = [
           `${result.sent} reminder${result.sent !== 1 ? 's' : ''} sent`,
@@ -1389,8 +1389,8 @@ export default function ConsultantPortal() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {[
                       { label: 'Build Survey', desc: 'Add or edit questions', action: () => setScreen('survey'), disabled: false },
-                      { label: 'Add Respondents', desc: 'Invite employees to participate', action: () => setScreen('survey'), disabled: false },
-                      { label: 'Send Reminders', desc: 'Nudge non-respondents', action: handleSendReminders, disabled: !isLive || totalPending === 0 },
+                      { label: 'Add Users', desc: 'Invite users to participate', action: () => setScreen('survey'), disabled: false },
+                      { label: 'Send Reminders', desc: 'Nudge users who have not responded', action: handleSendReminders, disabled: !isLive || totalPending === 0 },
                       { label: isLive ? 'Stop Survey' : isDraft ? 'Launch Survey' : isScheduled ? 'Return to Draft' : 'Reopen Survey', desc: isLive ? 'Manually close' : isDraft ? 'Make live' : isScheduled ? 'Edit before launch' : 'Reopen as draft', action: isLive ? handleStop : isDraft ? handleLaunch : handleReopen, disabled: !survey },
                       { label: 'View Analytics', desc: 'Per-question analysis', action: () => setScreen('analytics'), disabled: responses.length === 0 },
                     ].map(item => (
@@ -1409,12 +1409,12 @@ export default function ConsultantPortal() {
                 </div>
               </div>
 
-              {/* Respondents table */}
+              {/* Survey users table */}
               <div className="card">
-                <div className="section-title mb-16">Respondents</div>
+                <div className="section-title mb-16">Users</div>
                 {respondents.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text3)', fontSize: 13 }}>
-                    No respondents yet. Go to <button onClick={() => setScreen('survey')} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: 0 }}>Survey</button> to add employees.
+                    No users have been assigned to this survey yet. Go to <button onClick={() => setScreen('survey')} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: 0 }}>Surveys</button> to add users.
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>

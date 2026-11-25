@@ -1,6 +1,6 @@
 # CultureXe Platform Architecture and Roadmap
 
-Last updated: 23 November 2026
+Last updated: 25 November 2026
 
 ## Purpose
 
@@ -461,19 +461,65 @@ Managed backup status confirmed on 20 November 2026:
 
 ## Current implementation priority
 
-The immediate implementation order was revised on 20 November 2026. Build the standalone management structure before adding the full multi-organisation and multi-survey orchestration or wiring the Postmark senders:
+The Jira export dated 25 November 2026 contains 23 issues: 1 Done, 6 In Review and 16 To Do. Jira remains the authoritative status source. Repository implementation notes do not change an issue's Jira status automatically.
 
-1. Standalone Organisation CRUD.
-2. Standalone User CRUD.
-3. Split Surveys, Survey Builder, Survey Controls and Analytics into standalone tabs and modules.
-4. Add organisation memberships, global organisation selection and organisation-scoped permissions.
-5. Add multi-survey listing, survey selection, routes and employee survey assignments.
-6. Complete role enforcement and RLS before multi-client production access.
-7. Implement CXW-7 reminders and CXW-8 completion receipts using the selected organisation and survey IDs.
+Execution order follows these rules:
 
-Even before the selection contexts exist, standalone modules must accept explicit `organisationId` and `surveyId` inputs. Do not hard-code DBN or load the newest survey inside a presentation component. This keeps the base reusable when multi-organisation and multi-survey orchestration is introduced.
+1. Higher Jira priority comes before lower Jira priority.
+2. Within the same priority, complete the quickest well-defined work first.
+3. Validate work already in review before starting another large feature.
+4. A dependency may move prerequisite work ahead of a dependent feature.
+5. `XS`, `S`, `M`, `L` and `XL` are relative implementation sizes, not time commitments.
 
-The Postmark templates have been created and are ready for the later email integration phase.
+### Done
+
+| Order | Issue | Priority | Item |
+| ---: | --- | --- | --- |
+| 1 | CXW-1 | High | Forgot-password functionality. |
+
+### In Review acceptance queue
+
+| Order | Issue | Priority | Size | Acceptance focus |
+| ---: | --- | --- | --- | --- |
+| 1 | CXW-2 | High | XS | Confirm password visibility works on sign-in, sign-up and password fields without exposing values by default. |
+| 2 | CXW-6 | High | L | Validate organisation CRUD, user scoping, global organisation selection, multiple surveys and cross-organisation isolation. |
+| 3 | CXW-9 | Medium | XS | Reconcile respondent, started and submitted counts against database rows for more than one survey and organisation. |
+| 4 | CXW-7 | Medium | S | Send reminders only to incomplete respondents, block closed surveys and confirm actual successful-send totals. |
+| 5 | CXW-8 | Medium | S | Confirm exactly one receipt is sent after a successful submission and retries do not duplicate it. |
+| 6 | CXW-3 | Low | M | Validate the sidebar profile location, imported employee fields, employee read-only behaviour and profile-correction support path. |
+
+### To Do execution queue
+
+| Order | Issue | Priority | Size | Implementation focus and dependency |
+| ---: | --- | --- | --- | --- |
+| 1 | CXW-10 | Medium | XS | Replace remaining user-facing `Respondent` labels with `Users` where the screen lists user accounts. Preserve respondent terminology where it specifically means a survey participant record. |
+| 2 | CXW-15 | Medium | XS | Re-test the implemented date-aware survey status and manual stop behaviour, then move the issue to review if acceptance passes. |
+| 3 | CXW-5 | Medium | S | Keep the Likert average and display the normalised percentage as `((average - 1) / 4) * 100`. Add boundary tests for averages 1, 3 and 5. |
+| 4 | CXW-11 | Medium | S | Add ascending and descending sorting to each participant table column while preserving active filters. |
+| 5 | CXW-12 | Medium | S | Export the filtered participant dashboard dataset to Excel and PDF with organisation and survey context. |
+| 6 | CXW-13 | Medium | S | Export raw and partial survey-response data with question, respondent and survey identifiers permitted for the requesting role. |
+| 7 | CXW-22 | Medium | XS discovery, build TBD | Define the bug-report fields, recipient, attachments, audit trail and notification workflow before estimating implementation. |
+| 8 | CXW-19 | Medium | M | Record first survey start, final submission and elapsed completion time. This is a prerequisite for CXW-20. |
+| 9 | CXW-14 | Medium | M | Preserve draft or partial answers and include them in authorised analytics and exports after the survey closes. |
+| 10 | CXW-16 | Medium | M-L | Record unique and repeat survey accesses separately from starts and completions. This supplies engagement data to CXW-21. |
+| 11 | CXW-18 | Medium | L | Add organisation-safe analysis filters for department, branch, employment level and other approved demographic fields. Enforce minimum reporting-group sizes. |
+| 12 | CXW-20 | Medium | L | Calculate average completion time, open-text response length and agreed quality indicators using CXW-19 timing data. |
+| 13 | CXW-21 | Medium | L | Build engagement analytics for sent, opened, accessed, started, completed, abandoned and repeat-access events. Depends on CXW-7, CXW-8 and CXW-16 event data. |
+| 14 | CXW-23 | Medium | L-XL | Replace authenticator-based client access with the approved email authentication flow without weakening super-administrator security. Requires a security and migration plan. |
+| 15 | CXW-17 | Medium | XL | Add AI analysis only after analytics, demographic filtering, anonymisation and access controls are stable. |
+| 16 | CXW-4 | Lowest | XL | Define whether troubleshooting support and culture feedback are separate products before building chatbot functionality. |
+
+### Architecture work that remains mandatory
+
+The issue queue does not remove the following platform prerequisites:
+
+1. Complete organisation memberships and organisation-scoped permissions.
+2. Complete explicit survey selection and employee survey assignments.
+3. Complete role enforcement and RLS before multi-client production access.
+4. Add automated cross-organisation access tests.
+5. Keep backend modules explicit about `organisationId` and `surveyId`; do not hard-code DBN or load the newest survey inside presentation components.
+
+The Postmark templates and initial senders exist. First-party email analytics remain deferred until the client-required workflows above are accepted.
 
 ### Phase 1 Foundation
 
@@ -545,6 +591,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-7 | Implemented, acceptance deferred | Sends Postmark reminders only to incomplete invited respondents, records successful sends in `reminded_at`, and blocks non-live or closed surveys. End-to-end acceptance waits for organisation and multi-survey selection. |
 | CXW-8 | Implemented, acceptance deferred | A secret-protected database webhook sends an idempotent Postmark receipt after a new response is committed. End-to-end acceptance waits for organisation and multi-survey selection. |
 | CXW-9 | Implemented, needs acceptance | Response counts use actual survey respondents and response rows. |
+| CXW-10 | Implemented, needs acceptance | The consultant dashboard labels its participant account list and related quick actions as Users. Survey-specific records and analytics retain respondent terminology where it remains accurate. |
 | CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
 | CXW-15 | Implemented, needs acceptance | Expired live surveys are treated as closed and manual-stop behaviour is clearer. |
 
@@ -558,6 +605,15 @@ These are implementation notes and do not change Jira statuses automatically.
 - Required retention rules for respondent identities, responses and email delivery records.
 
 ## Change log
+
+### 25 November 2026
+
+- Reconciled the roadmap with the 23-item Jira export.
+- Recorded 1 Done, 6 In Review and 16 To Do issues.
+- Added an acceptance queue ordered by Jira priority and relative implementation size.
+- Added a To Do execution queue ordered by Jira priority, quickest delivery and feature dependencies.
+- Kept mandatory multi-organisation security and RLS work separate from user-facing Jira task ordering.
+- Implemented CXW-10 dashboard terminology by changing the participant account list and related quick actions from Respondents to Users while preserving survey-specific respondent terminology.
 
 ### 23 November 2026
 
