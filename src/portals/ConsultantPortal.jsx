@@ -12,7 +12,7 @@ import ConsultantSidebar from '../features/navigation/components/ConsultantSideb
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
 import SurveyTemplatesPage from '../features/survey-templates/pages/SurveyTemplatesPage'
-import SurveyUsersTable from '../features/survey/components/SurveyUsersTable'
+import SurveyUsersTable, { sortSurveyUsers } from '../features/survey/components/SurveyUsersTable'
 import UsersPage from '../features/users/pages/UsersPage'
 import PercentageBar from '../features/analytics/components/PercentageBar'
 import ScoreBar from '../features/analytics/components/ScoreBar'
@@ -106,15 +106,15 @@ async function downloadXLSX(rows, filename) {
 
 // Builds a real (text/vector) PDF using jsPDF + autotable — selectable text,
 // not an image snapshot. `buildPdf(doc, autoTable)` draws the content.
-async function exportToPDF(buildPdf, filename) {
+async function exportToPDF(buildPdf, filename, orientation = 'portrait') {
   const { default: jsPDF }     = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
-  const doc = new jsPDF('p', 'mm', 'a4')
+  const doc = new jsPDF(orientation === 'landscape' ? 'l' : 'p', 'mm', 'a4')
   buildPdf(doc, autoTable)
   doc.save(filename)
 }
 
-function ExportMenu({ filename = 'export', getRows, buildPdf }) {
+function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = 'portrait' }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef(null)
@@ -131,7 +131,7 @@ function ExportMenu({ filename = 'export', getRows, buildPdf }) {
       setBusy(true)
       if (kind === 'pdf') {
         if (!buildPdf) { alert('Nothing to export yet.'); return }
-        await exportToPDF(buildPdf, `${filename}-${date}.pdf`)
+        await exportToPDF(buildPdf, `${filename}-${date}.pdf`, pdfOrientation)
         return
       }
       const rows = getRows ? getRows() : []
@@ -767,6 +767,10 @@ export default function ConsultantPortal() {
 
   const [screen, setScreen] = useState('dashboard')
   const [dashboardTab, setDashboardTab] = useState('overview')
+  const [surveyUserSort, setSurveyUserSort] = useState({
+    key: 'firstName',
+    direction: 'asc',
+  })
   const isSuperAdmin = role === 'superadmin' || role === 'super_admin'
 
   useEffect(() => {
@@ -975,17 +979,60 @@ export default function ConsultantPortal() {
     }
   })
 
+  const sortedSurveyUserRows = sortSurveyUsers(surveyUserRows, surveyUserSort)
+  const selectedOrganisation = organisations.find(({ id }) => id === organisationScope)
+  const organisationContext = organisationScope === ALL_ORGANISATIONS
+    ? 'All organisations'
+    : selectedOrganisation?.name || 'Selected organisation'
+  const surveyContext = survey?.title || 'No survey selected'
+  const dashboardExportFilename = `${organisationContext}-${surveyContext}-users`
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+
+  function exportedOrganisationName(row) {
+    const matchingProfile = scopedUsers.find(user => user.email === row.email)
+    const organisationId = matchingProfile?.org_id || survey?.org_id
+    return organisations.find(({ id }) => id === organisationId)?.name || organisationContext
+  }
+
+  function exportedStatus(status) {
+    if (status === 'completed') return 'Completed'
+    if (status === 'in_progress') return 'In progress'
+    return 'Not started'
+  }
+
+  function exportedTiming(timing) {
+    if (timing === 'early') return 'Early'
+    if (timing === 'on_time') return 'On time'
+    if (timing === 'late') return 'Late'
+    return ''
+  }
+
+  function exportedDuration(minutes) {
+    if (minutes == null) return ''
+    if (minutes < 1) return '< 1 min'
+    if (minutes < 60) return `${Math.round(minutes)} min`
+    const hours = Math.floor(minutes / 60)
+    const remainder = Math.round(minutes % 60)
+    return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`
+  }
+
   // ── Export row builders ──────────────────────────────────
-  // Dashboard export = the participation summary + respondent list.
+  // Users export deliberately uses the same ordered rows shown in the table.
   function buildDashboardRows() {
-    return respondents.map(r => ({
-      Name:           r.name || '',
-      Email:          r.email || '',
-      Department:     resolveDept(r) || '',
-      Position:       r.job_title || '',
-      Responded:      hasResponded(r) ? 'Yes' : 'No',
-      Timing:         hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end) || '') : '',
-      'Submitted At': r.submitted_at ? new Date(r.submitted_at).toLocaleString('en-ZA') : '',
+    return sortedSurveyUserRows.map(row => ({
+      Organisation:     exportedOrganisationName(row),
+      Survey:           surveyContext,
+      'First Name':     row.firstName,
+      Surname:          row.surname,
+      Email:            row.source === 'open_link' ? '' : row.email,
+      Source:           row.source === 'open_link' ? 'Open link' : 'Invited',
+      Department:       row.department,
+      Position:         row.position,
+      'Survey Status':  exportedStatus(row.status),
+      'Completion Time': exportedDuration(row.completionMinutes),
+      Timing:           exportedTiming(row.timing),
+      'Submitted At':   row.submittedAt ? new Date(row.submittedAt).toLocaleString('en-ZA') : '',
     }))
   }
 
@@ -1037,7 +1084,7 @@ export default function ConsultantPortal() {
   }
 
   function buildDashboardPdf(doc, autoTable) {
-    pdfHeader(doc, 'Dashboard — Participation Summary')
+    pdfHeader(doc, `Users — ${organisationContext} — ${surveyContext}`)
     autoTable(doc, {
       startY: 33,
       head: [['Registered', 'Completed Survey', 'Started — Not Done', 'Participation']],
@@ -1047,9 +1094,26 @@ export default function ConsultantPortal() {
     const rows = buildDashboardRows()
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 8,
-      head: [['Name', 'Email', 'Department', 'Position', 'Responded', 'Timing', 'Submitted At']],
-      body: rows.map(r => [r.Name, r.Email, r.Department, r.Position, r.Responded, r.Timing, r['Submitted At']]),
-      styles: { fontSize: 7.5, cellPadding: 1.5 }, headStyles: { fillColor: NAVY },
+      head: [[
+        'Organisation', 'Survey', 'First Name', 'Surname', 'Email', 'Source',
+        'Department', 'Position', 'Status', 'Completion', 'Timing', 'Submitted At',
+      ]],
+      body: rows.map(row => [
+        row.Organisation,
+        row.Survey,
+        row['First Name'],
+        row.Surname,
+        row.Email,
+        row.Source,
+        row.Department,
+        row.Position,
+        row['Survey Status'],
+        row['Completion Time'],
+        row.Timing,
+        row['Submitted At'],
+      ]),
+      styles: { fontSize: 6.2, cellPadding: 1.2, overflow: 'linebreak' },
+      headStyles: { fillColor: NAVY },
       didDrawPage: () => pdfHeaderRepeat(doc),
     })
   }
@@ -1276,9 +1340,6 @@ export default function ConsultantPortal() {
           {/* ════════ DASHBOARD ════════ */}
           {screen === 'dashboard' && (
             <div ref={dashboardRef}>
-              <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                <ExportMenu filename="DBN-Dashboard" getRows={buildDashboardRows} buildPdf={buildDashboardPdf} />
-              </div>
               <div className="page-hero">
                 <div className="hero-title">Welcome back, {displayName}</div>
                 <div className="hero-sub">
@@ -1441,10 +1502,28 @@ export default function ConsultantPortal() {
               )}
 
               {dashboardTab === 'users' && (
-                <SurveyUsersTable
-                  rows={surveyUserRows}
-                  onAddUsers={() => setScreen('survey')}
-                />
+                <>
+                  <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <div className="section-title">Survey users</div>
+                      <div className="mt-1 text-sm text-[#8A9BB0]">
+                        {organisationContext} · {surveyContext} · {surveyUserRows.length} user{surveyUserRows.length === 1 ? '' : 's'}
+                      </div>
+                    </div>
+                    <ExportMenu
+                      filename={dashboardExportFilename || 'survey-users'}
+                      getRows={buildDashboardRows}
+                      buildPdf={buildDashboardPdf}
+                      pdfOrientation="landscape"
+                    />
+                  </div>
+                  <SurveyUsersTable
+                    rows={surveyUserRows}
+                    sort={surveyUserSort}
+                    onSortChange={setSurveyUserSort}
+                    onAddUsers={() => setScreen('survey')}
+                  />
+                </>
               )}
             </div>
           )}

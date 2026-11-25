@@ -20,15 +20,22 @@ export type SurveyUserTableRow = {
   submittedAt: string | null
 }
 
-type SortKey = keyof Omit<SurveyUserTableRow, 'id'>
-type SortDirection = 'asc' | 'desc'
+export type SurveyUserSortKey = keyof Omit<SurveyUserTableRow, 'id'>
+export type SurveyUserSortDirection = 'asc' | 'desc'
+
+export type SurveyUserSort = {
+  key: SurveyUserSortKey
+  direction: SurveyUserSortDirection
+}
 
 type SurveyUsersTableProps = {
   rows: SurveyUserTableRow[]
   onAddUsers: () => void
+  sort: SurveyUserSort
+  onSortChange: (sort: SurveyUserSort) => void
 }
 
-const columns: Array<{ key: SortKey; label: string }> = [
+const columns: Array<{ key: SurveyUserSortKey; label: string }> = [
   { key: 'firstName', label: 'First name' },
   { key: 'surname', label: 'Surname' },
   { key: 'email', label: 'Email' },
@@ -51,6 +58,19 @@ function compareValues(left: unknown, right: unknown): number {
   return String(left).localeCompare(String(right), 'en-ZA', {
     numeric: true,
     sensitivity: 'base',
+  })
+}
+
+export function sortSurveyUsers(
+  rows: SurveyUserTableRow[],
+  sort: SurveyUserSort,
+): SurveyUserTableRow[] {
+  const direction = sort.direction === 'asc' ? 1 : -1
+
+  return [...rows].sort((left, right) => {
+    const comparison = compareValues(left[sort.key], right[sort.key])
+    if (comparison !== 0) return comparison * direction
+    return compareValues(left.email, right.email)
   })
 }
 
@@ -92,9 +112,9 @@ function timingLabel(timing: SurveyUserTableRow['timing']): string {
 export default function SurveyUsersTable({
   rows,
   onAddUsers,
+  sort,
+  onSortChange,
 }: SurveyUsersTableProps) {
-  const [sortKey, setSortKey] = useState<SortKey>('firstName')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const scrollContainer = useRef<HTMLDivElement>(null)
   const dragState = useRef({
     active: false,
@@ -105,22 +125,20 @@ export default function SurveyUsersTable({
   })
   const [dragging, setDragging] = useState(false)
 
-  const sortedRows = useMemo(() => {
-    const direction = sortDirection === 'asc' ? 1 : -1
-    return [...rows].sort((left, right) => {
-      const comparison = compareValues(left[sortKey], right[sortKey])
-      if (comparison !== 0) return comparison * direction
-      return compareValues(left.email, right.email)
-    })
-  }, [rows, sortDirection, sortKey])
+  const sortedRows = useMemo(
+    () => sortSurveyUsers(rows, sort),
+    [rows, sort],
+  )
 
-  function toggleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')
+  function toggleSort(key: SurveyUserSortKey) {
+    if (key === sort.key) {
+      onSortChange({
+        key,
+        direction: sort.direction === 'asc' ? 'desc' : 'asc',
+      })
       return
     }
-    setSortKey(key)
-    setSortDirection('asc')
+    onSortChange({ key, direction: 'asc' })
   }
 
   function startDragging(event: PointerEvent<HTMLDivElement>) {
@@ -200,10 +218,10 @@ export default function SurveyUsersTable({
           <thead className="bg-[#F7F9FC]">
             <tr>
               {columns.map((column) => {
-                const active = column.key === sortKey
+                const active = column.key === sort.key
                 const Icon = !active
                   ? ArrowUpDown
-                  : sortDirection === 'asc'
+                  : sort.direction === 'asc'
                     ? ArrowUp
                     : ArrowDown
 
@@ -213,7 +231,7 @@ export default function SurveyUsersTable({
                       type="button"
                       onClick={() => toggleSort(column.key)}
                       className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-bold uppercase tracking-[0.08em] text-[#7890AD] transition hover:text-[#0D1F3C]"
-                      aria-label={`Sort ${column.label} ${active && sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+                      aria-label={`Sort ${column.label} ${active && sort.direction === 'asc' ? 'descending' : 'ascending'}`}
                     >
                       {column.label}
                       <Icon className={`size-3.5 ${active ? 'text-[#1BBFB0]' : 'text-[#A5B2C2]'}`} />
