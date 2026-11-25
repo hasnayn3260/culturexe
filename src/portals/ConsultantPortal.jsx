@@ -16,6 +16,7 @@ import SurveyUsersTable, { sortSurveyUsers } from '../features/survey/components
 import UsersPage from '../features/users/pages/UsersPage'
 import PercentageBar from '../features/analytics/components/PercentageBar'
 import ScoreBar from '../features/analytics/components/ScoreBar'
+import AnalysisScopeFilter from '../features/analytics/components/AnalysisScopeFilter'
 import { calculateLikertMetrics } from '../features/analytics/utils/likertScore'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
@@ -62,6 +63,15 @@ function scoreColor(s) {
   if (s >= 50) return '#7A6030'
   return '#9A3825'
 }
+
+const ANALYSIS_GROUP_FIELDS = [
+  { key: 'department', label: 'Department' },
+  { key: 'branch', label: 'Team / Branch' },
+  { key: 'position', label: 'Grade / Employment Level' },
+  { key: 'location_site', label: 'Location / Site' },
+  { key: 'job_title', label: 'Job Title' },
+  { key: 'tenure', label: 'Tenure' },
+]
 
 // ── Export helpers (CSV / Excel / PDF) ─────────────────────
 
@@ -547,9 +557,8 @@ function CSVImportModal({ onImport, onClose }) {
 
 // ── Analytics: per-question card ───────────────────────────
 
-function QuestionAnalyticsCard({ q, responses, filterDept }) {
-  const filtered = filterDept ? responses.filter(r => r._dept === filterDept) : responses
-  const rawAnswers = filtered.map(r => r.answers?.[q.id]).filter(v => v != null)
+function QuestionAnalyticsCard({ q, responses }) {
+  const rawAnswers = responses.map(r => r.answers?.[q.id]).filter(v => v != null)
   const type = q.question_type
 
   function scoreColor(s) {
@@ -874,7 +883,8 @@ export default function ConsultantPortal() {
   const [openLinkCopied, setOpenLinkCopied] = useState(false)
 
   // Analytics filter
-  const [filterDept, setFilterDept]   = useState('')
+  const [analysisGroupField, setAnalysisGroupField] = useState('')
+  const [analysisGroupValue, setAnalysisGroupValue] = useState('')
 
   // Settings
   const [showAddUser, setShowAddUser] = useState(false)
@@ -891,6 +901,11 @@ export default function ConsultantPortal() {
       })
     }
   }, [survey])
+
+  useEffect(() => {
+    setAnalysisGroupField('')
+    setAnalysisGroupValue('')
+  }, [organisationScope, survey?.id])
 
   // The stored status can remain `live` after the scheduled closing time. Use
   // the dates as the authority so the UI never presents an expired survey as
@@ -978,6 +993,16 @@ export default function ConsultantPortal() {
     (q.text?.toLowerCase().includes('department') || q.dimension?.toLowerCase().includes('department'))
   )
   const responseByRespId = new Map(reportableResponses.map(resp => [resp.respondent_id, resp]))
+  const profileByEmail = new Map(
+    scopedUsers
+      .filter(user => user.email)
+      .map(user => [user.email.trim().toLowerCase(), user]),
+  )
+
+  function profileForRespondent(respondent) {
+    const email = respondent?.email?.trim().toLowerCase()
+    return email ? profileByEmail.get(email) : null
+  }
 
   // Department for a respondent: prefer what they actually typed/selected on the
   // "Which division or department do you work in?" survey question, then their
@@ -988,8 +1013,23 @@ export default function ConsultantPortal() {
     const resp = responseByRespId.get(r.id)
     const fromAnswer = deptQuestion ? (resp?.answers?.[deptQuestion.id] ?? null) : null
     if (fromAnswer) return fromAnswer
-    const respondentProfile = scopedUsers.find(u => u.email === r.email)
+    const respondentProfile = profileForRespondent(r)
     return respondentProfile?.department || r.department || null
+  }
+
+  function resolveAnalysisGroup(respondent, field) {
+    if (!respondent || !field) return null
+    const respondentProfile = profileForRespondent(respondent)
+    const values = {
+      department: resolveDept(respondent),
+      branch: respondentProfile?.branch,
+      position: respondentProfile?.position || respondent.job_grade,
+      location_site: respondentProfile?.location_site,
+      job_title: respondentProfile?.job_title || respondent.job_title,
+      tenure: respondent.tenure,
+    }
+    const value = values[field]
+    return typeof value === 'string' && value.trim() ? value.trim() : null
   }
 
   const enrichedResponses = reportableResponses.map(resp => {
@@ -999,8 +1039,47 @@ export default function ConsultantPortal() {
       _dept:  resolveDept(r),
       _title: r?.job_title,
       _name:  r?.name,
+      _groupValues: Object.fromEntries(
+        ANALYSIS_GROUP_FIELDS.map(({ key }) => [key, resolveAnalysisGroup(r, key)]),
+      ),
     }
   })
+
+  const analysisGroupOptions = analysisGroupField
+    ? [...new Set(
+        respondents
+          .map(respondent => resolveAnalysisGroup(respondent, analysisGroupField))
+          .filter(Boolean),
+      )]
+        .sort((left, right) => left.localeCompare(right))
+        .map(value => ({
+          value,
+          assignedCount: respondents.filter(
+            respondent => resolveAnalysisGroup(respondent, analysisGroupField) === value,
+          ).length,
+          responseCount: enrichedResponses.filter(
+            response => response._groupValues?.[analysisGroupField] === value,
+          ).length,
+        }))
+    : []
+
+  const analyticsScopeRespondents = analysisGroupField && analysisGroupValue
+    ? respondents.filter(
+        respondent => resolveAnalysisGroup(respondent, analysisGroupField) === analysisGroupValue,
+      )
+    : respondents
+  const analyticsScopeRespondentIds = new Set(
+    analyticsScopeRespondents.map(respondent => respondent.id),
+  )
+  const analyticsScopeResponses = analysisGroupField && analysisGroupValue
+    ? enrichedResponses.filter(response => analyticsScopeRespondentIds.has(response.respondent_id))
+    : enrichedResponses
+  const analysisGroupLabel = ANALYSIS_GROUP_FIELDS.find(
+    ({ key }) => key === analysisGroupField,
+  )?.label || ''
+  const analysisScopeLabel = analysisGroupField && analysisGroupValue
+    ? `${analysisGroupLabel}: ${analysisGroupValue}`
+    : 'Organisation-wide'
 
   const timingCounts = respondents.filter(hasResponded).reduce((acc, r) => {
     const t = r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)
@@ -1055,6 +1134,70 @@ export default function ConsultantPortal() {
     const metrics = computeMetrics(answers)
     return { dept, total, responded, answerBased, score: metrics ? Math.round(metrics.percentage) : null, average: metrics?.average ?? null }
   })
+
+  const analyticsOverallMetrics = (() => {
+    const answers = analyticsScopeResponses.flatMap(response =>
+      likertQs.map(question => response.answers?.[question.id]).filter(value => value != null),
+    )
+    return computeMetrics(answers)
+  })()
+  const analyticsOverallScore = analyticsOverallMetrics
+    ? Math.round(analyticsOverallMetrics.percentage)
+    : null
+  const analyticsDimensionScores = [...new Set(
+    likertQs.map(question => question.dimension).filter(Boolean),
+  )].map(dimension => {
+    const dimensionQuestions = likertQs.filter(question => question.dimension === dimension)
+    const answers = analyticsScopeResponses.flatMap(response =>
+      dimensionQuestions
+        .map(question => response.answers?.[question.id])
+        .filter(value => value != null),
+    )
+    const metrics = computeMetrics(answers)
+    return {
+      dim: dimension,
+      score: metrics ? Math.round(metrics.percentage) : null,
+      average: metrics?.average ?? null,
+      questionCount: dimensionQuestions.length,
+    }
+  }).sort((left, right) => (right.score ?? -1) - (left.score ?? -1))
+
+  const analyticsGroupScores = analysisGroupField
+    ? analysisGroupOptions
+        .filter(({ value }) => !analysisGroupValue || value === analysisGroupValue)
+        .map(({ value, assignedCount, responseCount }) => {
+          const groupResponses = enrichedResponses.filter(
+            response => response._groupValues?.[analysisGroupField] === value,
+          )
+          const answers = groupResponses.flatMap(response =>
+            likertQs.map(question => response.answers?.[question.id]).filter(answer => answer != null),
+          )
+          const metrics = computeMetrics(answers)
+          return {
+            label: value,
+            total: assignedCount,
+            responded: responseCount,
+            score: metrics ? Math.round(metrics.percentage) : null,
+            average: metrics?.average ?? null,
+          }
+        })
+    : deptScores.map(({ dept, total, responded, score, average }) => ({
+        label: dept,
+        total,
+        responded,
+        score,
+        average,
+        answerBased: Boolean(deptQuestion),
+      }))
+  const analyticsSubmittedCount = analyticsScopeResponses.filter(
+    response => !response._isPartial,
+  ).length
+  const analyticsIncompleteCount = analyticsScopeResponses.filter(
+    response => response._isPartial,
+  ).length
+  const analyticsCompletionPct = analyticsScopeRespondents.length > 0
+    ? Math.round((analyticsSubmittedCount / analyticsScopeRespondents.length) * 100)
+    : 0
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
 
@@ -1164,18 +1307,15 @@ export default function ConsultantPortal() {
     }))
   }
 
-  const analyticsExportResponses = filterDept
-    ? enrichedResponses.filter(response => response._dept === filterDept)
-    : enrichedResponses
-  const analyticsExportRespondents = filterDept
-    ? respondents.filter(respondent => resolveDept(respondent) === filterDept)
-    : respondents
+  const analyticsExportResponses = analyticsScopeResponses
+  const analyticsExportRespondents = analyticsScopeRespondents
 
   // Raw analytics export = one row per submitted response plus, after closure,
   // one row per saved partial response. Each question remains its own column.
   function buildAnalyticsRows() {
     return analyticsExportResponses.map(resp => {
       const r = respondents.find(rd => rd.id === resp.respondent_id)
+      const matchingProfile = profileForRespondent(r)
       const row = {
         'Organisation ID': survey?.org_id || '',
         Organisation:      organisationContext,
@@ -1188,6 +1328,12 @@ export default function ConsultantPortal() {
         Email:          r?.email || '',
         Department:     resp._dept || '',
         Position:       resp._title || '',
+        'Team / Branch': matchingProfile?.branch || '',
+        'Employment Level': matchingProfile?.position || r?.job_grade || '',
+        'Location / Site': matchingProfile?.location_site || '',
+        Tenure: r?.tenure || '',
+        'Grouping Parameter': analysisGroupLabel || 'Organisation-wide',
+        'Selected Group': analysisGroupValue || '',
         'Access Count': r?.access_count || 0,
         'Repeat Accesses': Math.max(0, (r?.access_count || 0) - 1),
         'Access Outcome': resp._isPartial ? 'Not completed' : 'Completed',
@@ -1275,7 +1421,9 @@ export default function ConsultantPortal() {
     return [
       { Metric: 'Organisation', Value: organisationContext },
       { Metric: 'Survey', Value: surveyContext },
-      { Metric: 'Department filter', Value: filterDept || 'All departments' },
+      { Metric: 'Analysis scope', Value: analysisScopeLabel },
+      { Metric: 'Grouping parameter', Value: analysisGroupLabel || 'None' },
+      { Metric: 'Selected group', Value: analysisGroupValue || 'All groups' },
       { Metric: 'Assigned users', Value: assigned },
       { Metric: 'Submitted responses', Value: submitted },
       { Metric: 'Incomplete responses', Value: partial },
@@ -1309,12 +1457,12 @@ export default function ConsultantPortal() {
   }
 
   function buildDepartmentExportRows() {
-    return deptScores
-      .filter(({ dept }) => !filterDept || dept === filterDept)
-      .map(({ dept, total, responded, score, average }) => ({
+    return analyticsGroupScores
+      .map(({ label, total, responded, score, average }) => ({
         Organisation: organisationContext,
         Survey: surveyContext,
-        Department: dept,
+        'Grouping Parameter': analysisGroupLabel || 'Department',
+        Group: label,
         Assigned: total,
         Responded: responded,
         Participation: total > 0 ? `${Math.round((responded / total) * 100)}%` : '',
@@ -1410,7 +1558,7 @@ export default function ConsultantPortal() {
     const departmentRows = buildDepartmentExportRows()
     const rawRows = buildAnalyticsRows()
 
-    pdfHeader(doc, `Analytics — ${organisationContext} — ${filterDept || 'All departments'}`)
+    pdfHeader(doc, `Analytics — ${organisationContext} — ${analysisScopeLabel}`)
     autoTable(doc, {
       startY: 33,
       head: [['Metric', 'Value']],
@@ -1468,7 +1616,7 @@ export default function ConsultantPortal() {
 
     if (includeRawResponses && rawRows.length) {
       doc.addPage()
-      pdfHeader(doc, `Raw responses — ${organisationContext} — ${filterDept || 'All departments'}`)
+      pdfHeader(doc, `Raw responses — ${organisationContext} — ${analysisScopeLabel}`)
       const rawHeaders = Object.keys(rawRows[0])
       autoTable(doc, {
         startY: 33,
@@ -2220,7 +2368,7 @@ export default function ConsultantPortal() {
             <div ref={analyticsRef}>
               <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
                 <ExportMenu
-                  filename={`${organisationContext}-${surveyContext}-analytics`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'survey-analytics'}
+                  filename={`${organisationContext}-${surveyContext}-${analysisScopeLabel}-analytics`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'survey-analytics'}
                   options={analyticsExportOptions}
                 />
               </div>
@@ -2237,64 +2385,66 @@ export default function ConsultantPortal() {
                 </div>
               ) : (
                 <>
+                  <AnalysisScopeFilter
+                    fields={ANALYSIS_GROUP_FIELDS}
+                    selectedField={analysisGroupField}
+                    selectedValue={analysisGroupValue}
+                    options={analysisGroupOptions}
+                    onFieldChange={setAnalysisGroupField}
+                    onValueChange={setAnalysisGroupValue}
+                  />
+
                   <div className="card mb-24" style={{ background: 'linear-gradient(135deg, #0D1F3C 0%, #0E3462 100%)', color: 'white', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, background: 'radial-gradient(circle, rgba(27,191,176,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
                     <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
                       {[
-                        { label: 'Submitted Responses', value: totalResponded },
-                        ...(isClosed && partialResponses.length > 0
-                          ? [{ label: 'Incomplete Responses', value: partialResponses.length }]
+                        { label: 'Analysis Scope', value: analysisScopeLabel },
+                        { label: 'Assigned Users', value: analyticsScopeRespondents.length },
+                        { label: 'Submitted Responses', value: analyticsSubmittedCount },
+                        ...(isClosed && analyticsIncompleteCount > 0
+                          ? [{ label: 'Incomplete Responses', value: analyticsIncompleteCount }]
                           : []),
-                        { label: 'Completion Rate', value: `${completionPct}%` },
-                        ...(overallMetrics ? [{ label: 'Likert Average', value: `${overallMetrics.average.toFixed(2)} / 5` }] : []),
-                        ...(overallScore != null ? [{ label: 'Overall Score', value: `${overallScore}%`, highlight: true }] : []),
+                        { label: 'Completion Rate', value: `${analyticsCompletionPct}%` },
+                        ...(analyticsOverallMetrics ? [{ label: 'Likert Average', value: `${analyticsOverallMetrics.average.toFixed(2)} / 5` }] : []),
+                        ...(analyticsOverallScore != null ? [{ label: 'Overall Score', value: `${analyticsOverallScore}%`, highlight: true }] : []),
                         { label: 'Questions', value: questions.length },
-                        ...(dimensionScores.length > 0 ? [{ label: 'Dimensions', value: dimensionScores.length }] : []),
+                        ...(analyticsDimensionScores.length > 0 ? [{ label: 'Dimensions', value: analyticsDimensionScores.length }] : []),
                       ].map(s => (
                         <div key={s.label} style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: 36, fontWeight: 800, color: s.highlight ? scoreColor(overallScore) : '#1BBFB0' }}>{s.value}</div>
+                          <div style={{ fontSize: s.label === 'Analysis Scope' ? 19 : 36, fontWeight: 800, color: s.highlight ? scoreColor(analyticsOverallScore) : '#1BBFB0' }}>{s.value}</div>
                           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {departments.length > 0 && (
-                    <div className="card mb-24">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--navy)', flexShrink: 0 }}>Filter by Department:</span>
-                        {['', ...departments].map(d => (
-                          <button key={d || 'all'} onClick={() => setFilterDept(d)} style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterDept === d ? 'var(--teal)' : 'var(--border)'}`, background: filterDept === d ? 'var(--teal-light)' : 'white', color: filterDept === d ? '#0A8A7E' : 'var(--text2)', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
-                            {d || 'All'}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Dept + Dimension summaries */}
-                  {(deptScores.length > 0 || dimensionScores.length > 0) && likertQs.length > 0 && (
+                  {/* Group + dimension summaries */}
+                  {(analyticsGroupScores.length > 0 || analyticsDimensionScores.length > 0) && likertQs.length > 0 && (
                     <div className="grid-2 mb-24">
-                      {deptScores.length > 0 && (
+                      {analyticsGroupScores.length > 0 && (
                         <div className="card">
-                          <div className="section-title mb-2">Score by Department</div>
+                          <div className="section-title mb-2">Score by {analysisGroupLabel || 'Department'}</div>
                           <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
-                            {deptQuestion ? <>Grouped by: <em>"{deptQuestion.text}"</em></> : 'Average Likert score · participation in brackets'}
+                            {analysisGroupField
+                              ? `Average Likert score for ${analysisGroupLabel.toLowerCase()} groups`
+                              : deptQuestion
+                                ? <>Grouped by: <em>"{deptQuestion.text}"</em></>
+                                : 'Average Likert score · participation in brackets'}
                           </div>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                             <thead>
                               <tr>
-                                <th style={{ textAlign: 'left', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>Department</th>
-                                <th style={{ textAlign: 'right', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>{deptQuestion ? 'Responses' : 'Participation'}</th>
+                                <th style={{ textAlign: 'left', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>{analysisGroupLabel || 'Department'}</th>
+                                <th style={{ textAlign: 'right', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>Participation</th>
                                 <th style={{ textAlign: 'right', padding: '6px 0', color: 'var(--text3)', fontWeight: 500, borderBottom: '1px solid var(--border)', fontSize: 11 }}>Score</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {[...deptScores].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(({ dept, total, responded, score, average, answerBased }) => {
+                              {[...analyticsGroupScores].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(({ label, total, responded, score, average, answerBased }) => {
                                 const pct = total > 0 ? Math.round((responded / total) * 100) : 0
                                 return (
-                                  <tr key={dept}>
-                                    <td style={{ padding: '9px 0', fontWeight: 600, color: 'var(--navy)', borderBottom: '1px solid var(--border)' }}>{dept}</td>
+                                  <tr key={label}>
+                                    <td style={{ padding: '9px 0', fontWeight: 600, color: 'var(--navy)', borderBottom: '1px solid var(--border)' }}>{label}</td>
                                     <td style={{ padding: '9px 0', textAlign: 'right', color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
                                       {answerBased
                                         ? <>{responded}</>
@@ -2312,11 +2462,11 @@ export default function ConsultantPortal() {
                         </div>
                       )}
 
-                      {dimensionScores.length > 0 && (
+                      {analyticsDimensionScores.length > 0 && (
                         <div className="card">
                           <div className="section-title mb-4">Score by Dimension</div>
                           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme · sorted high to low</div>
-                          {dimensionScores.map(({ dim, score, average, questionCount }) => (
+                          {analyticsDimensionScores.map(({ dim, score, average, questionCount }) => (
                             <div key={dim} style={{ marginBottom: 12 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                                 <div>
@@ -2337,7 +2487,7 @@ export default function ConsultantPortal() {
                   )}
 
                   {questions.map(q => (
-                    <QuestionAnalyticsCard key={q.id} q={q} responses={enrichedResponses} filterDept={filterDept} />
+                    <QuestionAnalyticsCard key={q.id} q={q} responses={analyticsScopeResponses} />
                   ))}
                 </>
               )}
