@@ -4,6 +4,7 @@ import { useOrganisations } from '../hooks/useOrganisations'
 import { useAssessments } from '../hooks/useAssessments'
 import { useReports } from '../hooks/useReports'
 import supabase from '../lib/supabaseClient'
+import PercentageBar from '../features/analytics/components/PercentageBar'
 
 const DEMO_SCORES = {
   purpose: 76, leadership: 62, innovation: 69, collaboration: 81,
@@ -299,9 +300,7 @@ export default function InsightsReport() {
                       </span>
                     </div>
                   </div>
-                  <div className="dim-bar-bg">
-                    <div className={`dim-bar ${dim.barClass}`} style={{ width: `${scores[dim.id]}%` }} />
-                  </div>
+                  <PercentageBar value={scores[dim.id]} fillClassName={dim.barClass} label={`${dim.name} score`} />
                 </div>
               ))}
             </div>

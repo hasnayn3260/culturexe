@@ -39,7 +39,7 @@ The immediate objective is to evolve the existing DBN-focused application into a
 
 - CXW-9: response counts now use actual respondents and unique submitted responses instead of a hard-coded expected total.
 - CXW-15: effective survey status now uses `live_start` and `live_end`; expired and malformed live surveys fail closed, open pages refresh their status automatically, and submission routes reject late responses.
-- CXW-15 database enforcement is included in `20261125120000_enforce_survey_response_window.sql`; run it in production before closing acceptance so direct Supabase inserts are also rejected outside the response window.
+- CXW-15 database enforcement from `20261125120000_enforce_survey_response_window.sql` has been applied in production and passed all 14 validation checks; direct Supabase inserts are rejected outside the response window.
 - Survey launching is blocked when the closing date is already in the past.
 - Manual survey stopping now explains that it closes the survey immediately and replaces the scheduled closing time.
 
@@ -494,8 +494,8 @@ Execution order follows these rules:
 | Order | Issue | Priority | Size | Implementation focus and dependency |
 | ---: | --- | --- | --- | --- |
 | 1 | CXW-10 | Medium | XS | Replace remaining user-facing `Respondent` labels with `Users` where the screen lists user accounts. Preserve respondent terminology where it specifically means a survey participant record. |
-| 2 | CXW-15 | Medium | XS | Apply the response-window RLS migration in production, then complete the final browser acceptance check and move the issue to review. |
-| 3 | CXW-5 | Medium | S | Keep the Likert average and display the normalised percentage as `((average - 1) / 4) * 100`. Add boundary tests for averages 1, 3 and 5. |
+| 2 | CXW-15 | Medium | XS | Complete the final browser acceptance check, then move the issue to review. The production RLS migration and all 14 SQL validation checks have passed. |
+| 3 | CXW-5 | Medium | XS acceptance | Confirm the displayed Likert average and normalised percentage in the browser for low, midpoint and high response sets. Automated boundary tests now pass. |
 | 4 | CXW-11 | Medium | S | Add ascending and descending sorting to each participant table column while preserving active filters. |
 | 5 | CXW-12 | Medium | S | Export the filtered participant dashboard dataset to Excel and PDF with organisation and survey context. |
 | 6 | CXW-13 | Medium | S | Export raw and partial survey-response data with question, respondent and survey identifiers permitted for the requesting role. |
@@ -595,8 +595,9 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-8 | Implemented, acceptance deferred | A secret-protected database webhook sends an idempotent Postmark receipt after a new response is committed. End-to-end acceptance waits for organisation and multi-survey selection. |
 | CXW-9 | Implemented, needs acceptance | Response counts use actual survey respondents and response rows. |
 | CXW-10 | Implemented, needs acceptance | The consultant dashboard labels its participant account list and related quick actions as Users. Survey-specific records and analytics retain respondent terminology where it remains accurate. |
+| CXW-5 | Implemented, browser acceptance pending | Likert analytics retain the raw 1–5 average and normalise percentages with `((average - 1) / 4) * 100`. Shared score and percentage chart components now serve consultant, legacy and client analytics views; all six automated calculation tests pass. |
 | CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
-| CXW-15 | Implemented, production SQL and acceptance pending | Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
+| CXW-15 | Implemented, browser acceptance pending | Production RLS and all 14 SQL validation checks passed. Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
 
 ## Open decisions
 
@@ -622,7 +623,11 @@ These are implementation notes and do not change Jira statuses automatically.
 - Blocked creation or activation of a live survey whose closing time has already passed.
 - Hardened invitation and reminder endpoints against missing, invalid and reversed survey dates.
 - Added production RLS migration `20261125120000_enforce_survey_response_window.sql` so direct anonymous or authenticated inserts cannot bypass the live response window.
+- Applied the CXW-15 response-window migration in production and confirmed all 14 function, permission, policy, relationship, timestamp and constraint validation checks pass.
 - Added a pre-production release gate requiring the current ESLint baseline of 43 errors and 3 warnings to be resolved or reviewed before go-live.
+- Corrected CXW-5 Likert normalisation so averages 1, 3 and 5 map to 0%, 50% and 100%, while displaying the original average beside the normalised score.
+- Added reusable `PercentageBar` and `ScoreBar` analytics components and adopted them across consultant, dashboard, insights and client report views.
+- Added six automated Likert calculation tests covering boundaries, averages, invalid values and empty datasets.
 
 ### 23 November 2026
 

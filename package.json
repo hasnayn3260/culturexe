@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:likert": "node --test --experimental-strip-types src/features/analytics/utils/likertScore.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../hooks/useAuth'
 import { useClientData } from '../../hooks/useClientData'
 import { dimensions } from '../../data/dimensions'
+import PercentageBar from '../../features/analytics/components/PercentageBar'
 
 const QUADRANTS = [
   { id: 'agility',   label: 'Agility & Innovation',  icon: '⚡', dims: ['innovation', 'collaboration'],   color: 'var(--gold)'  },
@@ -216,9 +217,7 @@ function ReportDetail({ report, assessment, orgName, onBack, autoDownload }) {
                     </span>
                   </div>
                 </div>
-                <div className="dim-bar-bg">
-                  <div className={`dim-bar ${dim.barClass}`} style={{ width: `${scores[dim.id] ?? 0}%` }} />
-                </div>
+                <PercentageBar value={scores[dim.id]} fillClassName={dim.barClass} label={`${dim.name} score`} />
               </div>
             ))}
           </div>

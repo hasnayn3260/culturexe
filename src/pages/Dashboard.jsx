@@ -6,6 +6,7 @@ import { useAssessments } from '../hooks/useAssessments'
 import { useReports } from '../hooks/useReports'
 import { useAuth } from '../hooks/useAuth'
 import supabase from '../lib/supabaseClient'
+import PercentageBar from '../features/analytics/components/PercentageBar'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -231,9 +232,7 @@ export default function Dashboard() {
                     {score ?? '—'}
                   </span>
                 </div>
-                <div className="dim-bar-bg">
-                  <div className={`dim-bar ${dim.barClass}`} style={{ width: score != null ? `${score}%` : '0%' }} />
-                </div>
+                <PercentageBar value={score} fillClassName={dim.barClass} label={`${dim.name} score`} />
               </div>
             )
           })}

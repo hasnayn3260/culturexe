@@ -13,6 +13,9 @@ import OrganisationsPage from '../features/organisations/pages/OrganisationsPage
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
 import SurveyTemplatesPage from '../features/survey-templates/pages/SurveyTemplatesPage'
 import UsersPage from '../features/users/pages/UsersPage'
+import PercentageBar from '../features/analytics/components/PercentageBar'
+import ScoreBar from '../features/analytics/components/ScoreBar'
+import { calculateLikertMetrics } from '../features/analytics/utils/likertScore'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
 import './consultant.css'
 
@@ -63,14 +66,6 @@ function scoreColor(s) {
   if (s >= 70) return '#0A8A7E'
   if (s >= 50) return '#7A6030'
   return '#9A3825'
-}
-
-function ScoreBar({ score, height = 8 }) {
-  return (
-    <div className="dim-bar-bg" style={{ height }}>
-      <div style={{ height: '100%', borderRadius: 99, width: `${score ?? 0}%`, background: score >= 70 ? 'linear-gradient(90deg,#1BBFB0,#00D4C0)' : score >= 50 ? 'linear-gradient(90deg,#C9B882,#E0D09A)' : 'linear-gradient(90deg,#E8563A,#F47A65)' }} />
-    </div>
-  )
 }
 
 // ── Export helpers (CSV / Excel / PDF) ─────────────────────
@@ -601,9 +596,7 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
                   <span style={{ color: 'var(--navy)' }}>{c}</span>
                   <span style={{ fontWeight: 700, color: 'var(--text2)' }}>{count} <span style={{ fontWeight: 400, color: 'var(--text3)' }}>({pct}%)</span></span>
                 </div>
-                <div className="dim-bar-bg" style={{ height: 8 }}>
-                  <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'linear-gradient(90deg,#1BBFB0,#00D4C0)', borderRadius: 99 }} />
-                </div>
+                <PercentageBar value={(count / maxCount) * 100} height={8} label={`${c} response distribution`} />
               </div>
             )
           })}
@@ -630,9 +623,7 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
                   <span style={{ color: 'var(--navy)' }}>{c}</span>
                   <span style={{ fontWeight: 700, color: 'var(--text2)' }}>{count} <span style={{ fontWeight: 400, color: 'var(--text3)' }}>({pct}%)</span></span>
                 </div>
-                <div className="dim-bar-bg" style={{ height: 8 }}>
-                  <div style={{ height: '100%', width: `${(count / maxCount) * 100}%`, background: 'linear-gradient(90deg,#3A8FC4,#5AADD4)', borderRadius: 99 }} />
-                </div>
+                <PercentageBar value={(count / maxCount) * 100} height={8} fill="linear-gradient(90deg,#3A8FC4,#5AADD4)" label={`${c} response distribution`} />
               </div>
             )
           })}
@@ -729,9 +720,10 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
   }
 
   // LIKERT (and legacy 'likert')
-  const vals = rawAnswers.map(Number).filter(n => !isNaN(n))
-  const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
-  const score = avg != null ? Math.round((avg / 5) * 100) : null
+  const vals = rawAnswers.map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 5)
+  const metrics = calculateLikertMetrics(vals)
+  const avg = metrics?.average ?? null
+  const score = metrics ? Math.round(metrics.percentage) : null
   const dist = [1, 2, 3, 4, 5].map(n => vals.filter(v => v === n).length)
   const maxDist = Math.max(...dist, 1)
   const barColors = ['#E8563A', '#C9B882', '#8A9BB0', '#3A8FC4', '#1BBFB0']
@@ -739,10 +731,8 @@ function QuestionAnalyticsCard({ q, responses, filterDept }) {
     <div style={cardStyle}>
       <Header />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <div className="dim-bar-bg" style={{ flex: 1, height: 8 }}>
-          <div style={{ height: '100%', borderRadius: 99, width: `${score ?? 0}%`, background: score >= 70 ? 'linear-gradient(90deg,#1BBFB0,#00D4C0)' : score >= 50 ? 'linear-gradient(90deg,#C9B882,#E0D09A)' : 'linear-gradient(90deg,#E8563A,#F47A65)' }} />
-        </div>
-        <span style={{ fontWeight: 800, fontSize: 18, color: score >= 70 ? '#0A8A7E' : score >= 50 ? '#7A6030' : '#9A3825', minWidth: 40, textAlign: 'right' }}>{score ?? '—'}</span>
+        <div style={{ flex: 1 }}><ScoreBar score={score} height={8} label={`Normalised score for ${q.text}`} /></div>
+        <span style={{ fontWeight: 800, fontSize: 18, color: scoreColor(score), minWidth: 48, textAlign: 'right' }}>{score != null ? `${score}%` : '—'}</span>
       </div>
       <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 56 }}>
         {dist.map((count, i) => (
@@ -935,26 +925,28 @@ export default function ConsultantPortal() {
 
   const likertQs = questions.filter(q => ['LIKERT', 'likert'].includes(q.question_type))
 
-  function computeScore(answers) {
-    const nums = answers.map(Number).filter(n => !isNaN(n) && n >= 1 && n <= 5)
-    return nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length / 5) * 100) : null
+  function computeMetrics(answers) {
+    return calculateLikertMetrics(answers)
   }
 
-  const overallScore = (() => {
+  const overallMetrics = (() => {
     const answers = enrichedResponses.flatMap(r => likertQs.map(q => r.answers?.[q.id]).filter(v => v != null))
-    return computeScore(answers)
+    return computeMetrics(answers)
   })()
+  const overallScore = overallMetrics ? Math.round(overallMetrics.percentage) : null
 
   const dimensionScores = [...new Set(likertQs.map(q => q.dimension).filter(Boolean))].map(dim => {
     const dimQs = likertQs.filter(q => q.dimension === dim)
     const answers = enrichedResponses.flatMap(r => dimQs.map(q => r.answers?.[q.id]).filter(v => v != null))
-    return { dim, score: computeScore(answers), questionCount: dimQs.length }
+    const metrics = computeMetrics(answers)
+    return { dim, score: metrics ? Math.round(metrics.percentage) : null, average: metrics?.average ?? null, questionCount: dimQs.length }
   }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
 
-  const deptScores = deptBreakdown.map(({ dept, total, responded }) => {
+  const deptScores = deptBreakdown.map(({ dept, total, responded, answerBased }) => {
     const deptResps = enrichedResponses.filter(r => r._dept === dept)
     const answers = deptResps.flatMap(r => likertQs.map(q => r.answers?.[q.id]).filter(v => v != null))
-    return { dept, total, responded, score: computeScore(answers) }
+    const metrics = computeMetrics(answers)
+    return { dept, total, responded, answerBased, score: metrics ? Math.round(metrics.percentage) : null, average: metrics?.average ?? null }
   })
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
@@ -1296,9 +1288,7 @@ export default function ConsultantPortal() {
                     <div className="section-title">Overall Participation</div>
                     <span style={{ fontWeight: 700, fontSize: 20, color: completionPct >= 70 ? '#0A8A7E' : completionPct >= 40 ? '#7A6030' : '#9A3825' }}>{completionPct}%</span>
                   </div>
-                  <div className="dim-bar-bg" style={{ height: 12 }}>
-                    <div className={`dim-bar ${completionPct >= 70 ? 'bar-teal' : completionPct >= 40 ? 'bar-gold' : 'bar-coral'}`} style={{ width: `${completionPct}%`, height: '100%' }} />
-                  </div>
+                  <PercentageBar value={completionPct} height={12} fillClassName={completionPct >= 70 ? 'bar-teal' : completionPct >= 40 ? 'bar-gold' : 'bar-coral'} label="Overall survey participation" />
                 </div>
               )}
 
@@ -1318,7 +1308,7 @@ export default function ConsultantPortal() {
                               <span className="dim-name">{label}</span>
                               <span style={{ fontWeight: 700, fontSize: 13, color }}>{count} <span style={{ fontWeight: 400, color: 'var(--text3)' }}>({pct}%)</span></span>
                             </div>
-                            <div className="dim-bar-bg"><div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, background: color }} /></div>
+                            <PercentageBar value={pct} fill={color} label={`${label} response timing`} />
                           </div>
                         )
                       })
@@ -1338,7 +1328,7 @@ export default function ConsultantPortal() {
                     </div>
                     {deptScores.length === 0 ? (
                       <div style={{ color: 'var(--text3)', fontSize: 13 }}>No department data yet.</div>
-                    ) : deptScores.map(({ dept, total, responded, score, answerBased }) => {
+                    ) : deptScores.map(({ dept, total, responded, score, average, answerBased }) => {
                       const pct = total > 0 ? Math.round((responded / total) * 100) : 0
                       return (
                         <div key={dept} style={{ marginBottom: 14 }}>
@@ -1348,12 +1338,14 @@ export default function ConsultantPortal() {
                               ? <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 72, textAlign: 'right' }}>{responded} respondent{responded !== 1 ? 's' : ''}</span>
                               : <span style={{ fontSize: 12, color: 'var(--text2)', minWidth: 72, textAlign: 'right' }}>{responded}/{total} <span style={{ color: 'var(--text3)' }}>({pct}%)</span></span>
                             }
-                            {likertQs.length > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: scoreColor(score), minWidth: 52, textAlign: 'right' }}>{score != null ? `${score}%` : '—'}</span>}
+                            {likertQs.length > 0 && (
+                              <span style={{ fontSize: 13, fontWeight: 700, color: scoreColor(score), minWidth: 110, textAlign: 'right' }}>
+                                {average != null && score != null ? `${average.toFixed(2)} / 5 · ${score}%` : '—'}
+                              </span>
+                            )}
                           </div>
                           {!answerBased && (
-                            <div className="dim-bar-bg" style={{ height: 6 }}>
-                              <div className={`dim-bar ${pct >= 70 ? 'bar-teal' : pct >= 40 ? 'bar-gold' : 'bar-coral'}`} style={{ width: `${pct}%`, height: '100%' }} />
-                            </div>
+                            <PercentageBar value={pct} height={6} fillClassName={pct >= 70 ? 'bar-teal' : pct >= 40 ? 'bar-gold' : 'bar-coral'} label={`${dept} participation`} />
                           )}
                           {likertQs.length > 0 && score != null && (
                             <ScoreBar score={score} height={answerBased ? 6 : 4} />
@@ -1369,12 +1361,13 @@ export default function ConsultantPortal() {
                   <div className="card mb-20">
                     <div className="section-title mb-4">Score by Dimension</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme</div>
-                    {dimensionScores.map(({ dim, score, questionCount }) => (
+                    {dimensionScores.map(({ dim, score, average, questionCount }) => (
                       <div key={dim} style={{ marginBottom: 12 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>{dim}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 11, color: 'var(--text3)' }}>{questionCount}Q</span>
+                            <span style={{ fontSize: 12, color: 'var(--text2)' }}>{average != null ? `${average.toFixed(2)} / 5` : '—'}</span>
                             <span style={{ fontSize: 14, fontWeight: 800, color: scoreColor(score) }}>{score != null ? `${score}%` : '—'}</span>
                           </div>
                         </div>
@@ -1740,6 +1733,7 @@ export default function ConsultantPortal() {
                       {[
                         { label: 'Responses', value: enrichedResponses.length },
                         { label: 'Completion Rate', value: `${completionPct}%` },
+                        ...(overallMetrics ? [{ label: 'Likert Average', value: `${overallMetrics.average.toFixed(2)} / 5` }] : []),
                         ...(overallScore != null ? [{ label: 'Overall Score', value: `${overallScore}%`, highlight: true }] : []),
                         { label: 'Questions', value: questions.length },
                         ...(dimensionScores.length > 0 ? [{ label: 'Dimensions', value: dimensionScores.length }] : []),
@@ -1783,7 +1777,7 @@ export default function ConsultantPortal() {
                               </tr>
                             </thead>
                             <tbody>
-                              {[...deptScores].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(({ dept, total, responded, score, answerBased }) => {
+                              {[...deptScores].sort((a, b) => (b.score ?? -1) - (a.score ?? -1)).map(({ dept, total, responded, score, average, answerBased }) => {
                                 const pct = total > 0 ? Math.round((responded / total) * 100) : 0
                                 return (
                                   <tr key={dept}>
@@ -1794,7 +1788,9 @@ export default function ConsultantPortal() {
                                         : <>{responded}/{total} <span style={{ color: 'var(--text3)', fontSize: 11 }}>({pct}%)</span></>
                                       }
                                     </td>
-                                    <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: 800, fontSize: 15, color: scoreColor(score), borderBottom: '1px solid var(--border)' }}>{score != null ? `${score}%` : '—'}</td>
+                                    <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: 800, fontSize: 15, color: scoreColor(score), borderBottom: '1px solid var(--border)' }}>
+                                      {average != null && score != null ? <>{average.toFixed(2)} / 5 <span style={{ color: 'var(--text3)', fontSize: 11 }}>· {score}%</span></> : '—'}
+                                    </td>
                                   </tr>
                                 )
                               })}
@@ -1807,14 +1803,17 @@ export default function ConsultantPortal() {
                         <div className="card">
                           <div className="section-title mb-4">Score by Dimension</div>
                           <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme · sorted high to low</div>
-                          {dimensionScores.map(({ dim, score, questionCount }) => (
+                          {dimensionScores.map(({ dim, score, average, questionCount }) => (
                             <div key={dim} style={{ marginBottom: 12 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                                 <div>
                                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>{dim}</span>
                                   <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>{questionCount}Q</span>
                                 </div>
-                                <span style={{ fontSize: 14, fontWeight: 800, color: scoreColor(score) }}>{score != null ? `${score}%` : '—'}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>{average != null ? `${average.toFixed(2)} / 5` : '—'}</span>
+                                  <span style={{ fontSize: 14, fontWeight: 800, color: scoreColor(score) }}>{score != null ? `${score}%` : '—'}</span>
+                                </div>
                               </div>
                               {score != null && <ScoreBar score={score} height={6} />}
                             </div>
