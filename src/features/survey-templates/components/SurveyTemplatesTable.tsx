@@ -299,7 +299,7 @@ export default function SurveyTemplatesTable({
                           <div className="truncate font-bold text-[#0D1F3C]">
                             {template.name}
                           </div>
-                          <div className="mt-0.5 max-w-[300px] truncate text-xs text-[#8A9BB0]">
+                          <div className="mt-0.5 max-w-75 truncate text-xs text-[#8A9BB0]">
                             {template.description || 'No description'}
                           </div>
                         </div>
@@ -384,7 +384,7 @@ export default function SurveyTemplatesTable({
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => {
         if (!open) closeDelete()
       }}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] rounded-[18px] bg-white p-6 text-[#0D1F3C] sm:max-w-[500px]">
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] rounded-[18px] bg-white p-6 text-[#0D1F3C] sm:max-w-125">
           <AlertDialogHeader className="items-start text-left">
             <AlertDialogMedia className="bg-[#FFF0EE] text-[#D94A3A]">
               <Trash2 />
