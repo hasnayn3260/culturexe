@@ -407,6 +407,8 @@ export default function Assessment({ previewMode = false }) {
   const [page, setPage]                 = useState(0)
   const [submitError, setSubmitError]   = useState('')
   const [navError, setNavError]         = useState('')
+  const [draftSaveState, setDraftSaveState] = useState('idle')
+  const draftSaveTimerRef = useRef(null)
 
   useEffect(() => {
     async function init() {
@@ -467,17 +469,22 @@ export default function Assessment({ previewMode = false }) {
         if (qErr) throw qErr
         setQuestions(qs || [])
 
+        const restoredDraft = resp.draft_answers && typeof resp.draft_answers === 'object'
+          ? resp.draft_answers
+          : {}
+        const prefill = {}
+
         // Open-link respondents already gave us department/tenure/job grade
         // at intake — pre-fill the matching survey questions so they aren't
         // asked again, but still submit the same values as real answers.
         if (resp.source === 'open_link') {
           const { deptQ, tenureQ, gradeQ } = findAboutYouQuestions(qs)
-          const prefill = {}
           if (deptQ   && resp.department && deptQ.options.choices.includes(resp.department))   prefill[deptQ.id]   = resp.department
           if (tenureQ && resp.tenure     && tenureQ.options.choices.includes(resp.tenure))       prefill[tenureQ.id] = resp.tenure
           if (gradeQ  && resp.job_grade  && gradeQ.options.choices.includes(resp.job_grade))     prefill[gradeQ.id]  = resp.job_grade
-          if (Object.keys(prefill).length) setAnswers(prefill)
         }
+
+        setAnswers({ ...prefill, ...restoredDraft })
 
         setPhase('survey')
 
@@ -496,6 +503,49 @@ export default function Assessment({ previewMode = false }) {
     }
     init()
   }, [previewMode, surveyId, token])
+
+  useEffect(() => {
+    if (
+      previewMode ||
+      phase !== 'survey' ||
+      !respondent?.token ||
+      respondent.used ||
+      Object.keys(answers).length === 0
+    ) return undefined
+
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
+    setDraftSaveState('saving')
+
+    draftSaveTimerRef.current = window.setTimeout(async () => {
+      const { data, error } = await supabase.rpc('save_survey_draft', {
+        p_token: respondent.token,
+        p_answers: answers,
+      })
+
+      if (error) {
+        setDraftSaveState('error')
+        return
+      }
+
+      const savedDraft = data?.[0]
+      if (savedDraft) {
+        setRespondent(current => current ? {
+          ...current,
+          started_at: savedDraft.started_at,
+          draft_saved_at: savedDraft.draft_saved_at,
+          draft_answers: answers,
+        } : current)
+      }
+      setDraftSaveState('saved')
+    }, 800)
+
+    return () => {
+      if (draftSaveTimerRef.current) {
+        clearTimeout(draftSaveTimerRef.current)
+        draftSaveTimerRef.current = null
+      }
+    }
+  }, [answers, phase, previewMode, respondent?.token, respondent?.used])
 
   // Questions already answered at open-link intake (department/tenure/job
   // grade) are hidden here so they aren't asked twice.
@@ -554,6 +604,10 @@ export default function Assessment({ previewMode = false }) {
       return
     }
     setSubmitError('')
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current)
+      draftSaveTimerRef.current = null
+    }
     setPhase('submitting')
     try {
       if (!isSurveyAcceptingResponses(survey)) {
@@ -571,7 +625,13 @@ export default function Assessment({ previewMode = false }) {
 
       await supabase
         .from('survey_respondents')
-        .update({ used: true, submitted_at: now, response_timing: timing })
+        .update({
+          used: true,
+          submitted_at: now,
+          response_timing: timing,
+          draft_answers: null,
+          draft_saved_at: null,
+        })
         .eq('id', respondent.id)
 
       setPhase('complete')
@@ -744,6 +804,14 @@ export default function Assessment({ previewMode = false }) {
       {navError && (
         <div style={{ padding: '12px 16px', background: '#FFF8EC', border: '1px solid rgba(214,158,46,0.25)', borderRadius: 10, color: '#9A6B00', fontSize: 13, marginBottom: 16 }}>
           ⚠ {navError}
+        </div>
+      )}
+
+      {!previewMode && draftSaveState !== 'idle' && (
+        <div style={{ textAlign: 'right', minHeight: 18, marginBottom: 8, fontSize: 12, color: draftSaveState === 'error' ? '#E8563A' : '#8898AA' }}>
+          {draftSaveState === 'saving' && 'Saving your progress…'}
+          {draftSaveState === 'saved' && 'Progress saved'}
+          {draftSaveState === 'error' && 'Progress could not be saved. Check your connection before leaving.'}
         </div>
       )}
 

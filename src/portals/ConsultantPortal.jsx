@@ -928,14 +928,42 @@ export default function ConsultantPortal() {
   // "Completed" = respondents who fully submitted the survey.
   const totalCompleted    = totalResponded
   // "Started, not completed" = opened the survey link but never submitted.
-  const totalInProgress   = respondents.filter(r => !hasResponded(r) && r.started_at).length
+  const totalInProgress   = respondents.filter(r =>
+    !hasResponded(r) && (r.started_at || r.draft_saved_at),
+  ).length
+
+  // Drafts are intentionally excluded from completion counts. Once the survey
+  // closes, however, they become reportable partial responses for authorised
+  // consultant analytics and exports.
+  const partialResponses = isClosed
+    ? respondents
+        .filter(respondent =>
+          !hasResponded(respondent) &&
+          respondent.draft_answers &&
+          typeof respondent.draft_answers === 'object' &&
+          Object.keys(respondent.draft_answers).length > 0,
+        )
+        .map(respondent => ({
+          id: `draft-${respondent.id}`,
+          survey_id: respondent.survey_id,
+          respondent_id: respondent.id,
+          answers: respondent.draft_answers,
+          submitted_at: null,
+          draft_saved_at: respondent.draft_saved_at,
+          _isPartial: true,
+        }))
+    : []
+  const reportableResponses = [
+    ...responses.map(response => ({ ...response, _isPartial: false })),
+    ...partialResponses,
+  ]
 
   // Detect which question represents "department" (first choice/dropdown/text Q whose text or dimension mentions "department")
   const deptQuestion = questions.find(q =>
     ['SINGLE_CHOICE', 'DROPDOWN', 'SHORT_TEXT', 'LONG_TEXT'].includes(q.question_type) &&
     (q.text?.toLowerCase().includes('department') || q.dimension?.toLowerCase().includes('department'))
   )
-  const responseByRespId = new Map(responses.map(resp => [resp.respondent_id, resp]))
+  const responseByRespId = new Map(reportableResponses.map(resp => [resp.respondent_id, resp]))
 
   // Department for a respondent: prefer what they actually typed/selected on the
   // "Which division or department do you work in?" survey question, then their
@@ -950,7 +978,7 @@ export default function ConsultantPortal() {
     return respondentProfile?.department || r.department || null
   }
 
-  const enrichedResponses = responses.map(resp => {
+  const enrichedResponses = reportableResponses.map(resp => {
     const r = respondents.find(rd => rd.id === resp.respondent_id)
     return {
       ...resp,
@@ -976,11 +1004,16 @@ export default function ConsultantPortal() {
   const deptBreakdown = deptQuestion
     ? departments.map(dept => {
         const responded = enrichedResponses.filter(r => r._dept === dept).length
-        return { dept, total: totalResponded, responded, answerBased: true }
+        return { dept, total: reportableResponses.length, responded, answerBased: true }
       })
     : departments.map(dept => {
         const dr = respondents.filter(r => r.department === dept)
-        return { dept, total: dr.length, responded: dr.filter(hasResponded).length, answerBased: false }
+        return {
+          dept,
+          total: dr.length,
+          responded: dr.filter(respondent => responseByRespId.has(respondent.id)).length,
+          answerBased: false,
+        }
       })
 
   const likertQs = questions.filter(q => ['LIKERT', 'likert'].includes(q.question_type))
@@ -1030,7 +1063,7 @@ export default function ConsultantPortal() {
       source: respondent.source === 'open_link' ? 'open_link' : 'invited',
       department: resolveDept(respondent) || '',
       position: respondent.job_title || matchingProfile?.job_title || '',
-      status: responded ? 'completed' : respondent.started_at ? 'in_progress' : 'not_started',
+      status: responded ? 'completed' : (respondent.started_at || respondent.draft_saved_at) ? 'in_progress' : 'not_started',
       completionMinutes,
       timing: responded
         ? (respondent.response_timing || calcTiming(respondent.submitted_at, survey?.live_start, survey?.live_end))
@@ -1103,7 +1136,8 @@ export default function ConsultantPortal() {
     ? respondents.filter(respondent => resolveDept(respondent) === filterDept)
     : respondents
 
-  // Raw analytics export = one row per submitted response, a column per question.
+  // Raw analytics export = one row per submitted response plus, after closure,
+  // one row per saved partial response. Each question remains its own column.
   function buildAnalyticsRows() {
     return analyticsExportResponses.map(resp => {
       const r = respondents.find(rd => rd.id === resp.respondent_id)
@@ -1114,11 +1148,15 @@ export default function ConsultantPortal() {
         Survey:            surveyContext,
         'Response ID':     resp.id || '',
         'Respondent ID':   resp.respondent_id || '',
+        'Response Status': resp._isPartial ? 'Incomplete' : 'Submitted',
         Name:           resp._name || '',
         Email:          r?.email || '',
         Department:     resp._dept || '',
         Position:       resp._title || '',
         'Submitted At': resp.submitted_at ? new Date(resp.submitted_at).toLocaleString('en-ZA') : '',
+        'Draft Saved At': resp._isPartial && resp.draft_saved_at
+          ? new Date(resp.draft_saved_at).toLocaleString('en-ZA')
+          : '',
       }
       questions.forEach(q => { row[`Q${q.order_num + 1}. ${q.text}`] = cellToString(resp.answers?.[q.id]) })
       return row
@@ -1174,7 +1212,8 @@ export default function ConsultantPortal() {
   }
 
   function buildAnalyticsSummaryRows() {
-    const submitted = analyticsExportResponses.length
+    const submitted = analyticsExportResponses.filter(response => !response._isPartial).length
+    const partial = analyticsExportResponses.filter(response => response._isPartial).length
     const assigned = analyticsExportRespondents.length
     const filteredLikertAnswers = analyticsExportResponses.flatMap(response =>
       likertQs.map(question => response.answers?.[question.id]).filter(value => value != null),
@@ -1187,6 +1226,7 @@ export default function ConsultantPortal() {
       { Metric: 'Department filter', Value: filterDept || 'All departments' },
       { Metric: 'Assigned users', Value: assigned },
       { Metric: 'Submitted responses', Value: submitted },
+      { Metric: 'Incomplete responses', Value: partial },
       { Metric: 'Completion rate', Value: assigned > 0 ? `${Math.round((submitted / assigned) * 100)}%` : '0%' },
       { Metric: 'Questions', Value: questions.length },
       { Metric: 'Likert average', Value: filteredMetrics ? `${filteredMetrics.average.toFixed(2)} / 5` : '' },
@@ -2115,7 +2155,7 @@ export default function ConsultantPortal() {
                 <div className="hero-sub">Per-question analysis — scores, distributions, choices, and open responses.</div>
               </div>
 
-              {responses.length === 0 ? (
+              {reportableResponses.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '80px 24px', color: 'var(--text3)' }}>
                   <div style={{ fontSize: 52, marginBottom: 16 }}>📊</div>
                   <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>No Responses Yet</div>
@@ -2127,7 +2167,10 @@ export default function ConsultantPortal() {
                     <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, background: 'radial-gradient(circle, rgba(27,191,176,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
                     <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
                       {[
-                        { label: 'Responses', value: enrichedResponses.length },
+                        { label: 'Submitted Responses', value: totalResponded },
+                        ...(isClosed && partialResponses.length > 0
+                          ? [{ label: 'Incomplete Responses', value: partialResponses.length }]
+                          : []),
                         { label: 'Completion Rate', value: `${completionPct}%` },
                         ...(overallMetrics ? [{ label: 'Likert Average', value: `${overallMetrics.average.toFixed(2)} / 5` }] : []),
                         ...(overallScore != null ? [{ label: 'Overall Score', value: `${overallScore}%`, highlight: true }] : []),

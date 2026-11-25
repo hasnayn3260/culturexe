@@ -84,13 +84,20 @@ export function useClientSurvey(userEmail, userId, orgId) {
   useEffect(() => { load() }, [load])
 
   async function saveDraft(answers) {
-    if (!respondent) return
-    const { data, error } = await supabase
-      .from('survey_respondents')
-      .update({ draft_answers: answers, draft_saved_at: new Date().toISOString() })
-      .eq('id', respondent.id).select().single()
+    if (!respondent?.token) return
+    const { data, error } = await supabase.rpc('save_survey_draft', {
+      p_token: respondent.token,
+      p_answers: answers,
+    })
     if (error) throw error
-    setRespondent(data)
+    const savedDraft = data?.[0]
+    if (!savedDraft) return
+    setRespondent(current => current ? {
+      ...current,
+      started_at: savedDraft.started_at,
+      draft_saved_at: savedDraft.draft_saved_at,
+      draft_answers: answers,
+    } : current)
   }
 
   async function submitResponse(answers) {

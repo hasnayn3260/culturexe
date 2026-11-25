@@ -501,7 +501,7 @@ Execution order follows these rules:
 | 6 | CXW-13 | Medium | XS acceptance | Confirm analytics Excel and PDF exports include both raw responses and calculated summaries, respect the department filter, and retain organisation, survey, response and respondent identifiers. Partial saved answers remain dependent on CXW-14. |
 | 7 | CXW-22 | Medium | XS discovery, build TBD | Define the bug-report fields, recipient, attachments, audit trail and notification workflow before estimating implementation. |
 | 8 | CXW-19 | Medium | M | Record first survey start, final submission and elapsed completion time. This is a prerequisite for CXW-20. |
-| 9 | CXW-14 | Medium | M | Preserve draft or partial answers and include them in authorised analytics and exports after the survey closes. |
+| 9 | CXW-14 | Medium | XS acceptance | Apply the draft-saving migration, then confirm token and signed-in surveys restore progress and closed-survey analytics/exports label incomplete responses without increasing completion totals. |
 | 10 | CXW-16 | Medium | M-L | Record unique and repeat survey accesses separately from starts and completions. This supplies engagement data to CXW-21. |
 | 11 | CXW-18 | Medium | L | Add organisation-safe analysis filters for department, branch, employment level and other approved demographic fields. Enforce minimum reporting-group sizes. |
 | 12 | CXW-20 | Medium | L | Calculate average completion time, open-text response length and agreed quality indicators using CXW-19 timing data. |
@@ -599,7 +599,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-11 | Implemented, browser acceptance pending | Dashboard users now have a dedicated tab. Every displayed column supports ascending and descending sorting, including status, completion duration and submitted date. Quick actions moved to the top and analytics cards use a compact responsive grid. |
 | CXW-12 | Implemented, browser acceptance pending | The Users tab exports its currently sorted dataset to Excel, CSV and landscape PDF. Each export includes organisation and survey context plus all participant status, timing and completion columns. |
 | CXW-13 | Implemented for submitted responses, browser acceptance pending | One Analytics export menu now offers Raw Data, Calculated Analytics and Complete Report groups. Excel uses purpose-specific worksheets; landscape PDF supports calculated-only or combined calculated/raw reports. Department filtering is preserved. Exporting incomplete saved answers remains dependent on CXW-14. |
-| CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
+| CXW-14 | Implemented, migration and browser acceptance pending | Token and signed-in surveys autosave and restore partial answers. Drafts remain outside `survey_responses`, so they do not count as completed or trigger receipts. After closure, authorised analytics and raw/complete exports include drafts labelled Incomplete. |
 | CXW-15 | Implemented, browser acceptance pending | Production RLS and all 14 SQL validation checks passed. Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
 
 ## Open decisions
@@ -635,6 +635,8 @@ These are implementation notes and do not change Jira statuses automatically.
 - Moved dashboard quick actions into a compact top bar and reorganised timing, dimension and department summaries into a bounded responsive card grid.
 - Implemented CXW-12 exports directly on the Users tab. Excel, CSV and landscape PDF now preserve the selected column sort and include organisation, survey, participant status, completion duration, timing and submission context.
 - Enhanced CXW-13 analytics exports so Excel and PDF both include raw submitted answers and calculated summary, question, dimension and department analytics. Exports preserve the active department filter and include organisation, survey, response and respondent identifiers.
+- Implemented CXW-14 draft persistence for token-based and signed-in surveys. Started-but-incomplete counts now recognise saved drafts; drafts are restored on return and cleared after submission.
+- Added closed-survey reporting for partial answers. Authorised analytics and raw/complete exports include saved drafts only after closure and label them Incomplete without inflating submitted or completion totals.
 
 ### 23 November 2026
 
