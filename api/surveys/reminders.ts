@@ -222,6 +222,16 @@ export async function route(request: Request): Promise<Response> {
     const now = Date.now()
     const openingTime = new Date(survey.live_start).getTime()
     const closingTime = new Date(survey.live_end).getTime()
+    if (
+      !Number.isFinite(openingTime) ||
+      !Number.isFinite(closingTime) ||
+      closingTime <= openingTime
+    ) {
+      return json(
+        { error: 'Set a valid survey opening and closing window before sending reminders.' },
+        409,
+      )
+    }
     if (survey.status === 'closed' || closingTime <= now) {
       return json({ error: 'Reminders cannot be sent after the survey has closed.' }, 409)
     }

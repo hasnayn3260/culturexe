@@ -9,6 +9,7 @@ import type {
   SurveyStoredStatus,
 } from '../types'
 import { getEffectiveSurveyStatus } from '../utils/surveyStatus'
+import { useSurveyStatusClock } from './useSurveyStatusClock'
 
 type SurveyRow = {
   id: string
@@ -101,6 +102,7 @@ function emptyStats(): SurveyListStats {
 }
 
 export function useSurveys(organisationId?: string | null) {
+  const statusNow = useSurveyStatusClock()
   const [surveys, setSurveys] = useState<SurveyListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -293,16 +295,28 @@ export function useSurveys(organisationId?: string | null) {
     }
   }, [organisationId, refetch])
 
+  const currentSurveys = useMemo(() => surveys.map((survey) => ({
+    ...survey,
+    effectiveStatus: getEffectiveSurveyStatus(
+      {
+        status: survey.storedStatus,
+        live_start: survey.liveStart,
+        live_end: survey.liveEnd,
+      },
+      statusNow,
+    ) || 'draft',
+  })), [statusNow, surveys])
+
   const stats = useMemo(() => {
-    return surveys.reduce<SurveyListStats>((totals, survey) => {
+    return currentSurveys.reduce<SurveyListStats>((totals, survey) => {
       totals.total += 1
       totals[survey.effectiveStatus] += 1
       return totals
     }, emptyStats())
-  }, [surveys])
+  }, [currentSurveys])
 
   return {
-    surveys,
+    surveys: currentSurveys,
     stats,
     loading,
     refreshing,

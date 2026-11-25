@@ -231,18 +231,28 @@ async function route(request: Request): Promise<Response> {
       )
     }
 
-    const now = Date.now()
-    const closingTime = survey.live_end
-      ? new Date(survey.live_end).getTime()
-      : Number.POSITIVE_INFINITY
-    if (survey.status === 'closed' || closingTime <= now) {
-      return json({ error: 'Invitations cannot be sent after the survey has closed.' }, 409)
-    }
     if (!survey.live_start || !survey.live_end) {
       return json(
         { error: 'Set the survey opening and closing dates before sending invitations.' },
         409,
       )
+    }
+
+    const now = Date.now()
+    const openingTime = new Date(survey.live_start).getTime()
+    const closingTime = new Date(survey.live_end).getTime()
+    if (
+      !Number.isFinite(openingTime) ||
+      !Number.isFinite(closingTime) ||
+      closingTime <= openingTime
+    ) {
+      return json(
+        { error: 'Set a valid survey opening and closing window before sending invitations.' },
+        409,
+      )
+    }
+    if (survey.status === 'closed' || closingTime <= now) {
+      return json({ error: 'Invitations cannot be sent after the survey has closed.' }, 409)
     }
 
     const { data: organisationData, error: organisationError } = await auth.admin

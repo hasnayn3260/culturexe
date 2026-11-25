@@ -138,12 +138,34 @@ function validate(
   if (values.liveEnd && !values.liveStart) {
     errors.liveStart = 'Set an opening date.'
   }
+  const openingTime = values.liveStart
+    ? new Date(values.liveStart).getTime()
+    : null
+  const closingTime = values.liveEnd
+    ? new Date(values.liveEnd).getTime()
+    : null
+  if (values.liveStart && !Number.isFinite(openingTime)) {
+    errors.liveStart = 'Enter a valid opening date.'
+  }
+  if (values.liveEnd && !Number.isFinite(closingTime)) {
+    errors.liveEnd = 'Enter a valid closing date.'
+  }
   if (
-    values.liveStart &&
-    values.liveEnd &&
-    new Date(values.liveEnd).getTime() <= new Date(values.liveStart).getTime()
+    openingTime !== null &&
+    closingTime !== null &&
+    Number.isFinite(openingTime) &&
+    Number.isFinite(closingTime) &&
+    closingTime <= openingTime
   ) {
     errors.liveEnd = 'The closing date must be after the opening date.'
+  }
+  if (
+    requiresSchedule &&
+    closingTime !== null &&
+    Number.isFinite(closingTime) &&
+    closingTime <= Date.now()
+  ) {
+    errors.liveEnd = 'Choose a closing date in the future.'
   }
 
   if (values.templateId) {

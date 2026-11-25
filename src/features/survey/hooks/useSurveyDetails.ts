@@ -6,6 +6,7 @@ import {
   getEffectiveSurveyStatus,
   type SurveyLifecycleStatus,
 } from '../utils/surveyStatus'
+import { useSurveyStatusClock } from './useSurveyStatusClock'
 
 export type SurveyDetail = {
   id: string
@@ -130,6 +131,7 @@ function errorMessage(error: unknown): string {
 }
 
 export function useSurveyDetails(surveyId?: string | null) {
+  const statusNow = useSurveyStatusClock()
   const [survey, setSurvey] = useState<SurveyDetail | null>(null)
   const [questions, setQuestions] = useState<SurveyQuestion[]>([])
   const [respondents, setRespondents] = useState<SurveyRespondent[]>([])
@@ -298,8 +300,8 @@ export function useSurveyDetails(surveyId?: string | null) {
   }, [refetch, surveyId])
 
   const effectiveStatus = useMemo<SurveyLifecycleStatus | null>(
-    () => getEffectiveSurveyStatus(survey),
-    [survey],
+    () => getEffectiveSurveyStatus(survey, statusNow),
+    [statusNow, survey],
   )
   const questionnaireLocked =
     effectiveStatus !== null && effectiveStatus !== 'draft'

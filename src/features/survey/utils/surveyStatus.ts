@@ -23,8 +23,14 @@ export function getEffectiveSurveyStatus(
   const opensAt = timestamp(survey.live_start)
   const closesAt = timestamp(survey.live_end)
 
-  if (closesAt !== null && now >= closesAt) return 'closed'
-  if (opensAt !== null && now < opensAt) return 'scheduled'
+  // A live survey must have a complete, valid response window. Fail closed
+  // for malformed legacy records instead of accidentally accepting responses.
+  if (opensAt === null || closesAt === null || closesAt <= opensAt) {
+    return 'closed'
+  }
+
+  if (now >= closesAt) return 'closed'
+  if (now < opensAt) return 'scheduled'
   return 'live'
 }
 

@@ -197,6 +197,9 @@ function validateValues(value: unknown, creating: boolean): ValidationResult {
   if (liveStart && liveEnd && Date.parse(liveEnd) <= Date.parse(liveStart)) {
     return { success: false, message: 'The closing date must be after the opening date.' }
   }
+  if (data.status === 'live' && liveEnd && Date.parse(liveEnd) <= Date.now()) {
+    return { success: false, message: 'Choose a closing date in the future before making the survey live.' }
+  }
 
   data.liveStart = liveStart || ''
   data.liveEnd = liveEnd || ''
