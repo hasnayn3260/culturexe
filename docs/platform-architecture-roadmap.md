@@ -498,7 +498,7 @@ Execution order follows these rules:
 | 3 | CXW-5 | Medium | XS acceptance | Confirm the displayed Likert average and normalised percentage in the browser for low, midpoint and high response sets. Automated boundary tests now pass. |
 | 4 | CXW-11 | Medium | XS acceptance | Confirm every participant column sorts ascending and descending, blank values remain stable, and the Users tab preserves the selected organisation scope. |
 | 5 | CXW-12 | Medium | XS acceptance | Confirm Excel, CSV and PDF exports preserve the Users tab's selected sort order, visible organisation scope and survey context. |
-| 6 | CXW-13 | Medium | S | Export raw and partial survey-response data with question, respondent and survey identifiers permitted for the requesting role. |
+| 6 | CXW-13 | Medium | XS acceptance | Confirm analytics Excel and PDF exports include both raw responses and calculated summaries, respect the department filter, and retain organisation, survey, response and respondent identifiers. Partial saved answers remain dependent on CXW-14. |
 | 7 | CXW-22 | Medium | XS discovery, build TBD | Define the bug-report fields, recipient, attachments, audit trail and notification workflow before estimating implementation. |
 | 8 | CXW-19 | Medium | M | Record first survey start, final submission and elapsed completion time. This is a prerequisite for CXW-20. |
 | 9 | CXW-14 | Medium | M | Preserve draft or partial answers and include them in authorised analytics and exports after the survey closes. |
@@ -598,6 +598,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-5 | Implemented, browser acceptance pending | Likert analytics retain the raw 1–5 average and normalise percentages with `((average - 1) / 4) * 100`. Shared score and percentage chart components now serve consultant, legacy and client analytics views; all six automated calculation tests pass. |
 | CXW-11 | Implemented, browser acceptance pending | Dashboard users now have a dedicated tab. Every displayed column supports ascending and descending sorting, including status, completion duration and submitted date. Quick actions moved to the top and analytics cards use a compact responsive grid. |
 | CXW-12 | Implemented, browser acceptance pending | The Users tab exports its currently sorted dataset to Excel, CSV and landscape PDF. Each export includes organisation and survey context plus all participant status, timing and completion columns. |
+| CXW-13 | Implemented for submitted responses, browser acceptance pending | One Analytics export menu now offers Raw Data, Calculated Analytics and Complete Report groups. Excel uses purpose-specific worksheets; landscape PDF supports calculated-only or combined calculated/raw reports. Department filtering is preserved. Exporting incomplete saved answers remains dependent on CXW-14. |
 | CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
 | CXW-15 | Implemented, browser acceptance pending | Production RLS and all 14 SQL validation checks passed. Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
 
@@ -633,6 +634,7 @@ These are implementation notes and do not change Jira statuses automatically.
 - Implemented CXW-11 with a dedicated dashboard Users tab and sortable headers for first name, surname, email, source, department, position, survey status, completion time, timing and submission date.
 - Moved dashboard quick actions into a compact top bar and reorganised timing, dimension and department summaries into a bounded responsive card grid.
 - Implemented CXW-12 exports directly on the Users tab. Excel, CSV and landscape PDF now preserve the selected column sort and include organisation, survey, participant status, completion duration, timing and submission context.
+- Enhanced CXW-13 analytics exports so Excel and PDF both include raw submitted answers and calculated summary, question, dimension and department analytics. Exports preserve the active department filter and include organisation, survey, response and respondent identifiers.
 
 ### 23 November 2026
 

@@ -88,20 +88,50 @@ function rowsToCSV(rows) {
   return [headers.map(esc).join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\r\n')
 }
 
-// Real .xlsx via ExcelJS (so Excel doesn't warn about format/extension mismatch).
-async function downloadXLSX(rows, filename) {
+async function downloadWorkbook(sheets, filename) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
-  const ws = wb.addWorksheet('Export')
-  const headers = Object.keys(rows[0])
-  ws.columns = headers.map(h => ({ header: h, key: h, width: Math.min(Math.max(h.length + 2, 12), 60) }))
-  rows.forEach(r => ws.addRow(headers.reduce((o, h) => { o[h] = cellToString(r[h]); return o }, {})))
-  const header = ws.getRow(1)
-  header.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3560' } }
-  header.alignment = { vertical: 'middle' }
+
+  sheets.forEach(({ name, rows }) => {
+    const ws = wb.addWorksheet(name.slice(0, 31))
+    if (!rows.length) {
+      ws.addRow(['No data available'])
+      return
+    }
+
+    const headers = Object.keys(rows[0])
+    ws.columns = headers.map(header => ({
+      header,
+      key: header,
+      width: Math.min(
+        Math.max(
+          header.length + 2,
+          ...rows.map(row => cellToString(row[header]).length + 2),
+          12,
+        ),
+        60,
+      ),
+    }))
+    rows.forEach(row => ws.addRow(headers.reduce((output, header) => {
+      output[header] = cellToString(row[header])
+      return output
+    }, {})))
+
+    const headerRow = ws.getRow(1)
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A3560' } }
+    headerRow.alignment = { vertical: 'middle' }
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
+    ws.autoFilter = { from: 'A1', to: `${ws.getColumn(headers.length).letter}1` }
+  })
+
   const buf = await wb.xlsx.writeBuffer()
   downloadBlob(filename, buf, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+}
+
+// Real .xlsx via ExcelJS (so Excel doesn't warn about format/extension mismatch).
+async function downloadXLSX(rows, filename) {
+  await downloadWorkbook([{ name: 'Export', rows }], filename)
 }
 
 // Builds a real (text/vector) PDF using jsPDF + autotable — selectable text,
@@ -114,7 +144,7 @@ async function exportToPDF(buildPdf, filename, orientation = 'portrait') {
   doc.save(filename)
 }
 
-function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = 'portrait' }) {
+function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = 'portrait', exportExcel, options }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const ref = useRef(null)
@@ -134,6 +164,10 @@ function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = '
         await exportToPDF(buildPdf, `${filename}-${date}.pdf`, pdfOrientation)
         return
       }
+      if (kind === 'excel' && exportExcel) {
+        await exportExcel(`${filename}-${date}.xlsx`)
+        return
+      }
       const rows = getRows ? getRows() : []
       if (!rows.length) { alert('Nothing to export yet.'); return }
       if (kind === 'csv')   downloadBlob(`${filename}-${date}.csv`, '﻿' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
@@ -143,19 +177,45 @@ function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = '
     } finally { setBusy(false) }
   }
 
+  async function runCustom(option) {
+    setOpen(false)
+    try {
+      setBusy(true)
+      await option.action(`${filename}-${date}`)
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Export failed: ' + (error.message || error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const defaultOptions = [
+    { k: 'excel', label: 'Excel (.xlsx)' },
+    { k: 'csv', label: 'CSV (.csv)' },
+    { k: 'pdf', label: 'PDF (.pdf)' },
+  ]
+
   return (
     <div ref={ref} className="export-toolbar" style={{ position: 'relative', display: 'inline-block' }}>
       <button className="btn btn-outline btn-sm" onClick={() => setOpen(o => !o)} disabled={busy}>
         {busy ? 'Exporting…' : '⤓ Export ▾'}
       </button>
       {open && (
-        <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.14)', zIndex: 50, minWidth: 150, overflow: 'hidden' }}>
-          {[{ k: 'excel', label: 'Excel (.xlsx)' }, { k: 'csv', label: 'CSV (.csv)' }, { k: 'pdf', label: 'PDF (.pdf)' }].map(o => (
-            <button key={o.k} onClick={() => run(o.k)}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--navy)', fontFamily: 'inherit' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
-              {o.label}
-            </button>
+        <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.14)', zIndex: 50, minWidth: options ? 230 : 150, overflow: 'hidden' }}>
+          {(options || defaultOptions).map((option, index, menuOptions) => (
+            <div key={option.k}>
+              {options && (index === 0 || option.group !== menuOptions[index - 1].group) && (
+                <div style={{ padding: '8px 14px 4px', borderTop: index === 0 ? 'none' : '1px solid var(--border)', color: 'var(--text3)', fontSize: 10, fontWeight: 800, letterSpacing: 0.8, textTransform: 'uppercase' }}>
+                  {option.group}
+                </div>
+              )}
+              <button onClick={() => options ? runCustom(option) : run(option.k)}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: options ? '7px 14px 9px' : '9px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--navy)', fontFamily: 'inherit' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'} onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                {option.label}
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -1036,14 +1096,28 @@ export default function ConsultantPortal() {
     }))
   }
 
-  // Analytics export = one row per submitted response, a column per question.
+  const analyticsExportResponses = filterDept
+    ? enrichedResponses.filter(response => response._dept === filterDept)
+    : enrichedResponses
+  const analyticsExportRespondents = filterDept
+    ? respondents.filter(respondent => resolveDept(respondent) === filterDept)
+    : respondents
+
+  // Raw analytics export = one row per submitted response, a column per question.
   function buildAnalyticsRows() {
-    return enrichedResponses.map(resp => {
+    return analyticsExportResponses.map(resp => {
       const r = respondents.find(rd => rd.id === resp.respondent_id)
       const row = {
+        'Organisation ID': survey?.org_id || '',
+        Organisation:      organisationContext,
+        'Survey ID':       survey?.id || '',
+        Survey:            surveyContext,
+        'Response ID':     resp.id || '',
+        'Respondent ID':   resp.respondent_id || '',
         Name:           resp._name || '',
         Email:          r?.email || '',
         Department:     resp._dept || '',
+        Position:       resp._title || '',
         'Submitted At': resp.submitted_at ? new Date(resp.submitted_at).toLocaleString('en-ZA') : '',
       }
       questions.forEach(q => { row[`Q${q.order_num + 1}. ${q.text}`] = cellToString(resp.answers?.[q.id]) })
@@ -1051,25 +1125,127 @@ export default function ConsultantPortal() {
     })
   }
 
-  // Per-question result summary (used in the Analytics PDF).
-  function analyticsSummaryRows() {
+  function buildCalculatedAnalyticsRows() {
     return questions.map(q => {
-      const ans = enrichedResponses.map(r => r.answers?.[q.id]).filter(v => v != null && v !== '')
+      const ans = analyticsExportResponses.map(r => r.answers?.[q.id]).filter(v => v != null && v !== '')
       const t = q.question_type
       let result = '—'
-      if (['LIKERT', 'likert', 'RATING_SCALE'].includes(t)) {
-        const nums = ans.map(Number).filter(n => !isNaN(n))
-        if (nums.length) result = `Avg ${(nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2)}`
+      let average = ''
+      let calculatedScore = ''
+
+      if (['LIKERT', 'likert'].includes(t)) {
+        const metrics = calculateLikertMetrics(ans)
+        if (metrics) {
+          average = metrics.average.toFixed(2)
+          calculatedScore = `${Math.round(metrics.percentage)}%`
+          result = `Average ${average} / 5`
+        }
+      } else if (t === 'RATING_SCALE') {
+        const nums = ans.map(Number).filter(Number.isFinite)
+        if (nums.length) {
+          average = (nums.reduce((sum, value) => sum + value, 0) / nums.length).toFixed(2)
+          result = `Average ${average}`
+        }
       } else if (['SINGLE_CHOICE', 'DROPDOWN', 'MULTI_CHOICE'].includes(t)) {
         const counts = {}
         ans.forEach(a => (Array.isArray(a) ? a : [a]).forEach(x => { counts[x] = (counts[x] || 0) + 1 }))
-        const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
-        if (top) result = `Top: ${top[0]} (${top[1]})`
+        const distribution = Object.entries(counts).sort((a, b) => b[1] - a[1])
+        if (distribution.length) {
+          result = distribution.map(([option, count]) => `${option}: ${count}`).join('; ')
+        }
       } else {
         result = `${ans.length} answered`
       }
-      return [`Q${q.order_num + 1}`, q.text, t, result]
+
+      return {
+        Organisation: organisationContext,
+        Survey: surveyContext,
+        Question: `Q${q.order_num + 1}`,
+        'Question ID': q.id,
+        'Question Text': q.text,
+        Dimension: q.dimension || '',
+        Type: t,
+        'Answer Count': ans.length,
+        Average: average,
+        'Calculated Score': calculatedScore,
+        'Result / Distribution': result,
+      }
     })
+  }
+
+  function buildAnalyticsSummaryRows() {
+    const submitted = analyticsExportResponses.length
+    const assigned = analyticsExportRespondents.length
+    const filteredLikertAnswers = analyticsExportResponses.flatMap(response =>
+      likertQs.map(question => response.answers?.[question.id]).filter(value => value != null),
+    )
+    const filteredMetrics = calculateLikertMetrics(filteredLikertAnswers)
+
+    return [
+      { Metric: 'Organisation', Value: organisationContext },
+      { Metric: 'Survey', Value: surveyContext },
+      { Metric: 'Department filter', Value: filterDept || 'All departments' },
+      { Metric: 'Assigned users', Value: assigned },
+      { Metric: 'Submitted responses', Value: submitted },
+      { Metric: 'Completion rate', Value: assigned > 0 ? `${Math.round((submitted / assigned) * 100)}%` : '0%' },
+      { Metric: 'Questions', Value: questions.length },
+      { Metric: 'Likert average', Value: filteredMetrics ? `${filteredMetrics.average.toFixed(2)} / 5` : '' },
+      { Metric: 'Calculated Likert score', Value: filteredMetrics ? `${Math.round(filteredMetrics.percentage)}%` : '' },
+    ]
+  }
+
+  function buildDimensionExportRows() {
+    return [...new Set(likertQs.map(question => question.dimension).filter(Boolean))].map(dimension => {
+      const dimensionQuestions = likertQs.filter(question => question.dimension === dimension)
+      const answers = analyticsExportResponses.flatMap(response =>
+        dimensionQuestions.map(question => response.answers?.[question.id]).filter(value => value != null),
+      )
+      const metrics = calculateLikertMetrics(answers)
+      return {
+        Organisation: organisationContext,
+        Survey: surveyContext,
+        Dimension: dimension,
+        Questions: dimensionQuestions.length,
+        Answers: answers.length,
+        Average: metrics ? metrics.average.toFixed(2) : '',
+        'Calculated Score': metrics ? `${Math.round(metrics.percentage)}%` : '',
+      }
+    })
+  }
+
+  function buildDepartmentExportRows() {
+    return deptScores
+      .filter(({ dept }) => !filterDept || dept === filterDept)
+      .map(({ dept, total, responded, score, average }) => ({
+        Organisation: organisationContext,
+        Survey: surveyContext,
+        Department: dept,
+        Assigned: total,
+        Responded: responded,
+        Participation: total > 0 ? `${Math.round((responded / total) * 100)}%` : '',
+        Average: average != null ? average.toFixed(2) : '',
+        'Calculated Score': score != null ? `${score}%` : '',
+      }))
+  }
+
+  function calculatedAnalyticsSheets() {
+    return [
+      { name: 'Summary', rows: buildAnalyticsSummaryRows() },
+      { name: 'Calculated Analytics', rows: buildCalculatedAnalyticsRows() },
+      { name: 'Dimension Scores', rows: buildDimensionExportRows() },
+      { name: 'Department Scores', rows: buildDepartmentExportRows() },
+    ]
+  }
+
+  async function exportCalculatedAnalyticsWorkbook(filename) {
+    await downloadWorkbook(calculatedAnalyticsSheets(), filename)
+  }
+
+  async function exportAnalyticsWorkbook(filename) {
+    await downloadWorkbook([
+      ...calculatedAnalyticsSheets(),
+      { name: 'Raw Responses', rows: buildAnalyticsRows() },
+    ], filename)
   }
 
   const NAVY = [26, 53, 96]
@@ -1118,17 +1294,140 @@ export default function ConsultantPortal() {
     })
   }
 
-  function buildAnalyticsPdf(doc, autoTable) {
-    pdfHeader(doc, `Analytics — ${enrichedResponses.length} response${enrichedResponses.length !== 1 ? 's' : ''}`)
+  function drawAnalyticsPdf(doc, autoTable, includeRawResponses) {
+    const summaryRows = buildAnalyticsSummaryRows()
+    const calculatedRows = buildCalculatedAnalyticsRows()
+    const dimensionRows = buildDimensionExportRows()
+    const departmentRows = buildDepartmentExportRows()
+    const rawRows = buildAnalyticsRows()
+
+    pdfHeader(doc, `Analytics — ${organisationContext} — ${filterDept || 'All departments'}`)
     autoTable(doc, {
       startY: 33,
-      head: [['#', 'Question', 'Type', 'Result']],
-      body: analyticsSummaryRows(),
-      styles: { fontSize: 8, cellPadding: 1.5, valign: 'middle' },
-      columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 110 } },
+      head: [['Metric', 'Value']],
+      body: summaryRows.map(row => [row.Metric, row.Value]),
+      styles: { fontSize: 8, cellPadding: 1.5 },
       headStyles: { fillColor: NAVY },
     })
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 7,
+      head: [['#', 'Question', 'Dimension', 'Type', 'Answers', 'Average', 'Score', 'Result / Distribution']],
+      body: calculatedRows.map(row => [
+        row.Question,
+        row['Question Text'],
+        row.Dimension,
+        row.Type,
+        row['Answer Count'],
+        row.Average,
+        row['Calculated Score'],
+        row['Result / Distribution'],
+      ]),
+      styles: { fontSize: 8, cellPadding: 1.5, valign: 'middle' },
+      columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 62 }, 7: { cellWidth: 65 } },
+      headStyles: { fillColor: NAVY },
+      didDrawPage: () => pdfHeaderRepeat(doc),
+    })
+
+    if (dimensionRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 7,
+        head: [['Dimension', 'Questions', 'Answers', 'Average', 'Calculated Score']],
+        body: dimensionRows.map(row => [row.Dimension, row.Questions, row.Answers, row.Average, row['Calculated Score']]),
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: NAVY },
+        didDrawPage: () => pdfHeaderRepeat(doc),
+      })
+    }
+
+    if (departmentRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 7,
+        head: [['Department', 'Assigned', 'Responded', 'Participation', 'Average', 'Calculated Score']],
+        body: departmentRows.map(row => [
+          row.Department,
+          row.Assigned,
+          row.Responded,
+          row.Participation,
+          row.Average,
+          row['Calculated Score'],
+        ]),
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: NAVY },
+        didDrawPage: () => pdfHeaderRepeat(doc),
+      })
+    }
+
+    if (includeRawResponses && rawRows.length) {
+      doc.addPage()
+      pdfHeader(doc, `Raw responses — ${organisationContext} — ${filterDept || 'All departments'}`)
+      const rawHeaders = Object.keys(rawRows[0])
+      autoTable(doc, {
+        startY: 33,
+        head: [rawHeaders],
+        body: rawRows.map(row => rawHeaders.map(header => row[header])),
+        styles: { fontSize: 5.5, cellPadding: 1, overflow: 'linebreak' },
+        headStyles: { fillColor: NAVY },
+        horizontalPageBreak: true,
+        horizontalPageBreakRepeat: [0, 1, 2, 3, 5],
+        didDrawPage: () => pdfHeaderRepeat(doc),
+      })
+    }
   }
+
+  function buildCalculatedAnalyticsPdf(doc, autoTable) {
+    drawAnalyticsPdf(doc, autoTable, false)
+  }
+
+  function buildAnalyticsPdf(doc, autoTable) {
+    drawAnalyticsPdf(doc, autoTable, true)
+  }
+
+  const analyticsExportOptions = [
+    {
+      k: 'raw-excel',
+      group: 'Raw data',
+      label: 'Excel workbook (.xlsx)',
+      action: async baseFilename => {
+        const rows = buildAnalyticsRows()
+        if (!rows.length) return alert('There are no submitted responses to export.')
+        await downloadXLSX(rows, `${baseFilename}-raw-responses.xlsx`)
+      },
+    },
+    {
+      k: 'raw-csv',
+      group: 'Raw data',
+      label: 'CSV file (.csv)',
+      action: async baseFilename => {
+        const rows = buildAnalyticsRows()
+        if (!rows.length) return alert('There are no submitted responses to export.')
+        downloadBlob(`${baseFilename}-raw-responses.csv`, '\ufeff' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
+      },
+    },
+    {
+      k: 'calculated-excel',
+      group: 'Calculated analytics',
+      label: 'Excel workbook (.xlsx)',
+      action: baseFilename => exportCalculatedAnalyticsWorkbook(`${baseFilename}-calculated.xlsx`),
+    },
+    {
+      k: 'calculated-pdf',
+      group: 'Calculated analytics',
+      label: 'PDF report (.pdf)',
+      action: baseFilename => exportToPDF(buildCalculatedAnalyticsPdf, `${baseFilename}-calculated.pdf`, 'landscape'),
+    },
+    {
+      k: 'complete-excel',
+      group: 'Complete report',
+      label: 'Excel workbook (.xlsx)',
+      action: baseFilename => exportAnalyticsWorkbook(`${baseFilename}-complete.xlsx`),
+    },
+    {
+      k: 'complete-pdf',
+      group: 'Complete report',
+      label: 'PDF report (.pdf)',
+      action: baseFilename => exportToPDF(buildAnalyticsPdf, `${baseFilename}-complete.pdf`, 'landscape'),
+    },
+  ]
 
   // Lightweight page-number footer for multi-page tables.
   function pdfHeaderRepeat(doc) {
@@ -1806,7 +2105,10 @@ export default function ConsultantPortal() {
           {screen === 'analytics' && (
             <div ref={analyticsRef}>
               <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                <ExportMenu filename="DBN-Analytics" getRows={buildAnalyticsRows} buildPdf={buildAnalyticsPdf} />
+                <ExportMenu
+                  filename={`${organisationContext}-${surveyContext}-analytics`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'survey-analytics'}
+                  options={analyticsExportOptions}
+                />
               </div>
               <div className="page-hero">
                 <div className="hero-title">Analytics</div>
