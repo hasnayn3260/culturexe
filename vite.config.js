@@ -8,6 +8,20 @@ import { fileURLToPath } from 'node:url'
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
+function appVersionPlugin(version) {
+  return {
+    name: 'culturexe-app-version',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version }),
+      })
+    },
+  }
+}
+
 function localApiPlugin() {
   const routes = new Map([
     ['/api/organisations', '/api/organisations/index.ts'],
@@ -83,13 +97,22 @@ function localApiPlugin() {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const localEnv = loadEnv(mode, rootDir, '')
+  const buildVersion = new Date().toISOString()
 
   for (const [name, value] of Object.entries(localEnv)) {
     if (process.env[name] === undefined) process.env[name] = value
   }
 
   return {
-    plugins: [react(), tailwindcss(), localApiPlugin()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      localApiPlugin(),
+      appVersionPlugin(buildVersion),
+    ],
+    define: {
+      __APP_VERSION__: JSON.stringify(buildVersion),
+    },
     resolve: {
       alias: {
         '@': path.resolve(rootDir, './src'),

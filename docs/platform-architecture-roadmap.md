@@ -599,7 +599,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-11 | Implemented, browser acceptance pending | Dashboard users now have a dedicated tab. Every displayed column supports ascending and descending sorting, including status, completion duration and submitted date. Quick actions moved to the top and analytics cards use a compact responsive grid. |
 | CXW-12 | Implemented, browser acceptance pending | The Users tab exports its currently sorted dataset to Excel, CSV and landscape PDF. Each export includes organisation and survey context plus all participant status, timing and completion columns. |
 | CXW-13 | Implemented for submitted responses, browser acceptance pending | One Analytics export menu now offers Raw Data, Calculated Analytics and Complete Report groups. Excel uses purpose-specific worksheets; landscape PDF supports calculated-only or combined calculated/raw reports. Department filtering is preserved. Exporting incomplete saved answers remains dependent on CXW-14. |
-| CXW-14 | Implemented, migration and browser acceptance pending | Token and signed-in surveys autosave and restore partial answers. Drafts remain outside `survey_responses`, so they do not count as completed or trigger receipts. After closure, authorised analytics and raw/complete exports include drafts labelled Incomplete. |
+| CXW-14 | Implemented, browser acceptance pending | Production migration and all validation checks pass. Token and signed-in surveys autosave and restore partial answers. Drafts remain outside `survey_responses`, so they do not count as completed or trigger receipts. After closure, authorised analytics and raw/complete exports include drafts labelled Incomplete. |
 | CXW-15 | Implemented, browser acceptance pending | Production RLS and all 14 SQL validation checks passed. Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
 
 ## Open decisions
@@ -637,6 +637,8 @@ These are implementation notes and do not change Jira statuses automatically.
 - Enhanced CXW-13 analytics exports so Excel and PDF both include raw submitted answers and calculated summary, question, dimension and department analytics. Exports preserve the active department filter and include organisation, survey, response and respondent identifiers.
 - Implemented CXW-14 draft persistence for token-based and signed-in surveys. Started-but-incomplete counts now recognise saved drafts; drafts are restored on return and cleared after submission.
 - Added closed-survey reporting for partial answers. Authorised analytics and raw/complete exports include saved drafts only after closure and label them Incomplete without inflating submitted or completion totals.
+- Applied and validated the CXW-14 production database changes. Cleared 11 redundant legacy drafts, routed both survey experiences through the secured draft-saving function, and added a response trigger that finalises respondents and removes drafts atomically when a response is committed.
+- Added production version detection. Every build emits a unique `version.json`; open sessions check it every minute and when the tab regains focus, then show a forced refresh prompt when a newer deployment is available.
 
 ### 23 November 2026
 

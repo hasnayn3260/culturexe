@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequireMfa from './routes/guards/RequireMfa'
 import { TooltipProvider } from './components/ui/tooltip'
+import AppUpdatePrompt from './components/AppUpdatePrompt'
 import Home            from './pages/Home'
 import Login           from './pages/Login'
 import Signup          from './pages/Signup'
@@ -25,6 +26,7 @@ export default function App() {
       <AuthProvider>
         <ToastProvider>
           <TooltipProvider>
+            <AppUpdatePrompt />
             <BrowserRouter>
               <Routes>
               <Route path="/"               element={<Home />} />
