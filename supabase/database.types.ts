@@ -221,6 +221,7 @@ export type Database = {
       }
       survey_respondents: {
         Row: {
+          completion_duration_seconds: number | null
           department: string | null
           draft_answers: Json | null
           draft_saved_at: string | null
@@ -242,6 +243,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          completion_duration_seconds?: number | null
           department?: string | null
           draft_answers?: Json | null
           draft_saved_at?: string | null
@@ -263,6 +265,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          completion_duration_seconds?: number | null
           department?: string | null
           draft_answers?: Json | null
           draft_saved_at?: string | null

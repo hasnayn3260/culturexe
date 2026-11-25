@@ -100,6 +100,20 @@ export function useClientSurvey(userEmail, userId, orgId) {
     } : current)
   }
 
+  const markStarted = useCallback(async () => {
+    if (!respondent?.token || respondent.started_at || existingResponse) return
+    const { data, error: startError } = await supabase.rpc('start_survey_response', {
+      p_token: respondent.token,
+    })
+    if (startError) throw startError
+    const started = data?.[0]
+    if (!started) return
+    setRespondent(current => current ? {
+      ...current,
+      started_at: started.started_at,
+    } : current)
+  }, [existingResponse, respondent?.started_at, respondent?.token])
+
   async function submitResponse(answers) {
     if (!respondent || !survey) throw new Error('Unable to save your response — please refresh the page and try again.')
     if (!isSurveyAcceptingResponses(survey)) {
@@ -138,7 +152,7 @@ export function useClientSurvey(userEmail, userId, orgId) {
   return {
     survey, questions, respondent, existingResponse,
     loading, error,
-    saveDraft, submitResponse, updateRespondentProfile,
+    saveDraft, markStarted, submitResponse, updateRespondentProfile,
     refetch: load,
   }
 }

@@ -1049,10 +1049,17 @@ export default function ConsultantPortal() {
     const fullName = (matchingProfile?.full_name || respondent.name || '').trim()
     const [firstName = '', ...surnameParts] = fullName.split(/\s+/).filter(Boolean)
     const startedAt = respondent.started_at ? new Date(respondent.started_at).getTime() : null
-    const submittedAt = respondent.submitted_at ? new Date(respondent.submitted_at).getTime() : null
-    const completionMinutes = startedAt && submittedAt && submittedAt >= startedAt
-      ? (submittedAt - startedAt) / 60000
+    const response = responseByRespId.get(respondent.id)
+    const submittedAtValue = respondent.submitted_at || response?.submitted_at || null
+    const submittedAt = submittedAtValue ? new Date(submittedAtValue).getTime() : null
+    const persistedCompletionSeconds = Number.isFinite(respondent.completion_duration_seconds)
+      ? respondent.completion_duration_seconds
       : null
+    const completionSeconds = persistedCompletionSeconds != null
+      ? persistedCompletionSeconds
+      : startedAt && submittedAt && submittedAt >= startedAt
+        ? Math.floor((submittedAt - startedAt) / 1000)
+        : null
     const responded = hasResponded(respondent)
 
     return {
@@ -1064,11 +1071,12 @@ export default function ConsultantPortal() {
       department: resolveDept(respondent) || '',
       position: respondent.job_title || matchingProfile?.job_title || '',
       status: responded ? 'completed' : (respondent.started_at || respondent.draft_saved_at) ? 'in_progress' : 'not_started',
-      completionMinutes,
+      startedAt: respondent.started_at,
+      completionSeconds,
       timing: responded
         ? (respondent.response_timing || calcTiming(respondent.submitted_at, survey?.live_start, survey?.live_end))
         : null,
-      submittedAt: respondent.submitted_at,
+      submittedAt: submittedAtValue,
     }
   })
 
@@ -1101,13 +1109,17 @@ export default function ConsultantPortal() {
     return ''
   }
 
-  function exportedDuration(minutes) {
-    if (minutes == null) return ''
-    if (minutes < 1) return '< 1 min'
-    if (minutes < 60) return `${Math.round(minutes)} min`
+  function exportedDuration(seconds) {
+    if (seconds == null) return ''
+    if (seconds < 60) return `${Math.max(0, Math.round(seconds))} sec`
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.round(seconds % 60)
+    if (minutes < 60) {
+      return remainingSeconds ? `${minutes} min ${remainingSeconds} sec` : `${minutes} min`
+    }
     const hours = Math.floor(minutes / 60)
-    const remainder = Math.round(minutes % 60)
-    return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`
+    const remainingMinutes = minutes % 60
+    return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`
   }
 
   // ── Export row builders ──────────────────────────────────
@@ -1123,7 +1135,8 @@ export default function ConsultantPortal() {
       Department:       row.department,
       Position:         row.position,
       'Survey Status':  exportedStatus(row.status),
-      'Completion Time': exportedDuration(row.completionMinutes),
+      'Started At':     row.startedAt ? new Date(row.startedAt).toLocaleString('en-ZA') : '',
+      'Time Taken':     exportedDuration(row.completionSeconds),
       Timing:           exportedTiming(row.timing),
       'Submitted At':   row.submittedAt ? new Date(row.submittedAt).toLocaleString('en-ZA') : '',
     }))
@@ -1153,7 +1166,11 @@ export default function ConsultantPortal() {
         Email:          r?.email || '',
         Department:     resp._dept || '',
         Position:       resp._title || '',
+        'Started At': r?.started_at ? new Date(r.started_at).toLocaleString('en-ZA') : '',
         'Submitted At': resp.submitted_at ? new Date(resp.submitted_at).toLocaleString('en-ZA') : '',
+        'Time Taken': r?.completion_duration_seconds != null
+          ? exportedDuration(r.completion_duration_seconds)
+          : '',
         'Draft Saved At': resp._isPartial && resp.draft_saved_at
           ? new Date(resp.draft_saved_at).toLocaleString('en-ZA')
           : '',
@@ -1312,7 +1329,7 @@ export default function ConsultantPortal() {
       startY: doc.lastAutoTable.finalY + 8,
       head: [[
         'Organisation', 'Survey', 'First Name', 'Surname', 'Email', 'Source',
-        'Department', 'Position', 'Status', 'Completion', 'Timing', 'Submitted At',
+        'Department', 'Position', 'Status', 'Started At', 'Time Taken', 'Timing', 'Submitted At',
       ]],
       body: rows.map(row => [
         row.Organisation,
@@ -1324,7 +1341,8 @@ export default function ConsultantPortal() {
         row.Department,
         row.Position,
         row['Survey Status'],
-        row['Completion Time'],
+        row['Started At'],
+        row['Time Taken'],
         row.Timing,
         row['Submitted At'],
       ]),

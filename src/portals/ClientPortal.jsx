@@ -347,7 +347,7 @@ function ProfileScreen({ profile, respondent, onSave, onBack }) {
 export default function ClientPortal() {
   const navigate = useNavigate()
   const { user, profile, role, signOut } = useAuth()
-  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id)
+  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id)
 
   const [screen,      setScreen]      = useState('survey')
   const [answers,     setAnswers]     = useState({})
@@ -366,6 +366,13 @@ export default function ClientPortal() {
   const surveyStatus = getEffectiveSurveyStatus(survey)
   const isLive    = surveyStatus === 'live'
   const isClosed  = surveyStatus === 'closed'
+
+  // Record the first open immediately. Saving an answer later must never reset
+  // this timestamp because it is the start of the elapsed completion window.
+  useEffect(() => {
+    if (!isLive || !respondent || respondent.started_at || existingResponse) return
+    markStarted().catch(() => {})
+  }, [existingResponse, isLive, markStarted, respondent])
 
   // Seed answers from existing response or draft
   useEffect(() => {

@@ -64,6 +64,7 @@ export type SurveyRespondent = {
   draft_answers: unknown
   draft_saved_at: string | null
   started_at: string | null
+  completion_duration_seconds: number | null
   source: string | null
   tenure: string | null
   job_grade: string | null

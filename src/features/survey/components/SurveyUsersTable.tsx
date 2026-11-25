@@ -15,7 +15,8 @@ export type SurveyUserTableRow = {
   department: string
   position: string
   status: 'completed' | 'in_progress' | 'not_started'
-  completionMinutes: number | null
+  startedAt: string | null
+  completionSeconds: number | null
   timing: 'early' | 'on_time' | 'late' | null
   submittedAt: string | null
 }
@@ -43,7 +44,8 @@ const columns: Array<{ key: SurveyUserSortKey; label: string }> = [
   { key: 'department', label: 'Department' },
   { key: 'position', label: 'Position' },
   { key: 'status', label: 'Survey status' },
-  { key: 'completionMinutes', label: 'Completion time' },
+  { key: 'startedAt', label: 'Started' },
+  { key: 'completionSeconds', label: 'Time taken' },
   { key: 'timing', label: 'Timing' },
   { key: 'submittedAt', label: 'Submitted' },
 ]
@@ -74,16 +76,22 @@ export function sortSurveyUsers(
   })
 }
 
-function formatDuration(minutes: number | null): string {
-  if (minutes === null) return '—'
-  if (minutes < 1) return '< 1 min'
-  if (minutes < 60) return `${Math.round(minutes)} min`
+function formatDuration(seconds: number | null): string {
+  if (seconds === null) return '—'
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))} sec`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.round(seconds % 60)
+  if (minutes < 60) {
+    return remainingSeconds > 0
+      ? `${minutes} min ${remainingSeconds} sec`
+      : `${minutes} min`
+  }
   const hours = Math.floor(minutes / 60)
-  const remainder = Math.round(minutes % 60)
-  return remainder ? `${hours} hr ${remainder} min` : `${hours} hr`
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`
 }
 
-function formatSubmitted(value: string | null): string {
+function formatDateTime(value: string | null): string {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
@@ -259,9 +267,10 @@ export default function SurveyUsersTable({
                     {statusLabel(row.status)}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[#314966]">{formatDuration(row.completionMinutes)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.startedAt)}</td>
+                <td className="px-4 py-3 text-[#314966]">{formatDuration(row.completionSeconds)}</td>
                 <td className="px-4 py-3 text-[#314966]">{timingLabel(row.timing)}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatSubmitted(row.submittedAt)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.submittedAt)}</td>
               </tr>
             ))}
           </tbody>

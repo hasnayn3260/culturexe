@@ -491,11 +491,16 @@ export default function Assessment({ previewMode = false }) {
         // Mark the moment this respondent first opened the survey, so the
         // dashboard can distinguish "started but not completed" from "not started".
         if (!resp.started_at) {
-          supabase
-            .from('survey_respondents')
-            .update({ started_at: new Date().toISOString() })
-            .eq('id', resp.id)
-            .then(() => {}, () => {}) // best-effort; never block the survey on this
+          supabase.rpc('start_survey_response', { p_token: resp.token })
+            .then(({ data }) => {
+              const started = data?.[0]
+              if (started) {
+                setRespondent(current => current ? {
+                  ...current,
+                  started_at: started.started_at,
+                } : current)
+              }
+            }, () => {}) // best-effort; never block rendering on analytics timing
         }
       } catch {
         setPhase('invalid')

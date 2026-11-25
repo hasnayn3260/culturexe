@@ -102,6 +102,23 @@ function formatDateTime(value: string | null): string {
   }).format(date)
 }
 
+function formatDuration(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return '—'
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))} sec`
+
+  const totalMinutes = Math.floor(seconds / 60)
+  const remainingSeconds = Math.round(seconds % 60)
+  if (totalMinutes < 60) {
+    return remainingSeconds > 0
+      ? `${totalMinutes} min ${remainingSeconds} sec`
+      : `${totalMinutes} min`
+  }
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes > 0 ? `${hours} hr ${minutes} min` : `${hours} hr`
+}
+
 function initials(respondent: SurveyRespondent): string {
   const source = respondent.name || respondent.email || '?'
   return source
@@ -608,7 +625,7 @@ export default function SurveyRespondentsPanel({
               return (
                 <article
                   key={respondent.id}
-                  className="grid gap-3 rounded-xl border border-[#E1E8EF] bg-white p-3 md:grid-cols-[minmax(180px,1.2fr)_minmax(130px,0.7fr)_minmax(110px,0.6fr)_minmax(130px,0.7fr)_auto] md:items-center"
+                  className="grid gap-3 rounded-xl border border-[#E1E8EF] bg-white p-3 md:grid-cols-[minmax(180px,1.2fr)_minmax(130px,0.7fr)_minmax(110px,0.6fr)_minmax(210px,0.9fr)_auto] md:items-center"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1BBFB0] to-[#3298C5] text-xs font-extrabold text-white">
@@ -637,16 +654,24 @@ export default function SurveyRespondentsPanel({
                       {respondent.source?.replace('_', ' ') || 'invited'}
                     </div>
                   </div>
-                  <div className="text-xs text-[#7C8EA5]">
-                    <div className="font-semibold text-[#526A88]">
-                      {status === 'completed' ? 'Submitted' : 'Invited'}
+                  <div className="grid gap-1 text-xs text-[#7C8EA5]">
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold text-[#526A88]">Started</span>
+                      <span className="text-right">{formatDateTime(respondent.started_at)}</span>
                     </div>
-                    <div className="mt-0.5">
-                      {formatDateTime(
-                        status === 'completed'
-                          ? respondent.submitted_at || submittedAtByRespondent.get(respondent.id) || null
-                          : respondent.invited_at,
-                      )}
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold text-[#526A88]">Submitted</span>
+                      <span className="text-right">
+                        {formatDateTime(
+                          respondent.submitted_at || submittedAtByRespondent.get(respondent.id) || null,
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold text-[#526A88]">Time taken</span>
+                      <span className="text-right">
+                        {formatDuration(respondent.completion_duration_seconds)}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center justify-end gap-1">
