@@ -15,6 +15,9 @@ export type SurveyUserTableRow = {
   department: string
   position: string
   status: 'completed' | 'in_progress' | 'not_started'
+  accessCount: number
+  firstAccessedAt: string | null
+  lastAccessedAt: string | null
   startedAt: string | null
   completionSeconds: number | null
   timing: 'early' | 'on_time' | 'late' | null
@@ -44,6 +47,9 @@ const columns: Array<{ key: SurveyUserSortKey; label: string }> = [
   { key: 'department', label: 'Department' },
   { key: 'position', label: 'Position' },
   { key: 'status', label: 'Survey status' },
+  { key: 'accessCount', label: 'Accesses' },
+  { key: 'firstAccessedAt', label: 'First accessed' },
+  { key: 'lastAccessedAt', label: 'Last accessed' },
   { key: 'startedAt', label: 'Started' },
   { key: 'completionSeconds', label: 'Time taken' },
   { key: 'timing', label: 'Timing' },
@@ -267,6 +273,9 @@ export default function SurveyUsersTable({
                     {statusLabel(row.status)}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-[#314966]">{row.accessCount}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.firstAccessedAt)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.lastAccessedAt)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.startedAt)}</td>
                 <td className="px-4 py-3 text-[#314966]">{formatDuration(row.completionSeconds)}</td>
                 <td className="px-4 py-3 text-[#314966]">{timingLabel(row.timing)}</td>

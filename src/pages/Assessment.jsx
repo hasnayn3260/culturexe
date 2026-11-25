@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
 import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
+import { createSurveyAccessId } from '../features/survey/utils/surveyAccess'
 
 const SCALE = [1, 2, 3, 4, 5]
 const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
@@ -409,6 +410,7 @@ export default function Assessment({ previewMode = false }) {
   const [navError, setNavError]         = useState('')
   const [draftSaveState, setDraftSaveState] = useState('idle')
   const draftSaveTimerRef = useRef(null)
+  const accessIdRef = useRef(createSurveyAccessId())
 
   useEffect(() => {
     async function init() {
@@ -444,14 +446,22 @@ export default function Assessment({ previewMode = false }) {
 
       if (!token) { setPhase('invalid'); return }
       try {
-        const { data: resp, error: rErr } = await supabase
+        const { data: respondentData, error: rErr } = await supabase
           .from('survey_respondents')
           .select('*, survey(*)')
           .eq('token', token)
           .maybeSingle()
 
         if (rErr) throw rErr
-        if (!resp) { setPhase('invalid'); return }
+        if (!respondentData) { setPhase('invalid'); return }
+
+        let resp = respondentData
+        const { data: accessRows } = await supabase.rpc('record_survey_access', {
+          p_token: resp.token,
+          p_access_id: accessIdRef.current,
+        })
+        if (accessRows?.[0]) resp = { ...resp, ...accessRows[0] }
+
         if (resp.used) { setPhase('used'); return }
 
         const sv = resp.survey

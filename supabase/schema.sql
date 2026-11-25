@@ -54,6 +54,76 @@ $$;
 ALTER FUNCTION "public"."enforce_profile_privilege_lock"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."finalize_respondent_on_response"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+begin
+  update public.survey_respondents
+  set
+    used = true,
+
+    -- Preserve the first final submission timestamp.
+    submitted_at = coalesce(
+      submitted_at,
+      new.submitted_at,
+      now()
+    ),
+
+    -- Preserve the original start. If no start exists because of a race,
+    -- use submission time and record a zero-second duration.
+    started_at = coalesce(
+      started_at,
+      new.submitted_at,
+      now()
+    ),
+
+    completion_duration_seconds = case
+      when coalesce(
+        submitted_at,
+        new.submitted_at,
+        now()
+      ) >= coalesce(
+        started_at,
+        new.submitted_at,
+        now()
+      )
+      then floor(
+        extract(
+          epoch from (
+            coalesce(
+              submitted_at,
+              new.submitted_at,
+              now()
+            )
+            -
+            coalesce(
+              started_at,
+              new.submitted_at,
+              now()
+            )
+          )
+        )
+      )::integer
+      else 0
+    end,
+
+    draft_answers = null,
+    draft_saved_at = null
+  where id = new.respondent_id;
+
+  return new;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."finalize_respondent_on_response"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."finalize_respondent_on_response"() IS 'Marks a respondent submitted and removes redundant draft data whenever the final response is committed.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."get_email_by_username"("p_username" "text") RETURNS "text"
     LANGUAGE "sql" STABLE SECURITY DEFINER
     AS $$
@@ -226,6 +296,69 @@ $$;
 ALTER FUNCTION "public"."register_open_respondent"("p_open_token" "uuid", "p_department" "text", "p_job_title" "text", "p_tenure" "text", "p_job_grade" "text", "p_name" "text") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") RETURNS TABLE("respondent_id" "uuid", "started_at" timestamp with time zone, "draft_saved_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_respondent public.survey_respondents%rowtype;
+  v_saved_at timestamptz := now();
+begin
+  if p_token is null then
+    raise exception 'A survey access token is required.' using errcode = 'CX001';
+  end if;
+
+  if p_answers is null or jsonb_typeof(p_answers) <> 'object' then
+    raise exception 'Draft answers must be a JSON object.' using errcode = 'CX002';
+  end if;
+
+  if octet_length(p_answers::text) > 1048576 then
+    raise exception 'Draft answers exceed the 1 MB limit.' using errcode = 'CX003';
+  end if;
+
+  select sr.*
+    into v_respondent
+  from public.survey_respondents as sr
+  where sr.token = p_token
+  for update;
+
+  if not found then
+    raise exception 'This survey link is invalid.' using errcode = 'CX004';
+  end if;
+
+  if v_respondent.used or v_respondent.submitted_at is not null then
+    raise exception 'This survey has already been submitted.' using errcode = 'CX005';
+  end if;
+
+  if not public.survey_accepting_responses(
+    v_respondent.survey_id,
+    v_respondent.id
+  ) then
+    raise exception 'This survey is closed and is no longer accepting responses.'
+      using errcode = 'CX006';
+  end if;
+
+  update public.survey_respondents as sr
+  set
+    started_at = coalesce(sr.started_at, v_saved_at),
+    draft_answers = p_answers,
+    draft_saved_at = v_saved_at
+  where sr.id = v_respondent.id
+  returning sr.id, sr.started_at, sr.draft_saved_at
+    into respondent_id, started_at, draft_saved_at;
+
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") IS 'Saves token-scoped partial survey answers while the survey response window is open. Drafts do not count as submitted responses.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."set_organisations_updated_at"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     SET "search_path" TO 'public'
@@ -238,6 +371,95 @@ $$;
 
 
 ALTER FUNCTION "public"."set_organisations_updated_at"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."start_survey_response"("p_token" "uuid") RETURNS TABLE("respondent_id" "uuid", "started_at" timestamp with time zone)
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_respondent public.survey_respondents%rowtype;
+begin
+  if p_token is null then
+    raise exception 'A survey access token is required.'
+      using errcode = 'CX001';
+  end if;
+
+  select sr.*
+  into v_respondent
+  from public.survey_respondents as sr
+  where sr.token = p_token
+  for update;
+
+  if not found then
+    raise exception 'This survey link is invalid.'
+      using errcode = 'CX004';
+  end if;
+
+  if v_respondent.used
+    or v_respondent.submitted_at is not null
+  then
+    raise exception 'This survey has already been submitted.'
+      using errcode = 'CX005';
+  end if;
+
+  if not public.survey_accepting_responses(
+    v_respondent.survey_id,
+    v_respondent.id
+  ) then
+    raise exception
+      'This survey is closed and is no longer accepting responses.'
+      using errcode = 'CX006';
+  end if;
+
+  update public.survey_respondents as sr
+  set started_at = coalesce(sr.started_at, now())
+  where sr.id = v_respondent.id
+  returning
+    sr.id,
+    sr.started_at
+  into
+    respondent_id,
+    started_at;
+
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."start_survey_response"("p_token" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."start_survey_response"("p_token" "uuid") IS 'Records the first time a respondent opens an active survey without resetting resumed sessions.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") RETURNS boolean
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+  select exists (
+    select 1
+    from public.survey as s
+    join public.survey_respondents as sr
+      on sr.survey_id = s.id
+    where s.id = p_survey_id
+      and sr.id = p_respondent_id
+      and s.status = 'live'
+      and s.live_start is not null
+      and s.live_end is not null
+      and s.live_end > s.live_start
+      and now() >= s.live_start
+      and now() < s.live_end
+  );
+$$;
+
+
+ALTER FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") IS 'Returns true only when the respondent belongs to the survey and its live response window is currently open.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."update_updated_at"() RETURNS "trigger"
@@ -383,11 +605,51 @@ CREATE TABLE IF NOT EXISTS "public"."survey" (
     "updated_at" timestamp with time zone DEFAULT "now"(),
     "open_link_enabled" boolean DEFAULT false NOT NULL,
     "open_link_token" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "org_id" "uuid" NOT NULL
+    "org_id" "uuid" NOT NULL,
+    "reminders_enabled" boolean DEFAULT false NOT NULL,
+    "reminder_first_send_at" timestamp with time zone,
+    "reminder_frequency_days" smallint DEFAULT 3 NOT NULL,
+    "reminder_send_time" time without time zone DEFAULT '09:00:00'::time without time zone NOT NULL,
+    "reminder_timezone" "text" DEFAULT 'Africa/Johannesburg'::"text" NOT NULL,
+    "reminder_max_sends" smallint DEFAULT 3 NOT NULL,
+    "email_invitations_enabled" boolean DEFAULT true NOT NULL,
+    "email_reminders_enabled" boolean DEFAULT true NOT NULL,
+    "email_receipts_enabled" boolean DEFAULT true NOT NULL,
+    "sms_invitations_enabled" boolean DEFAULT false NOT NULL,
+    "sms_reminders_enabled" boolean DEFAULT false NOT NULL,
+    "sms_receipts_enabled" boolean DEFAULT false NOT NULL,
+    CONSTRAINT "survey_reminder_frequency_days_check" CHECK ((("reminder_frequency_days" >= 1) AND ("reminder_frequency_days" <= 30))),
+    CONSTRAINT "survey_reminder_max_sends_check" CHECK ((("reminder_max_sends" >= 1) AND ("reminder_max_sends" <= 20))),
+    CONSTRAINT "survey_reminder_timezone_check" CHECK ((("length"("btrim"("reminder_timezone")) >= 1) AND ("length"("btrim"("reminder_timezone")) <= 100))),
+    CONSTRAINT "survey_schedule_dates_check" CHECK ((("live_start" IS NULL) OR ("live_end" IS NULL) OR ("live_end" > "live_start")))
 );
 
 
 ALTER TABLE "public"."survey" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."survey"."reminders_enabled" IS 'Enables scheduled reminders. A scheduler must still invoke the reminder delivery endpoint.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."reminder_first_send_at" IS 'Earliest timestamp at which the automatic reminder schedule may begin.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."reminder_frequency_days" IS 'Number of days between automatic reminder runs.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."reminder_send_time" IS 'Preferred local delivery time for automatic reminders.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."reminder_timezone" IS 'IANA timezone used to interpret reminder_send_time.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."reminder_max_sends" IS 'Maximum number of reminders that may be sent to one respondent for this survey.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."survey_questions" (
@@ -426,11 +688,33 @@ CREATE TABLE IF NOT EXISTS "public"."survey_respondents" (
     "started_at" timestamp with time zone,
     "source" "text" DEFAULT 'invited'::"text" NOT NULL,
     "tenure" "text",
-    "job_grade" "text"
+    "job_grade" "text",
+    "reminder_count" smallint DEFAULT 0 NOT NULL,
+    "last_reminder_attempted_at" timestamp with time zone,
+    "last_reminder_error" "text",
+    "completion_duration_seconds" integer,
+    CONSTRAINT "survey_respondents_completion_duration_nonnegative" CHECK ((("completion_duration_seconds" IS NULL) OR (("completion_duration_seconds" >= 0) AND ("started_at" IS NOT NULL) AND ("submitted_at" IS NOT NULL) AND ("submitted_at" >= "started_at")))),
+    CONSTRAINT "survey_respondents_reminder_count_check" CHECK (("reminder_count" >= 0))
 );
 
 
 ALTER TABLE "public"."survey_respondents" OWNER TO "postgres";
+
+
+COMMENT ON COLUMN "public"."survey_respondents"."reminder_count" IS 'Number of successfully delivered reminders for this respondent and survey.';
+
+
+
+COMMENT ON COLUMN "public"."survey_respondents"."last_reminder_attempted_at" IS 'Timestamp of the latest reminder delivery attempt, whether successful or failed.';
+
+
+
+COMMENT ON COLUMN "public"."survey_respondents"."last_reminder_error" IS 'Latest reminder delivery error. Cleared after a successful delivery.';
+
+
+
+COMMENT ON COLUMN "public"."survey_respondents"."completion_duration_seconds" IS 'Elapsed whole seconds from the respondent first opening the survey to final submission.';
+
 
 
 CREATE TABLE IF NOT EXISTS "public"."survey_responses" (
@@ -446,6 +730,56 @@ CREATE TABLE IF NOT EXISTS "public"."survey_responses" (
 
 
 ALTER TABLE "public"."survey_responses" OWNER TO "postgres";
+
+
+CREATE TABLE IF NOT EXISTS "public"."survey_template_questions" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "template_id" "uuid" NOT NULL,
+    "text" "text" NOT NULL,
+    "hint" "text",
+    "question_type" "text" DEFAULT 'LIKERT'::"text" NOT NULL,
+    "dimension" "text",
+    "order_num" integer DEFAULT 0 NOT NULL,
+    "options" "jsonb",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "survey_template_questions_dimension_length" CHECK ((("dimension" IS NULL) OR ("length"("dimension") <= 180))),
+    CONSTRAINT "survey_template_questions_hint_length" CHECK ((("hint" IS NULL) OR ("length"("hint") <= 2000))),
+    CONSTRAINT "survey_template_questions_order_nonnegative" CHECK (("order_num" >= 0)),
+    CONSTRAINT "survey_template_questions_text_not_blank" CHECK ((("length"("btrim"("text")) >= 1) AND ("length"("btrim"("text")) <= 5000)))
+);
+
+
+ALTER TABLE "public"."survey_template_questions" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."survey_template_questions" IS 'Ordered reusable question content belonging to a survey template.';
+
+
+
+CREATE TABLE IF NOT EXISTS "public"."survey_templates" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "org_id" "uuid",
+    "name" "text" NOT NULL,
+    "description" "text",
+    "active" boolean DEFAULT true NOT NULL,
+    "created_by" "uuid",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "survey_templates_description_length" CHECK ((("description" IS NULL) OR ("length"("description") <= 5000))),
+    CONSTRAINT "survey_templates_name_not_blank" CHECK ((("length"("btrim"("name")) >= 2) AND ("length"("btrim"("name")) <= 180)))
+);
+
+
+ALTER TABLE "public"."survey_templates" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."survey_templates" IS 'Reusable global or organisation-specific survey definitions. Managed by super administrators.';
+
+
+
+COMMENT ON COLUMN "public"."survey_templates"."org_id" IS 'Null for a global template; otherwise limits the template to one organisation.';
+
 
 
 ALTER TABLE ONLY "public"."organisations"
@@ -493,11 +827,30 @@ ALTER TABLE ONLY "public"."survey_responses"
 
 
 
+ALTER TABLE ONLY "public"."survey_template_questions"
+    ADD CONSTRAINT "survey_template_questions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."survey_template_questions"
+    ADD CONSTRAINT "survey_template_questions_template_order_unique" UNIQUE ("template_id", "order_num");
+
+
+
+ALTER TABLE ONLY "public"."survey_templates"
+    ADD CONSTRAINT "survey_templates_pkey" PRIMARY KEY ("id");
+
+
+
 CREATE INDEX "idx_profiles_org_id" ON "public"."profiles" USING "btree" ("org_id");
 
 
 
 CREATE INDEX "idx_profiles_role" ON "public"."profiles" USING "btree" ("role");
+
+
+
+CREATE INDEX "idx_survey_automatic_reminders" ON "public"."survey" USING "btree" ("reminder_first_send_at", "live_end") WHERE (("reminders_enabled" = true) AND ("status" = 'live'::"text"));
 
 
 
@@ -529,6 +882,30 @@ CREATE INDEX "survey_org_id_idx" ON "public"."survey" USING "btree" ("org_id");
 
 
 
+CREATE INDEX "survey_template_questions_template_id_idx" ON "public"."survey_template_questions" USING "btree" ("template_id", "order_num");
+
+
+
+CREATE INDEX "survey_templates_active_idx" ON "public"."survey_templates" USING "btree" ("active");
+
+
+
+CREATE UNIQUE INDEX "survey_templates_global_name_unique" ON "public"."survey_templates" USING "btree" ("lower"("btrim"("name"))) WHERE ("org_id" IS NULL);
+
+
+
+CREATE INDEX "survey_templates_org_id_idx" ON "public"."survey_templates" USING "btree" ("org_id");
+
+
+
+CREATE UNIQUE INDEX "survey_templates_org_name_unique" ON "public"."survey_templates" USING "btree" ("org_id", "lower"("btrim"("name"))) WHERE ("org_id" IS NOT NULL);
+
+
+
+CREATE OR REPLACE TRIGGER "finalize_respondent_after_response" AFTER INSERT OR UPDATE OF "submitted_at" ON "public"."survey_responses" FOR EACH ROW EXECUTE FUNCTION "public"."finalize_respondent_on_response"();
+
+
+
 CREATE OR REPLACE TRIGGER "organisations_set_updated_at" BEFORE UPDATE ON "public"."organisations" FOR EACH ROW EXECUTE FUNCTION "public"."set_organisations_updated_at"();
 
 
@@ -538,6 +915,14 @@ CREATE OR REPLACE TRIGGER "profiles_privilege_lock" BEFORE UPDATE ON "public"."p
 
 
 CREATE OR REPLACE TRIGGER "survey_completion_receipt" AFTER INSERT ON "public"."survey_responses" FOR EACH ROW EXECUTE FUNCTION "supabase_functions"."http_request"('https://www.culture-xe.com/api/surveys/receipt', 'POST', '{"Content-type":"application/json","x-webhook-secret":"17dbefbf63722a2d3bac9817d1901d80c8d08a6399ec32941857dfbcf7c8cb5d+"}', '{}', '10000');
+
+
+
+CREATE OR REPLACE TRIGGER "survey_template_questions_set_updated_at" BEFORE UPDATE ON "public"."survey_template_questions" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at"();
+
+
+
+CREATE OR REPLACE TRIGGER "survey_templates_set_updated_at" BEFORE UPDATE ON "public"."survey_templates" FOR EACH ROW EXECUTE FUNCTION "public"."update_updated_at"();
 
 
 
@@ -588,6 +973,21 @@ ALTER TABLE ONLY "public"."survey_responses"
 
 ALTER TABLE ONLY "public"."survey_responses"
     ADD CONSTRAINT "survey_responses_survey_id_fkey" FOREIGN KEY ("survey_id") REFERENCES "public"."survey"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."survey_template_questions"
+    ADD CONSTRAINT "survey_template_questions_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."survey_templates"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."survey_templates"
+    ADD CONSTRAINT "survey_templates_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "auth"."users"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."survey_templates"
+    ADD CONSTRAINT "survey_templates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organisations"("id") ON DELETE CASCADE;
 
 
 
@@ -657,7 +1057,7 @@ CREATE POLICY "sresp_admin_all" ON "public"."survey_responses" TO "authenticated
 
 
 
-CREATE POLICY "sresp_anon_insert" ON "public"."survey_responses" FOR INSERT TO "anon" WITH CHECK (true);
+CREATE POLICY "sresp_anon_insert" ON "public"."survey_responses" FOR INSERT TO "anon" WITH CHECK ("public"."survey_accepting_responses"("survey_id", "respondent_id"));
 
 
 
@@ -667,9 +1067,9 @@ CREATE POLICY "sresp_own_read" ON "public"."survey_responses" FOR SELECT TO "aut
 
 
 
-CREATE POLICY "sresp_own_write" ON "public"."survey_responses" FOR INSERT TO "authenticated" WITH CHECK ((EXISTS ( SELECT 1
+CREATE POLICY "sresp_own_write" ON "public"."survey_responses" FOR INSERT TO "authenticated" WITH CHECK (("public"."survey_accepting_responses"("survey_id", "respondent_id") AND (EXISTS ( SELECT 1
    FROM "public"."survey_respondents" "sr"
-  WHERE (("sr"."id" = "survey_responses"."respondent_id") AND (("sr"."user_id" = "auth"."uid"()) OR ("lower"("sr"."email") = "lower"("auth"."email"())))))));
+  WHERE (("sr"."id" = "survey_responses"."respondent_id") AND ("sr"."survey_id" = "survey_responses"."survey_id") AND (("sr"."user_id" = "auth"."uid"()) OR ("lower"("sr"."email") = "lower"("auth"."email"()))))))));
 
 
 
@@ -701,6 +1101,20 @@ ALTER TABLE "public"."survey_respondents" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."survey_responses" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."survey_template_questions" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "survey_template_questions_superadmin_all" ON "public"."survey_template_questions" TO "authenticated" USING ("public"."is_superadmin"()) WITH CHECK ("public"."is_superadmin"());
+
+
+
+ALTER TABLE "public"."survey_templates" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "survey_templates_superadmin_all" ON "public"."survey_templates" TO "authenticated" USING ("public"."is_superadmin"()) WITH CHECK ("public"."is_superadmin"());
+
+
+
 GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
@@ -711,6 +1125,13 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 GRANT ALL ON FUNCTION "public"."enforce_profile_privilege_lock"() TO "anon";
 GRANT ALL ON FUNCTION "public"."enforce_profile_privilege_lock"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."enforce_profile_privilege_lock"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."finalize_respondent_on_response"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."finalize_respondent_on_response"() TO "anon";
+GRANT ALL ON FUNCTION "public"."finalize_respondent_on_response"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."finalize_respondent_on_response"() TO "service_role";
 
 
 
@@ -757,9 +1178,30 @@ GRANT ALL ON FUNCTION "public"."register_open_respondent"("p_open_token" "uuid",
 
 
 
+REVOKE ALL ON FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."save_survey_draft"("p_token" "uuid", "p_answers" "jsonb") TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "public"."set_organisations_updated_at"() TO "anon";
 GRANT ALL ON FUNCTION "public"."set_organisations_updated_at"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."set_organisations_updated_at"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") TO "service_role";
 
 
 
@@ -802,6 +1244,16 @@ GRANT ALL ON TABLE "public"."survey_respondents" TO "service_role";
 GRANT ALL ON TABLE "public"."survey_responses" TO "anon";
 GRANT ALL ON TABLE "public"."survey_responses" TO "authenticated";
 GRANT ALL ON TABLE "public"."survey_responses" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."survey_template_questions" TO "authenticated";
+GRANT ALL ON TABLE "public"."survey_template_questions" TO "service_role";
+
+
+
+GRANT ALL ON TABLE "public"."survey_templates" TO "authenticated";
+GRANT ALL ON TABLE "public"."survey_templates" TO "service_role";
 
 
 

@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import supabase from '../lib/supabaseClient'
 import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
+import { createSurveyAccessId } from '../features/survey/utils/surveyAccess'
 
 function calcTiming(submittedAt, liveStart, liveEnd) {
   const sub = new Date(submittedAt).getTime()
@@ -13,6 +14,7 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
 }
 
 export function useClientSurvey(userEmail, userId, orgId) {
+  const accessIdRef = useRef(createSurveyAccessId())
   const [survey,           setSurvey]           = useState(null)
   const [questions,        setQuestions]        = useState([])
   const [respondent,       setRespondent]       = useState(null)
@@ -71,6 +73,21 @@ export function useClientSurvey(userEmail, userId, orgId) {
           .from('survey_responses').select('*')
           .eq('respondent_id', resp.id).maybeSingle()
         setExistingResponse(existing)
+      }
+
+      if (resp?.token) {
+        const { data: accessRows, error: accessError } = await supabase.rpc(
+          'record_survey_access',
+          {
+            p_token: resp.token,
+            p_access_id: accessIdRef.current,
+          },
+        )
+        if (accessError) {
+          console.warn('survey access tracking:', accessError.message)
+        } else if (accessRows?.[0]) {
+          resp = { ...resp, ...accessRows[0] }
+        }
       }
 
       setRespondent(resp)

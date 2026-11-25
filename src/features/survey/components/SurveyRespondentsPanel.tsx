@@ -656,6 +656,16 @@ export default function SurveyRespondentsPanel({
                   </div>
                   <div className="grid gap-1 text-xs text-[#7C8EA5]">
                     <div className="flex justify-between gap-3">
+                      <span className="font-semibold text-[#526A88]">Accesses</span>
+                      <span className="text-right">
+                        {respondent.access_count || 0} ({Math.max(0, (respondent.access_count || 0) - 1)} repeat)
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="font-semibold text-[#526A88]">Last accessed</span>
+                      <span className="text-right">{formatDateTime(respondent.last_accessed_at)}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
                       <span className="font-semibold text-[#526A88]">Started</span>
                       <span className="text-right">{formatDateTime(respondent.started_at)}</span>
                     </div>

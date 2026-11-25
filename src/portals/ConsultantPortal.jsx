@@ -931,6 +931,20 @@ export default function ConsultantPortal() {
   const totalInProgress   = respondents.filter(r =>
     !hasResponded(r) && (r.started_at || r.draft_saved_at),
   ).length
+  const totalUniqueAccesses = respondents.filter(r => (r.access_count || 0) > 0).length
+  const totalRepeatAccesses = respondents.reduce(
+    (total, respondent) => total + Math.max(0, (respondent.access_count || 0) - 1),
+    0,
+  )
+  const totalSurveyAccesses = respondents.reduce(
+    (total, respondent) => total + (respondent.access_count || 0),
+    0,
+  )
+  const totalIncompleteAccesses = respondents.reduce(
+    (total, respondent) => total + (hasResponded(respondent) ? 0 : (respondent.access_count || 0)),
+    0,
+  )
+  const totalCompletedAccesses = totalSurveyAccesses - totalIncompleteAccesses
 
   // Drafts are intentionally excluded from completion counts. Once the survey
   // closes, however, they become reportable partial responses for authorised
@@ -1071,6 +1085,9 @@ export default function ConsultantPortal() {
       department: resolveDept(respondent) || '',
       position: respondent.job_title || matchingProfile?.job_title || '',
       status: responded ? 'completed' : (respondent.started_at || respondent.draft_saved_at) ? 'in_progress' : 'not_started',
+      accessCount: respondent.access_count || 0,
+      firstAccessedAt: respondent.first_accessed_at,
+      lastAccessedAt: respondent.last_accessed_at,
       startedAt: respondent.started_at,
       completionSeconds,
       timing: responded
@@ -1135,6 +1152,11 @@ export default function ConsultantPortal() {
       Department:       row.department,
       Position:         row.position,
       'Survey Status':  exportedStatus(row.status),
+      'Access Count':   row.accessCount,
+      'Repeat Accesses': Math.max(0, row.accessCount - 1),
+      'Access Outcome': row.status === 'completed' ? 'Completed' : 'Not completed',
+      'First Accessed At': row.firstAccessedAt ? new Date(row.firstAccessedAt).toLocaleString('en-ZA') : '',
+      'Last Accessed At': row.lastAccessedAt ? new Date(row.lastAccessedAt).toLocaleString('en-ZA') : '',
       'Started At':     row.startedAt ? new Date(row.startedAt).toLocaleString('en-ZA') : '',
       'Time Taken':     exportedDuration(row.completionSeconds),
       Timing:           exportedTiming(row.timing),
@@ -1166,6 +1188,11 @@ export default function ConsultantPortal() {
         Email:          r?.email || '',
         Department:     resp._dept || '',
         Position:       resp._title || '',
+        'Access Count': r?.access_count || 0,
+        'Repeat Accesses': Math.max(0, (r?.access_count || 0) - 1),
+        'Access Outcome': resp._isPartial ? 'Not completed' : 'Completed',
+        'First Accessed At': r?.first_accessed_at ? new Date(r.first_accessed_at).toLocaleString('en-ZA') : '',
+        'Last Accessed At': r?.last_accessed_at ? new Date(r.last_accessed_at).toLocaleString('en-ZA') : '',
         'Started At': r?.started_at ? new Date(r.started_at).toLocaleString('en-ZA') : '',
         'Submitted At': resp.submitted_at ? new Date(resp.submitted_at).toLocaleString('en-ZA') : '',
         'Time Taken': r?.completion_duration_seconds != null
@@ -1236,6 +1263,14 @@ export default function ConsultantPortal() {
       likertQs.map(question => response.answers?.[question.id]).filter(value => value != null),
     )
     const filteredMetrics = calculateLikertMetrics(filteredLikertAnswers)
+    const filteredAccesses = analyticsExportRespondents.reduce(
+      (total, respondent) => total + (respondent.access_count || 0),
+      0,
+    )
+    const filteredIncompleteAccesses = analyticsExportRespondents.reduce(
+      (total, respondent) => total + (hasResponded(respondent) ? 0 : (respondent.access_count || 0)),
+      0,
+    )
 
     return [
       { Metric: 'Organisation', Value: organisationContext },
@@ -1244,6 +1279,9 @@ export default function ConsultantPortal() {
       { Metric: 'Assigned users', Value: assigned },
       { Metric: 'Submitted responses', Value: submitted },
       { Metric: 'Incomplete responses', Value: partial },
+      { Metric: 'Total survey accesses', Value: filteredAccesses },
+      { Metric: 'Accesses without completion', Value: filteredIncompleteAccesses },
+      { Metric: 'Accesses by users who completed', Value: filteredAccesses - filteredIncompleteAccesses },
       { Metric: 'Completion rate', Value: assigned > 0 ? `${Math.round((submitted / assigned) * 100)}%` : '0%' },
       { Metric: 'Questions', Value: questions.length },
       { Metric: 'Likert average', Value: filteredMetrics ? `${filteredMetrics.average.toFixed(2)} / 5` : '' },
@@ -1320,16 +1358,24 @@ export default function ConsultantPortal() {
     pdfHeader(doc, `Users — ${organisationContext} — ${surveyContext}`)
     autoTable(doc, {
       startY: 33,
-      head: [['Registered', 'Completed Survey', 'Started — Not Done', 'Participation']],
-      body: [[String(totalRegistered), String(totalCompleted), String(totalInProgress), `${completionPct}%`]],
-      theme: 'grid', headStyles: { fillColor: NAVY }, styles: { halign: 'center', fontSize: 10 },
+      head: [[
+        'Registered', 'Total Accesses', 'Incomplete Accesses', 'Completed-user Accesses',
+        'Unique Users', 'Repeat Accesses', 'Started — Not Done', 'Completed', 'Participation',
+      ]],
+      body: [[
+        String(totalRegistered), String(totalSurveyAccesses), String(totalIncompleteAccesses),
+        String(totalCompletedAccesses), String(totalUniqueAccesses), String(totalRepeatAccesses),
+        String(totalInProgress), String(totalCompleted), `${completionPct}%`,
+      ]],
+      theme: 'grid', headStyles: { fillColor: NAVY }, styles: { halign: 'center', fontSize: 7.5 },
     })
     const rows = buildDashboardRows()
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 8,
       head: [[
         'Organisation', 'Survey', 'First Name', 'Surname', 'Email', 'Source',
-        'Department', 'Position', 'Status', 'Started At', 'Time Taken', 'Timing', 'Submitted At',
+        'Department', 'Position', 'Status', 'Accesses', 'Repeats', 'Access Outcome', 'First Accessed',
+        'Last Accessed', 'Started At', 'Time Taken', 'Timing', 'Submitted At',
       ]],
       body: rows.map(row => [
         row.Organisation,
@@ -1341,6 +1387,11 @@ export default function ConsultantPortal() {
         row.Department,
         row.Position,
         row['Survey Status'],
+        row['Access Count'],
+        row['Repeat Accesses'],
+        row['Access Outcome'],
+        row['First Accessed At'],
+        row['Last Accessed At'],
         row['Started At'],
         row['Time Taken'],
         row.Timing,
@@ -1748,11 +1799,16 @@ export default function ConsultantPortal() {
                 </div>
               </div>
 
-              <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {[
                   { label: 'Registered',          value: totalRegistered,  sub: 'Accounts created on the website',  color: '#1A6BAA' },
                   { label: 'Completed Survey',    value: totalCompleted,   sub: 'Fully submitted',                  color: '#0A8A7E' },
                   { label: 'Started — Not Done',  value: totalInProgress,  sub: 'Opened the survey, not submitted', color: '#C9B882' },
+                  { label: 'Total Accesses',      value: totalSurveyAccesses, sub: 'Every recorded survey click or open', color: '#2479AF' },
+                  { label: 'Incomplete Accesses', value: totalIncompleteAccesses, sub: 'Clicks by users who have not submitted', color: '#C0644B' },
+                  { label: 'Completed-user Accesses', value: totalCompletedAccesses, sub: 'Clicks by users who submitted', color: '#0A8A7E' },
+                  { label: 'Unique Users Accessed', value: totalUniqueAccesses, sub: 'People who opened the survey link', color: '#2479AF' },
+                  { label: 'Repeat Accesses',     value: totalRepeatAccesses, sub: 'Additional survey-link visits', color: '#7B5AA6' },
                 ].map(c => (
                   <div className="stat-card" key={c.label}>
                     <div className="stat-accent" style={{ background: c.color }} />

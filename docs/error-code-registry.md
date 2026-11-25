@@ -6,12 +6,13 @@ messages. PostgreSQL codes use the vendor class `CX` followed by three digits.
 
 | Code | Source | Meaning | Intended user message |
 | --- | --- | --- | --- |
-| `CX001` | `save_survey_draft`, `start_survey_response` | Survey access token was not supplied. | This survey link is incomplete. Please reopen the link from your email. |
+| `CX001` | `save_survey_draft`, `start_survey_response`, `record_survey_access` | Survey access token was not supplied. | This survey link is incomplete. Please reopen the link from your email. |
 | `CX002` | `save_survey_draft` | Draft answers were not a JSON object. | Your progress could not be saved because the answer data is invalid. |
 | `CX003` | `save_survey_draft` | Draft payload exceeded 1 MB. | Your saved progress is too large. Please contact support. |
-| `CX004` | `save_survey_draft`, `start_survey_response` | Survey token does not match a respondent. | This survey link is invalid or has expired. |
+| `CX004` | `save_survey_draft`, `start_survey_response`, `record_survey_access` | Survey token does not match a respondent. | This survey link is invalid or has expired. |
 | `CX005` | `save_survey_draft`, `start_survey_response` | Respondent has already submitted. | This survey has already been submitted. |
 | `CX006` | `save_survey_draft`, `start_survey_response` | Survey is not accepting responses. | This survey is closed and is no longer accepting responses. |
+| `CX007` | `record_survey_access` | The client did not supply its page-load access identifier. | This survey visit could not be recorded. Please refresh the page. |
 
 ## Rules for future codes
 

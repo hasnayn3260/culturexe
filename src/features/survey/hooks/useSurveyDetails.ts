@@ -63,6 +63,9 @@ export type SurveyRespondent = {
   user_id: string | null
   draft_answers: unknown
   draft_saved_at: string | null
+  first_accessed_at: string | null
+  last_accessed_at: string | null
+  access_count: number
   started_at: string | null
   completion_duration_seconds: number | null
   source: string | null

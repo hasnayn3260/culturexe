@@ -172,6 +172,48 @@ export type Database = {
           },
         ]
       }
+      survey_access_events: {
+        Row: {
+          access_id: string
+          access_type: string
+          accessed_at: string
+          id: string
+          respondent_id: string
+          survey_id: string
+        }
+        Insert: {
+          access_id: string
+          access_type: string
+          accessed_at?: string
+          id?: string
+          respondent_id: string
+          survey_id: string
+        }
+        Update: {
+          access_id?: string
+          access_type?: string
+          accessed_at?: string
+          id?: string
+          respondent_id?: string
+          survey_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_access_events_respondent_id_fkey"
+            columns: ["respondent_id"]
+            isOneToOne: false
+            referencedRelation: "survey_respondents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_access_events_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "survey"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       survey_questions: {
         Row: {
           created_at: string | null
@@ -221,15 +263,18 @@ export type Database = {
       }
       survey_respondents: {
         Row: {
+          access_count: number
           completion_duration_seconds: number | null
           department: string | null
           draft_answers: Json | null
           draft_saved_at: string | null
           email: string
+          first_accessed_at: string | null
           id: string
           invited_at: string | null
           job_grade: string | null
           job_title: string | null
+          last_accessed_at: string | null
           name: string | null
           reminded_at: string | null
           response_timing: string | null
@@ -243,15 +288,18 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          access_count?: number
           completion_duration_seconds?: number | null
           department?: string | null
           draft_answers?: Json | null
           draft_saved_at?: string | null
           email: string
+          first_accessed_at?: string | null
           id?: string
           invited_at?: string | null
           job_grade?: string | null
           job_title?: string | null
+          last_accessed_at?: string | null
           name?: string | null
           reminded_at?: string | null
           response_timing?: string | null
@@ -265,15 +313,18 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          access_count?: number
           completion_duration_seconds?: number | null
           department?: string | null
           draft_answers?: Json | null
           draft_saved_at?: string | null
           email?: string
+          first_accessed_at?: string | null
           id?: string
           invited_at?: string | null
           job_grade?: string | null
           job_title?: string | null
+          last_accessed_at?: string | null
           name?: string | null
           reminded_at?: string | null
           response_timing?: string | null
@@ -354,6 +405,16 @@ export type Database = {
       get_my_role: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       is_superadmin: { Args: never; Returns: boolean }
+      record_survey_access: {
+        Args: { p_access_id: string; p_token: string }
+        Returns: {
+          access_count: number
+          access_type: string
+          first_accessed_at: string
+          last_accessed_at: string
+          respondent_id: string
+        }[]
+      }
       register_open_respondent: {
         Args: {
           p_department: string
