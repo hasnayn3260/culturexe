@@ -12,11 +12,13 @@ import ConsultantSidebar from '../features/navigation/components/ConsultantSideb
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
 import SurveyTemplatesPage from '../features/survey-templates/pages/SurveyTemplatesPage'
+import SurveyUsersTable from '../features/survey/components/SurveyUsersTable'
 import UsersPage from '../features/users/pages/UsersPage'
 import PercentageBar from '../features/analytics/components/PercentageBar'
 import ScoreBar from '../features/analytics/components/ScoreBar'
 import { calculateLikertMetrics } from '../features/analytics/utils/likertScore'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import './consultant.css'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -39,13 +41,6 @@ function FluidSVG({ size = 38, id = 'cf' }) {
       <circle cx="50" cy="50" r="7" fill="white" opacity="0.36" />
     </svg>
   )
-}
-
-function timingBadge(timing) {
-  if (timing === 'early')   return <span className="tag tag-active">Early</span>
-  if (timing === 'on_time') return <span className="tag tag-complete">On Time</span>
-  if (timing === 'late')    return <span className="tag tag-pending">Late</span>
-  return <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>
 }
 
 function calcTiming(submittedAt, liveStart, liveEnd) {
@@ -771,6 +766,7 @@ export default function ConsultantPortal() {
   const responses    = rawResponses.filter(response => respondentIds.has(response.respondent_id))
 
   const [screen, setScreen] = useState('dashboard')
+  const [dashboardTab, setDashboardTab] = useState('overview')
   const isSuperAdmin = role === 'superadmin' || role === 'super_admin'
 
   useEffect(() => {
@@ -950,6 +946,34 @@ export default function ConsultantPortal() {
   })
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
+
+  const surveyUserRows = respondents.map(respondent => {
+    const matchingProfile = scopedUsers.find(user => user.email === respondent.email)
+    const fullName = (matchingProfile?.full_name || respondent.name || '').trim()
+    const [firstName = '', ...surnameParts] = fullName.split(/\s+/).filter(Boolean)
+    const startedAt = respondent.started_at ? new Date(respondent.started_at).getTime() : null
+    const submittedAt = respondent.submitted_at ? new Date(respondent.submitted_at).getTime() : null
+    const completionMinutes = startedAt && submittedAt && submittedAt >= startedAt
+      ? (submittedAt - startedAt) / 60000
+      : null
+    const responded = hasResponded(respondent)
+
+    return {
+      id: respondent.id,
+      firstName,
+      surname: surnameParts.join(' '),
+      email: respondent.email || '',
+      source: respondent.source === 'open_link' ? 'open_link' : 'invited',
+      department: resolveDept(respondent) || '',
+      position: respondent.job_title || matchingProfile?.job_title || '',
+      status: responded ? 'completed' : respondent.started_at ? 'in_progress' : 'not_started',
+      completionMinutes,
+      timing: responded
+        ? (respondent.response_timing || calcTiming(respondent.submitted_at, survey?.live_start, survey?.live_end))
+        : null,
+      submittedAt: respondent.submitted_at,
+    }
+  })
 
   // ── Export row builders ──────────────────────────────────
   // Dashboard export = the participation summary + respondent list.
@@ -1267,6 +1291,45 @@ export default function ConsultantPortal() {
                 <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
               </div>
 
+              <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="mb-6">
+                <TabsList className="dashboard-tab-list grid w-full grid-cols-2">
+                  <TabsTrigger value="overview" className="dashboard-tab-trigger">
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="users" className="dashboard-tab-trigger">
+                    Users ({respondents.length})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {dashboardTab === 'overview' && (
+                <>
+              <div className="card mb-24" style={{ padding: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}>
+                  {[
+                    { label: 'Build Survey', desc: 'Edit questions', action: () => setScreen('survey'), disabled: false },
+                    { label: 'Add Users', desc: 'Invite participants', action: () => setScreen('survey'), disabled: false },
+                    { label: 'Send Reminders', desc: 'Nudge incomplete users', action: handleSendReminders, disabled: !isLive || totalPending === 0 },
+                    { label: isLive ? 'Stop Survey' : isDraft ? 'Launch Survey' : isScheduled ? 'Return to Draft' : 'Reopen Survey', desc: isLive ? 'Close immediately' : isDraft ? 'Make live' : isScheduled ? 'Edit schedule' : 'Reopen as draft', action: isLive ? handleStop : isDraft ? handleLaunch : handleReopen, disabled: !survey },
+                    { label: 'View Analytics', desc: 'Question analysis', action: () => setScreen('analytics'), disabled: responses.length === 0 },
+                  ].map(item => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={item.action}
+                      disabled={item.disabled}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 68, padding: '11px 13px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, cursor: item.disabled ? 'not-allowed' : 'pointer', opacity: item.disabled ? 0.45 : 1, fontFamily: 'inherit', textAlign: 'left' }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--navy)' }}>{item.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{item.desc}</div>
+                      </div>
+                      <span style={{ color: 'var(--teal)', fontSize: 16 }}>→</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid-4 mb-28" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                 {[
                   { label: 'Registered',          value: totalRegistered,  sub: 'Accounts created on the website',  color: '#1A6BAA' },
@@ -1292,9 +1355,8 @@ export default function ConsultantPortal() {
                 </div>
               )}
 
-              <div className="grid-2 mb-24">
-                <div>
-                  <div className="card mb-20">
+              <div className="dashboard-analytics-grid mb-24">
+                  <div className="card dashboard-response-timing">
                     <div className="section-title mb-16">Response Timing</div>
                     {totalResponded === 0 ? (
                       <div style={{ color: 'var(--text3)', fontSize: 13 }}>No responses yet.</div>
@@ -1314,7 +1376,7 @@ export default function ConsultantPortal() {
                       })
                     )}
                   </div>
-                  <div className="card">
+                  <div className="card" style={{ maxHeight: 470, overflowY: 'auto' }}>
                     <div className="section-title mb-2">By Department</div>
                     {deptQuestion && (
                       <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
@@ -1354,11 +1416,8 @@ export default function ConsultantPortal() {
                       )
                     })}
                   </div>
-                </div>
-
-                <div>
                 {dimensionScores.length > 0 && overallScore != null && (
-                  <div className="card mb-20">
+                  <div className="card" style={{ maxHeight: 470, overflowY: 'auto' }}>
                     <div className="section-title mb-4">Score by Dimension</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>Average Likert score per theme</div>
                     {dimensionScores.map(({ dim, score, average, questionCount }) => (
@@ -1376,61 +1435,17 @@ export default function ConsultantPortal() {
                     ))}
                   </div>
                 )}
-
-                <div className="card mb-20">
-                  <div className="section-title mb-16">Quick Actions</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {[
-                      { label: 'Build Survey', desc: 'Add or edit questions', action: () => setScreen('survey'), disabled: false },
-                      { label: 'Add Users', desc: 'Invite users to participate', action: () => setScreen('survey'), disabled: false },
-                      { label: 'Send Reminders', desc: 'Nudge users who have not responded', action: handleSendReminders, disabled: !isLive || totalPending === 0 },
-                      { label: isLive ? 'Stop Survey' : isDraft ? 'Launch Survey' : isScheduled ? 'Return to Draft' : 'Reopen Survey', desc: isLive ? 'Manually close' : isDraft ? 'Make live' : isScheduled ? 'Edit before launch' : 'Reopen as draft', action: isLive ? handleStop : isDraft ? handleLaunch : handleReopen, disabled: !survey },
-                      { label: 'View Analytics', desc: 'Per-question analysis', action: () => setScreen('analytics'), disabled: responses.length === 0 },
-                    ].map(item => (
-                      <button key={item.label} onClick={item.action} disabled={item.disabled} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, cursor: item.disabled ? 'not-allowed' : 'pointer', opacity: item.disabled ? 0.4 : 1, fontFamily: 'inherit', textAlign: 'left', transition: 'border-color 0.15s' }}
-                        onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.borderColor = 'var(--teal)' }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--navy)' }}>{item.label}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{item.desc}</div>
-                        </div>
-                        <span style={{ color: 'var(--teal)', fontSize: 16 }}>→</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                </div>
               </div>
 
-              {/* Survey users table */}
-              <div className="card">
-                <div className="section-title mb-16">Users</div>
-                {respondents.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text3)', fontSize: 13 }}>
-                    No users have been assigned to this survey yet. Go to <button onClick={() => setScreen('survey')} style={{ background: 'none', border: 'none', color: 'var(--teal)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: 0 }}>Surveys</button> to add users.
-                  </div>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead><tr><th>Name</th><th>Email</th><th>Source</th><th>Department</th><th>Position</th><th>Responded</th><th>Timing</th><th>Submitted</th></tr></thead>
-                      <tbody>
-                        {respondents.map(r => (
-                          <tr key={r.id}>
-                            <td style={{ fontWeight: 600 }}>{r.name || '—'}</td>
-                            <td style={{ color: 'var(--text2)' }}>{r.source === 'open_link' ? <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>no email</span> : r.email}</td>
-                            <td>{r.source === 'open_link' ? <span className="tag" style={{ background: 'var(--teal-light)', color: 'var(--teal)' }}>Open Link</span> : <span className="tag tag-pending">Invited</span>}</td>
-                            <td>{resolveDept(r) || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                            <td>{r.job_title  || <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                            <td>{hasResponded(r) ? <span className="tag tag-active">● Yes</span> : <span className="tag tag-pending">○ No</span>}</td>
-                            <td>{timingBadge(hasResponded(r) ? (r.response_timing || calcTiming(r.submitted_at, survey?.live_start, survey?.live_end)) : null)}</td>
-                            <td style={{ fontSize: 12.5, color: 'var(--text3)' }}>{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                </>
+              )}
+
+              {dashboardTab === 'users' && (
+                <SurveyUsersTable
+                  rows={surveyUserRows}
+                  onAddUsers={() => setScreen('survey')}
+                />
+              )}
             </div>
           )}
 

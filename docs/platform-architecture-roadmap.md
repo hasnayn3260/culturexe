@@ -496,7 +496,7 @@ Execution order follows these rules:
 | 1 | CXW-10 | Medium | XS | Replace remaining user-facing `Respondent` labels with `Users` where the screen lists user accounts. Preserve respondent terminology where it specifically means a survey participant record. |
 | 2 | CXW-15 | Medium | XS | Complete the final browser acceptance check, then move the issue to review. The production RLS migration and all 14 SQL validation checks have passed. |
 | 3 | CXW-5 | Medium | XS acceptance | Confirm the displayed Likert average and normalised percentage in the browser for low, midpoint and high response sets. Automated boundary tests now pass. |
-| 4 | CXW-11 | Medium | S | Add ascending and descending sorting to each participant table column while preserving active filters. |
+| 4 | CXW-11 | Medium | XS acceptance | Confirm every participant column sorts ascending and descending, blank values remain stable, and the Users tab preserves the selected organisation scope. |
 | 5 | CXW-12 | Medium | S | Export the filtered participant dashboard dataset to Excel and PDF with organisation and survey context. |
 | 6 | CXW-13 | Medium | S | Export raw and partial survey-response data with question, respondent and survey identifiers permitted for the requesting role. |
 | 7 | CXW-22 | Medium | XS discovery, build TBD | Define the bug-report fields, recipient, attachments, audit trail and notification workflow before estimating implementation. |
@@ -596,6 +596,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-9 | Implemented, needs acceptance | Response counts use actual survey respondents and response rows. |
 | CXW-10 | Implemented, needs acceptance | The consultant dashboard labels its participant account list and related quick actions as Users. Survey-specific records and analytics retain respondent terminology where it remains accurate. |
 | CXW-5 | Implemented, browser acceptance pending | Likert analytics retain the raw 1–5 average and normalise percentages with `((average - 1) / 4) * 100`. Shared score and percentage chart components now serve consultant, legacy and client analytics views; all six automated calculation tests pass. |
+| CXW-11 | Implemented, browser acceptance pending | Dashboard users now have a dedicated tab. Every displayed column supports ascending and descending sorting, including status, completion duration and submitted date. Quick actions moved to the top and analytics cards use a compact responsive grid. |
 | CXW-14 | Partially supported | Started-not-completed count exists; partial-answer analytics and export need separate implementation. |
 | CXW-15 | Implemented, browser acceptance pending | Production RLS and all 14 SQL validation checks passed. Expired or malformed live surveys fail closed; status updates while pages remain open; invitations, reminders and submissions are blocked after closing; manual stop clearly closes immediately. |
 
@@ -628,6 +629,8 @@ These are implementation notes and do not change Jira statuses automatically.
 - Corrected CXW-5 Likert normalisation so averages 1, 3 and 5 map to 0%, 50% and 100%, while displaying the original average beside the normalised score.
 - Added reusable `PercentageBar` and `ScoreBar` analytics components and adopted them across consultant, dashboard, insights and client report views.
 - Added six automated Likert calculation tests covering boundaries, averages, invalid values and empty datasets.
+- Implemented CXW-11 with a dedicated dashboard Users tab and sortable headers for first name, surname, email, source, department, position, survey status, completion time, timing and submission date.
+- Moved dashboard quick actions into a compact top bar and reorganised timing, dimension and department summaries into a bounded responsive card grid.
 
 ### 23 November 2026
 
