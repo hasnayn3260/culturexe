@@ -5,7 +5,7 @@ type ScoreBarProps = {
   height?: number
   label?: string
 }
-
+//test version validator
 function scoreGradient(score?: number | null): string {
   if (score !== null && score !== undefined && score >= 70) {
     return 'linear-gradient(90deg,#1BBFB0,#00D4C0)'
