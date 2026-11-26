@@ -2,6 +2,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useClientSurvey } from '../hooks/useClientSurvey'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import {
   SURVEY_FILE_ACCEPT,
@@ -357,7 +364,8 @@ function ProfileScreen({ profile, respondent, onSave, onBack }) {
 export default function ClientPortal() {
   const navigate = useNavigate()
   const { user, profile, role, signOut } = useAuth()
-  const { survey, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id)
+  const [selectedSurveyId, setSelectedSurveyId] = useState(null)
+  const { survey, availableSurveys, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id, selectedSurveyId)
 
   const [screen,      setScreen]      = useState('survey')
   const [answers,     setAnswers]     = useState({})
@@ -376,6 +384,20 @@ export default function ClientPortal() {
   const surveyStatus = getEffectiveSurveyStatus(survey)
   const isLive    = surveyStatus === 'live'
   const isClosed  = surveyStatus === 'closed'
+
+  useEffect(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    setScreen('survey')
+    setAnswers({})
+    setPage(0)
+    setSaveState('idle')
+    setSubmitting(false)
+    setSubmitted(false)
+    setSubmitErr('')
+    setShowWelcome(true)
+    setTriedNext(false)
+    setShowIncomplete(false)
+  }, [survey?.id])
 
   // Record the first open immediately. Saving an answer later must never reset
   // this timestamp because it is the start of the elapsed completion window.
@@ -460,6 +482,11 @@ export default function ClientPortal() {
 
   const cardStyle = { background: 'white', borderRadius: 16, padding: '28px', boxShadow: '0 2px 16px rgba(0,0,0,0.05)', marginBottom: 20 }
 
+  function switchSurvey(surveyId) {
+    if (!surveyId || surveyId === survey?.id) return
+    setSelectedSurveyId(surveyId)
+  }
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#F2F7FA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -475,11 +502,51 @@ export default function ClientPortal() {
 
       {/* ── NAV ── */}
       <nav style={{ background: 'white', borderBottom: '1px solid #E8EFF5', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px' }}>
             <span style={{ color: '#0D1F3C' }}>Culture</span><span style={{ color: '#1BBFB0' }}>Xe</span>
           </div>
-          {survey?.title && <span style={{ fontSize: 13, color: '#A0B0C0', borderLeft: '1px solid #E8EFF5', paddingLeft: 12 }}>{survey.title}</span>}
+          {availableSurveys.length > 0 && (
+            <div style={{ borderLeft: '1px solid #E8EFF5', paddingLeft: 12, width: 'min(340px, 42vw)', minWidth: 0 }}>
+              <Select
+                value={survey?.id || null}
+                onValueChange={switchSurvey}
+                disabled={availableSurveys.length === 1}
+              >
+                <SelectTrigger
+                  aria-label="Select survey"
+                  className="h-10 w-full border-[#DCE4EE] bg-[#F8FAFC] text-[#0D1F3C] shadow-none"
+                >
+                  <SelectValue placeholder="Select a survey">
+                    {(value) => availableSurveys.find((item) => item.id === value)?.title || 'Select a survey'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSurveys.map((item) => {
+                    const assignment = item.clientRespondent
+                    const effectiveStatus = getEffectiveSurveyStatus(item)
+                    const status = assignment?.submitted_at
+                      ? 'Completed'
+                      : effectiveStatus === 'live'
+                        ? 'Open'
+                        : effectiveStatus === 'scheduled'
+                          ? 'Upcoming'
+                          : effectiveStatus === 'closed'
+                            ? 'Closed'
+                            : 'Not open'
+                    return (
+                      <SelectItem key={item.id} value={item.id}>
+                        <span className="flex min-w-0 items-center justify-between gap-4">
+                          <span className="truncate font-semibold">{item.title}</span>
+                          <span className="shrink-0 text-[11px] font-medium text-[#7C8EA5]">{status}</span>
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {role && role !== 'client' && (
@@ -557,6 +624,17 @@ export default function ClientPortal() {
         {/* ════════ SURVEY ════════ */}
         {screen === 'survey' && (
           <>
+            {!survey && !error && (
+              <div style={cardStyle}>
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}><IconClock /></div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: '#0D1F3C', marginBottom: 8 }}>No surveys assigned</div>
+                  <div style={{ fontSize: 14, color: '#7A9BB0', lineHeight: 1.7 }}>
+                    Surveys you are invited or added to will appear here.
+                  </div>
+                </div>
+              </div>
+            )}
             {error && (
               <div style={{ ...cardStyle, background: '#FDE8E3', borderLeft: '4px solid #E8563A', padding: '16px 20px' }}>
                 <div style={{ color: '#C0392B', fontSize: 13.5 }}>⚠ {error}</div>

@@ -13,12 +13,13 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
   return 'on_time'
 }
 
-export function useClientSurvey(userEmail, userId, orgId) {
+export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId) {
   const accessIdRef = useRef(createSurveyAccessId())
   const [survey,           setSurvey]           = useState(null)
   const [questions,        setQuestions]        = useState([])
   const [respondent,       setRespondent]       = useState(null)
   const [existingResponse, setExistingResponse] = useState(null)
+  const [availableSurveys, setAvailableSurveys] = useState([])
   const [loading,          setLoading]          = useState(true)
   const [error,            setError]            = useState(null)
 
@@ -28,6 +29,7 @@ export function useClientSurvey(userEmail, userId, orgId) {
       setQuestions([])
       setRespondent(null)
       setExistingResponse(null)
+      setAvailableSurveys([])
       setError(null)
       setLoading(false)
       return
@@ -35,44 +37,88 @@ export function useClientSurvey(userEmail, userId, orgId) {
 
     setLoading(true)
     setError(null)
+    setQuestions([])
+    setRespondent(null)
+    setExistingResponse(null)
     try {
-      const { data: sv, error: svErr } = await supabase
+      const assignmentQueries = []
+      if (userId) {
+        assignmentQueries.push(
+          supabase.from('survey_respondents').select('*').eq('user_id', userId),
+        )
+      }
+      if (userEmail) {
+        assignmentQueries.push(
+          supabase.from('survey_respondents').select('*').ilike('email', userEmail),
+        )
+      }
+
+      const assignmentResults = await Promise.all(assignmentQueries)
+      const assignmentBySurvey = new Map()
+      for (const result of assignmentResults) {
+        if (result.error) throw result.error
+        for (const assignment of result.data || []) {
+          const current = assignmentBySurvey.get(assignment.survey_id)
+          if (!current || assignment.user_id === userId) {
+            assignmentBySurvey.set(assignment.survey_id, assignment)
+          }
+        }
+      }
+
+      const assignedSurveyIds = [...assignmentBySurvey.keys()]
+      if (assignedSurveyIds.length === 0) {
+        setAvailableSurveys([])
+        setSurvey(null)
+        return
+      }
+
+      const { data: surveyRows, error: svErr } = await supabase
         .from('survey')
         .select('*')
         .eq('org_id', orgId)
+        .in('id', assignedSurveyIds)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
       if (svErr) throw svErr
+
+      const accessibleSurveys = (surveyRows || []).map((item) => ({
+        ...item,
+        clientRespondent: assignmentBySurvey.get(item.id),
+      }))
+      setAvailableSurveys(accessibleSurveys)
+      const sv = accessibleSurveys.find(({ id }) => id === selectedSurveyId) ||
+        accessibleSurveys.find((item) =>
+          isSurveyAcceptingResponses(item) && !item.clientRespondent?.submitted_at) ||
+        accessibleSurveys[0] || null
       setSurvey(sv)
-      if (!sv) { setLoading(false); return }
+      if (!sv) return
 
-      const { data: qs } = await supabase
-        .from('survey_questions').select('*')
-        .eq('survey_id', sv.id).order('order_num')
-      setQuestions(qs || [])
+      let resp = assignmentBySurvey.get(sv.id)
+      const [questionsResult, responseResult] = await Promise.all([
+        supabase
+          .from('survey_questions')
+          .select('*')
+          .eq('survey_id', sv.id)
+          .order('order_num'),
+        supabase
+          .from('survey_responses')
+          .select('*')
+          .eq('respondent_id', resp.id)
+          .maybeSingle(),
+      ])
+      if (questionsResult.error) throw questionsResult.error
+      if (responseResult.error) throw responseResult.error
+      setQuestions(questionsResult.data || [])
+      setExistingResponse(responseResult.data)
 
-      let { data: resp } = await supabase
-        .from('survey_respondents').select('*')
-        .eq('survey_id', sv.id).eq('email', userEmail).maybeSingle()
-
-      if (!resp) {
-        const { data: created, error: createErr } = await supabase
+      if (userId && !resp.user_id) {
+        const { data: linkedRespondent, error: linkError } = await supabase
           .from('survey_respondents')
-          .insert({ survey_id: sv.id, email: userEmail, user_id: userId || null })
+          .update({ user_id: userId })
+          .eq('id', resp.id)
           .select()
           .single()
-        if (createErr) console.warn('survey_respondents insert:', createErr.message)
-        resp = created
-      } else {
-        if (userId && !resp.user_id) {
-          await supabase.from('survey_respondents')
-            .update({ user_id: userId }).eq('id', resp.id)
-        }
-        const { data: existing } = await supabase
-          .from('survey_responses').select('*')
-          .eq('respondent_id', resp.id).maybeSingle()
-        setExistingResponse(existing)
+        if (linkError) throw linkError
+        resp = linkedRespondent
       }
 
       if (resp?.token) {
@@ -96,7 +142,7 @@ export function useClientSurvey(userEmail, userId, orgId) {
     } finally {
       setLoading(false)
     }
-  }, [userEmail, userId, orgId])
+  }, [userEmail, userId, orgId, selectedSurveyId])
 
   useEffect(() => { load() }, [load])
 
@@ -167,7 +213,7 @@ export function useClientSurvey(userEmail, userId, orgId) {
   }
 
   return {
-    survey, questions, respondent, existingResponse,
+    survey, availableSurveys, questions, respondent, existingResponse,
     loading, error,
     saveDraft, markStarted, submitResponse, updateRespondentProfile,
     refetch: load,
