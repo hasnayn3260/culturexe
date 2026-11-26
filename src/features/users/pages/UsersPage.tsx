@@ -9,6 +9,10 @@ import {
 } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  ALL_ORGANISATIONS,
+  useOrganisationScope,
+} from '@/context/OrganisationScopeContext'
 import { useOrganisations } from '@/features/organisations/hooks/useOrganisations'
 
 import UserActionDialog, {
@@ -127,6 +131,7 @@ function StatCard({
 }
 
 export default function UsersPage() {
+  const { organisationScope } = useOrganisationScope()
   const {
     users,
     loading,
@@ -152,37 +157,77 @@ export default function UsersPage() {
   const [importSummary, setImportSummary] =
     useState<BulkUserImportResponse | null>(null)
 
-  const visibleUsers = useMemo(() => {
-    const query = filters.search.trim().toLowerCase()
+  const globallyScopedUsers = useMemo(
+    () => organisationScope === ALL_ORGANISATIONS
+      ? users
+      : users.filter((user) => user.organisationId === organisationScope),
+    [organisationScope, users],
+  )
 
-    return users
+  const globallyScopedOrganisations = useMemo(
+    () => organisationScope === ALL_ORGANISATIONS
+      ? organisationState.organisations
+      : organisationState.organisations.filter(
+        (organisation) => organisation.id === organisationScope,
+      ),
+    [organisationScope, organisationState.organisations],
+  )
+
+  const effectiveFilters = useMemo<UserFilters>(() => ({
+    ...filters,
+    organisationId:
+      filters.organisationId === 'all' ||
+      globallyScopedOrganisations.some(
+        (organisation) => organisation.id === filters.organisationId,
+      )
+        ? filters.organisationId
+        : 'all',
+  }), [filters, globallyScopedOrganisations])
+
+  const organisationScopedUsers = useMemo(
+    () => effectiveFilters.organisationId === 'all'
+      ? globallyScopedUsers
+      : globallyScopedUsers.filter(
+        (user) => user.organisationId === effectiveFilters.organisationId,
+      ),
+    [effectiveFilters.organisationId, globallyScopedUsers],
+  )
+
+  const visibleUsers = useMemo(() => {
+    const query = effectiveFilters.search.trim().toLowerCase()
+
+    return organisationScopedUsers
       .filter((user) => {
         if (query && !searchableText(user).includes(query)) return false
         if (
-          filters.organisationId !== 'all' &&
-          user.organisationId !== filters.organisationId
-        ) return false
-        if (filters.role !== 'all' && user.role !== filters.role) return false
-        if (
-          filters.status !== 'all' &&
-          user.active !== (filters.status === 'active')
+          effectiveFilters.role !== 'all' &&
+          user.role !== effectiveFilters.role
         ) return false
         if (
-          filters.department !== 'all' &&
-          user.department !== filters.department
+          effectiveFilters.status !== 'all' &&
+          user.active !== (effectiveFilters.status === 'active')
         ) return false
-        if (filters.branch !== 'all' && user.branch !== filters.branch) return false
+        if (
+          effectiveFilters.department !== 'all' &&
+          user.department !== effectiveFilters.department
+        ) return false
+        if (
+          effectiveFilters.branch !== 'all' &&
+          user.branch !== effectiveFilters.branch
+        ) return false
         return true
       })
       .sort((first, second) => compareUsers(first, second, sort))
-  }, [filters, sort, users])
+  }, [effectiveFilters, organisationScopedUsers, sort])
 
   const stats = useMemo(() => ({
-    total: users.length,
-    active: users.filter((user) => user.active).length,
-    inactive: users.filter((user) => !user.active).length,
-    superadmins: users.filter((user) => user.role === 'superadmin').length,
-  }), [users])
+    total: organisationScopedUsers.length,
+    active: organisationScopedUsers.filter((user) => user.active).length,
+    inactive: organisationScopedUsers.filter((user) => !user.active).length,
+    superadmins: organisationScopedUsers.filter(
+      (user) => user.role === 'superadmin',
+    ).length,
+  }), [organisationScopedUsers])
 
   function openCreateDialog() {
     setEditingUser(null)
@@ -257,7 +302,7 @@ export default function UsersPage() {
         {!loading && (
           <div className="text-sm text-[#7C8EA5]">
             Showing <span className="font-bold text-[#314966]">{visibleUsers.length}</span>
-            {' '}of <span className="font-bold text-[#314966]">{users.length}</span>
+            {' '}of <span className="font-bold text-[#314966]">{organisationScopedUsers.length}</span>
           </div>
         )}
       </div>
@@ -308,9 +353,9 @@ export default function UsersPage() {
       )}
 
       <UsersToolbar
-        filters={filters}
-        organisations={organisationState.organisations}
-        users={users}
+        filters={effectiveFilters}
+        organisations={globallyScopedOrganisations}
+        users={organisationScopedUsers}
         refreshing={loading || organisationState.loading}
         onFiltersChange={setFilters}
         onRefresh={() => void refetch()}

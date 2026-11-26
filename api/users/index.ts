@@ -192,6 +192,14 @@ function nullable(value: string): string | null {
   return value || null
 }
 
+function normalizePhone(value: string): string {
+  const phone = value.trim()
+  if (!phone) return ''
+
+  const digits = phone.replace(/\D/g, '')
+  return phone.startsWith('+') ? `+${digits}` : digits
+}
+
 function validateValues(value: unknown): ValidationResult {
   if (!value || typeof value !== 'object') {
     return { success: false, message: 'User details are required.' }
@@ -298,6 +306,35 @@ async function listAllAuthUsers(admin: ReturnType<typeof createAdminClient>) {
   return users
 }
 
+async function ensureUniquePhone(
+  admin: ReturnType<typeof createAdminClient>,
+  phone: string,
+  currentUserId?: string,
+) {
+  const normalizedPhone = normalizePhone(phone)
+  if (!normalizedPhone) return
+
+  const [authUsers, profilesResult] = await Promise.all([
+    listAllAuthUsers(admin),
+    admin.from('profiles').select('id, phone').not('phone', 'is', null),
+  ])
+  if (profilesResult.error) throw profilesResult.error
+
+  const authOwner = authUsers.find(
+    (user) => user.phone && normalizePhone(user.phone) === normalizedPhone,
+  )
+  const profileOwner = (profilesResult.data || []).find(
+    (profile) => profile.phone && normalizePhone(profile.phone) === normalizedPhone,
+  )
+
+  if (
+    (authOwner && authOwner.id !== currentUserId) ||
+    (profileOwner && profileOwner.id !== currentUserId)
+  ) {
+    throw new Error('Phone number already belongs to another account.')
+  }
+}
+
 function providerNames(user: User): string[] {
   const identityProviders = (user.identities || [])
     .map((identity) => identity.provider)
@@ -332,7 +369,7 @@ function managedUser(
     email: user.email || profile?.email || null,
     authEmail: user.email || null,
     profileEmail: profile?.email || null,
-    phone: user.phone || profile?.phone || null,
+    phone: profile?.phone || user.phone || null,
     authPhone: user.phone || null,
     profilePhone: profile?.phone || null,
     role: profile?.role || null,
@@ -624,6 +661,7 @@ async function handlePost(
   if (!validation.success) return json({ error: validation.message }, 400)
   const values = validation.data
   await ensureReferences(admin, values)
+  await ensureUniquePhone(admin, values.phone)
   values.username = await resolveUsername(admin, values)
 
   const temporaryPassword = generateTemporaryPassword()
@@ -634,6 +672,7 @@ async function handlePost(
   )
   const { data, error } = await admin.auth.admin.createUser({
     email: values.email,
+    phone: nullable(values.phone) || undefined,
     password: temporaryPassword,
     email_confirm: true,
     user_metadata: { full_name: values.fullName, role: values.role },
@@ -737,6 +776,7 @@ async function handlePatch(
   }
 
   await ensureReferences(admin, values, id)
+  await ensureUniquePhone(admin, values.phone, id)
   values.username = await resolveUsername(admin, values, id)
   const { error: authError } = await admin.auth.admin.updateUserById(id, {
     email: values.email,

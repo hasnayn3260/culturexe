@@ -137,6 +137,14 @@ function normalizeActive(value: string): boolean | null {
   return null
 }
 
+function normalizePhone(value: string): string {
+  const phone = value.trim()
+  if (!phone) return ''
+
+  const digits = phone.replace(/\D/g, '')
+  return phone.startsWith('+') ? `+${digits}` : digits
+}
+
 function emptyValues(): UserImportValues {
   return {
     fullName: '',
@@ -171,7 +179,7 @@ function validateRow(
   values.locationSite = (source.locationSite || '').trim()
   values.jobTitle = (source.jobTitle || '').trim()
   values.hireDate = (source.hireDate || '').trim()
-  values.phone = (source.phone || '').trim()
+  values.phone = normalizePhone(source.phone || '')
   values.username = (source.username || '').trim().toLowerCase()
 
   const role = normalizeRole(source.role || '')
@@ -299,6 +307,7 @@ export function parseUserImportCsv(
     .filter((column) => !seenKeys.has(column.key))
     .map((column) => column.header)
   const emailCounts = new Map<string, number>()
+  const phoneCounts = new Map<string, number>()
 
   const rows = csvRows.slice(1).map((cells, index): UserImportPreviewRow => {
     const source: Partial<Record<UserImportColumnKey, string>> = {}
@@ -322,6 +331,9 @@ export function parseUserImportCsv(
     if (values.email) {
       emailCounts.set(values.email, (emailCounts.get(values.email) || 0) + 1)
     }
+    if (values.phone) {
+      phoneCounts.set(values.phone, (phoneCounts.get(values.phone) || 0) + 1)
+    }
 
     return {
       rowNumber: index + 2,
@@ -335,6 +347,10 @@ export function parseUserImportCsv(
   for (const row of rows) {
     if (row.values.email && (emailCounts.get(row.values.email) || 0) > 1) {
       row.errors.email = 'Email is duplicated in this file.'
+      row.valid = false
+    }
+    if (row.values.phone && (phoneCounts.get(row.values.phone) || 0) > 1) {
+      row.errors.phone = 'Phone number is duplicated in this file.'
       row.valid = false
     }
   }

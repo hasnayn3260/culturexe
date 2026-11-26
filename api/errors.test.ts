@@ -10,6 +10,17 @@ test('replaces an empty object message with the supplied fallback', () => {
   )
 })
 
+test('retains Supabase Auth type and HTTP status when its message is empty', () => {
+  const error = new Error('{}') as Error & { status: number }
+  error.name = 'AuthApiError'
+  error.status = 403
+
+  assert.equal(
+    describeError(error, 'No further details.'),
+    'AuthApiError — HTTP 403',
+  )
+})
+
 test('preserves useful Supabase error fields and codes', () => {
   assert.equal(
     describeError({

@@ -9,6 +9,10 @@ import {
 } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  ALL_ORGANISATIONS,
+  useOrganisationScope,
+} from '@/context/OrganisationScopeContext'
 import { useAvailableSurveyTemplates } from '@/features/survey-templates/hooks/useAvailableSurveyTemplates'
 
 import SurveyFormDialog from '../components/SurveyFormDialog'
@@ -23,6 +27,7 @@ import {
   type CreateSurveyInput,
   type SurveyListFilters,
   type SurveyListItem,
+  type SurveyListStats,
   type SurveyOrganisationReference,
   type SurveySort,
   type UpdateSurveyInput,
@@ -90,14 +95,16 @@ function organisationReferences(
 }
 
 export default function SurveyListPage() {
+  const { organisationScope } = useOrganisationScope()
   const {
     surveys,
-    stats,
     loading,
     refreshing,
     error: surveyLoadError,
     refetch,
-  } = useSurveys()
+  } = useSurveys(
+    organisationScope === ALL_ORGANISATIONS ? null : organisationScope,
+  )
   const {
     organisations,
     error: organisationLoadError,
@@ -112,9 +119,43 @@ export default function SurveyListPage() {
   const [sort, setSort] = useState<SurveySort>({ ...DEFAULT_SURVEY_SORT })
   const [formOpen, setFormOpen] = useState(false)
 
+  const globallyScopedSurveys = useMemo(
+    () => organisationScope === ALL_ORGANISATIONS
+      ? surveys
+      : surveys.filter(
+        (survey) => survey.organisationId === organisationScope,
+      ),
+    [organisationScope, surveys],
+  )
+  const globallyScopedOrganisations = useMemo(
+    () => organisationScope === ALL_ORGANISATIONS
+      ? organisations
+      : organisations.filter(
+        (organisation) => organisation.id === organisationScope,
+      ),
+    [organisationScope, organisations],
+  )
+  const effectiveFilters = useMemo<SurveyListFilters>(() => ({
+    ...filters,
+    organisationId:
+      filters.organisationId === 'all' ||
+      globallyScopedSurveys.some(
+        (survey) => survey.organisationId === filters.organisationId,
+      )
+        ? filters.organisationId
+        : 'all',
+  }), [filters, globallyScopedSurveys])
+  const organisationScopedSurveys = useMemo(
+    () => effectiveFilters.organisationId === 'all'
+      ? globallyScopedSurveys
+      : globallyScopedSurveys.filter(
+        (survey) => survey.organisationId === effectiveFilters.organisationId,
+      ),
+    [effectiveFilters.organisationId, globallyScopedSurveys],
+  )
   const availableSurveyIds = useMemo(
-    () => surveys.map((survey) => survey.id),
-    [surveys],
+    () => globallyScopedSurveys.map((survey) => survey.id),
+    [globallyScopedSurveys],
   )
   const {
     selectedSurveyId,
@@ -137,12 +178,27 @@ export default function SurveyListPage() {
   })
 
   const visibleSurveys = useMemo(
-    () => filterAndSortSurveys(surveys, filters, sort),
-    [filters, sort, surveys],
+    () => filterAndSortSurveys(
+      organisationScopedSurveys,
+      effectiveFilters,
+      sort,
+    ),
+    [effectiveFilters, organisationScopedSurveys, sort],
+  )
+  const stats = useMemo(
+    () => organisationScopedSurveys.reduce<SurveyListStats>(
+      (totals, survey) => {
+        totals.total += 1
+        totals[survey.effectiveStatus] += 1
+        return totals
+      },
+      { total: 0, draft: 0, scheduled: 0, live: 0, closed: 0 },
+    ),
+    [organisationScopedSurveys],
   )
   const availableOrganisations = useMemo(
-    () => organisationReferences(organisations),
-    [organisations],
+    () => organisationReferences(globallyScopedOrganisations),
+    [globallyScopedOrganisations],
   )
   const pageError = surveyLoadError
     || organisationLoadError
@@ -196,7 +252,7 @@ export default function SurveyListPage() {
             </span>{' '}
             of{' '}
             <span className="font-bold text-[#314966]">
-              {surveys.length}
+              {organisationScopedSurveys.length}
             </span>
           </div>
         )}
@@ -243,8 +299,8 @@ export default function SurveyListPage() {
       )}
 
       <SurveyListToolbar
-        filters={filters}
-        surveys={surveys}
+        filters={effectiveFilters}
+        surveys={globallyScopedSurveys}
         refreshing={refreshing}
         onFiltersChange={setFilters}
         onRefresh={() => void refetch({ silent: true })}

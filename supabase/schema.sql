@@ -620,6 +620,7 @@ CREATE TABLE IF NOT EXISTS "public"."organisations" (
     "external_reference" "text",
     "created_by" "uuid",
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "organisations_email_domain_format_check" CHECK ((("email_domain" IS NULL) OR (("email_domain" = "lower"("email_domain")) AND ("email_domain" ~ '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'::"text")))),
     CONSTRAINT "organisations_employee_count_check" CHECK ((("employee_count" IS NULL) OR ("employee_count" >= 0))),
     CONSTRAINT "organisations_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'inactive'::"text", 'onboarding'::"text"]))),
     CONSTRAINT "organisations_type_check" CHECK ((("organisation_type" IS NULL) OR ("organisation_type" = ANY (ARRAY['Private Company'::"text", 'Public Company'::"text", 'State-Owned Enterprise (SOE)'::"text", 'Government Department'::"text", 'Municipality / Local Government'::"text", 'Non-Profit Organisation (NPO)'::"text", 'Non-Governmental Organisation (NGO)'::"text", 'Trust'::"text", 'Partnership'::"text", 'Other'::"text"])))),
@@ -651,6 +652,10 @@ COMMENT ON COLUMN "public"."organisations"."logo_path" IS 'Object path inside th
 
 
 COMMENT ON COLUMN "public"."organisations"."banner_path" IS 'Object path inside the Company Banners storage bucket.';
+
+
+
+COMMENT ON COLUMN "public"."organisations"."email_domain" IS 'Canonical lowercase domain required for organisation user CSV imports, without @ or protocol.';
 
 
 

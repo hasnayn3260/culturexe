@@ -38,9 +38,20 @@ export function describeError(error: unknown, fallback: string): string {
       details.push(`Code: ${code}`)
     }
 
-    if (details.length === 0 && 'cause' in record && record.cause !== error) {
-      const cause = describeError(record.cause, '')
-      if (cause) details.push(cause)
+    const name = usefulText(record.name)
+    if (name && name !== 'Error' && !details.includes(name)) {
+      details.push(name)
+    }
+
+    if (typeof record.status === 'number') {
+      details.push(`HTTP ${record.status}`)
+    }
+
+    for (const key of ['cause', 'originalError']) {
+      if (key in record && record[key] !== error) {
+        const cause = describeError(record[key], '')
+        if (cause && !details.includes(cause)) details.push(cause)
+      }
     }
   }
 

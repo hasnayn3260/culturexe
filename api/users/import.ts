@@ -48,6 +48,7 @@ type ProfileRow = {
   email: string | null
   org_id: string | null
   username: string | null
+  phone: string | null
   active: boolean | null
   position: EmploymentPosition | null
 }
@@ -168,6 +169,14 @@ function nullable(value: string): string | null {
   return value || null
 }
 
+function normalizePhone(value: string): string {
+  const phone = value.trim()
+  if (!phone) return ''
+
+  const digits = phone.replace(/\D/g, '')
+  return phone.startsWith('+') ? `+${digits}` : digits
+}
+
 function emailDomain(email: string): string {
   return email.slice(email.lastIndexOf('@') + 1).toLowerCase()
 }
@@ -204,7 +213,7 @@ function normalizeRow(value: unknown): ImportRow | null {
     hireDate: clean(row.hireDate),
     role: clean(row.role) as PlatformRole,
     active: row.active,
-    phone: clean(row.phone),
+    phone: normalizePhone(clean(row.phone)),
     username: clean(row.username).toLowerCase(),
   }
 }
@@ -314,7 +323,7 @@ async function prepareRows(
 ) {
   const [authUsers, profilesResult, organisationResult] = await Promise.all([
     listAllAuthUsers(admin),
-    admin.from('profiles').select('id, email, org_id, username, active, position'),
+    admin.from('profiles').select('id, email, org_id, username, phone, active, position'),
     admin
       .from('organisations')
       .select('id, name, logo_path, banner_path, email_domain')
@@ -332,6 +341,11 @@ async function prepareRows(
       .filter((user) => user.email)
       .map((user) => [user.email!.toLowerCase(), user]),
   )
+  const authByPhone = new Map(
+    authUsers
+      .filter((user) => user.phone)
+      .map((user) => [normalizePhone(user.phone!), user]),
+  )
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]))
   const profileByEmail = new Map(
     profiles
@@ -343,8 +357,14 @@ async function prepareRows(
       .filter((profile) => profile.username)
       .map((profile) => [profile.username!.toLowerCase(), profile]),
   )
+  const profileByPhone = new Map(
+    profiles
+      .filter((profile) => profile.phone)
+      .map((profile) => [normalizePhone(profile.phone!), profile]),
+  )
   const emailCounts = new Map<string, number>()
   const usernameCounts = new Map<string, number>()
+  const phoneCounts = new Map<string, number>()
   const normalized = inputRows.map((row, index) => ({
     rowNumber: index + 2,
     values: normalizeRow(row),
@@ -397,6 +417,12 @@ async function prepareRows(
         (usernameCounts.get(row.values.username) || 0) + 1,
       )
     }
+    if (row.values?.phone) {
+      phoneCounts.set(
+        row.values.phone,
+        (phoneCounts.get(row.values.phone) || 0) + 1,
+      )
+    }
   }
 
   const batchEmails = new Set(
@@ -444,6 +470,9 @@ async function prepareRows(
     if (!message && values.username && (usernameCounts.get(values.username) || 0) > 1) {
       message = 'Username is duplicated in this import.'
     }
+    if (!message && values.phone && (phoneCounts.get(values.phone) || 0) > 1) {
+      message = 'Phone number is duplicated in this import.'
+    }
     if (!message && existingProfile && existingProfile.org_id !== organisationId) {
       message = 'This user already belongs to another organisation.'
     }
@@ -451,6 +480,16 @@ async function prepareRows(
       const usernameOwner = profileByUsername.get(values.username)
       if (usernameOwner && usernameOwner.id !== authUser?.id) {
         message = 'Username is already used by another account.'
+      }
+    }
+    if (!message && values.phone) {
+      const authPhoneOwner = authByPhone.get(values.phone)
+      const profilePhoneOwner = profileByPhone.get(values.phone)
+      if (
+        (authPhoneOwner && authPhoneOwner.id !== authUser?.id) ||
+        (profilePhoneOwner && profilePhoneOwner.id !== authUser?.id)
+      ) {
+        message = 'Phone number already belongs to another account.'
       }
     }
     if (!message && profileByEmail.has(values.email) && !authUser) {
@@ -576,11 +615,21 @@ async function runImport(
       }
 
       const { error: authError } = await admin.auth.admin.updateUserById(userId, {
-        phone: nullable(values.phone) || undefined,
         user_metadata: { full_name: values.fullName, role: values.role },
         ban_duration: values.active ? 'none' : '876000h',
       })
-      if (authError) throw stageError('Authentication update failed', authError)
+      if (authError) {
+        throw stageError('Authentication metadata or account-status update failed', authError)
+      }
+
+      if (values.phone) {
+        const { error: phoneError } = await admin.auth.admin.updateUserById(userId, {
+          phone: values.phone,
+        })
+        if (phoneError) {
+          throw stageError('Authentication phone update failed', phoneError)
+        }
+      }
 
       const managerId = values.managerEmail
         ? userIdByEmail.get(values.managerEmail) ||
