@@ -684,7 +684,7 @@ export default function OrganisationFormDialog({
               </div>
 
               <div>
-                <FieldLabel htmlFor="organisation-emailDomain">
+                <FieldLabel htmlFor="organisation-emailDomain" required>
                   Email domain
                 </FieldLabel>
                 <Input
@@ -694,9 +694,15 @@ export default function OrganisationFormDialog({
                   aria-invalid={Boolean(errors.emailDomain)}
                   className={inputClassName}
                   placeholder="company.com"
+                  required
                   disabled={submitting}
                 />
                 <FieldError message={errors.emailDomain} />
+                {!errors.emailDomain && (
+                  <p className="mt-1 text-xs text-[#8A9BB0]">
+                    CSV user email addresses must match this domain.
+                  </p>
+                )}
               </div>
             </FormSection>
 

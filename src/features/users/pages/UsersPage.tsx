@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useOrganisations } from '@/hooks/useOrganisations'
+import { useOrganisations } from '@/features/organisations/hooks/useOrganisations'
 
 import UserActionDialog, {
   type UserConfirmationAction,
@@ -23,19 +23,12 @@ import type { UserImportValues } from '../import/userImportSchema'
 import type { BulkUserImportResponse } from '../services/usersClient'
 import type {
   ManagedUser,
-  OrganisationReference,
   UserFilters,
   UserFormValues,
   UserSort,
   UserSortKey,
 } from '../types'
 import { DEFAULT_USER_FILTERS, DEFAULT_USER_SORT } from '../types'
-
-type OrganisationsState = {
-  organisations: OrganisationReference[]
-  loading: boolean
-  error: string | null
-}
 
 function searchableText(user: ManagedUser): string {
   return [
@@ -147,7 +140,7 @@ export default function UsersPage() {
     deleteUser,
     importUsers,
   } = useUsers()
-  const organisationState = useOrganisations() as OrganisationsState
+  const organisationState = useOrganisations()
   const [filters, setFilters] = useState<UserFilters>({ ...DEFAULT_USER_FILTERS })
   const [sort, setSort] = useState<UserSort>({ ...DEFAULT_USER_SORT })
   const [formOpen, setFormOpen] = useState(false)

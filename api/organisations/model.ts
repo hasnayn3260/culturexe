@@ -52,7 +52,7 @@ export type OrganisationValues = {
   country: string
   generalEmail: string
   mainPhone: string
-  emailDomain: string | null
+  emailDomain: string
   contactFirstName: string
   contactSurname: string
   contactJobTitle: string
@@ -225,7 +225,7 @@ export function validateOrganisationValues(value: unknown): ValidationResult {
     country: normalizedText(input.country),
     generalEmail: text(input.generalEmail).toLowerCase(),
     mainPhone: text(input.mainPhone),
-    emailDomain: nullable(normalizedDomain(input.emailDomain)),
+    emailDomain: normalizedDomain(input.emailDomain),
     contactFirstName: normalizedText(input.contactFirstName),
     contactSurname: normalizedText(input.contactSurname),
     contactJobTitle: normalizedText(input.contactJobTitle),
@@ -280,7 +280,10 @@ export function validateOrganisationValues(value: unknown): ValidationResult {
   if (!PHONE_PATTERN.test(data.mainPhone)) {
     return { success: false, message: 'Enter a valid main telephone number.' }
   }
-  if (data.emailDomain && !DOMAIN_PATTERN.test(data.emailDomain)) {
+  if (!data.emailDomain) {
+    return { success: false, message: 'Enter the email domain allowed for user imports.' }
+  }
+  if (!DOMAIN_PATTERN.test(data.emailDomain)) {
     return { success: false, message: 'Enter a valid email domain.' }
   }
   if (!data.contactFirstName || !data.contactSurname) {

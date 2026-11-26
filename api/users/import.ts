@@ -56,6 +56,7 @@ type OrganisationRow = {
   name: string
   logo_path: string | null
   banner_path: string | null
+  email_domain: string | null
 }
 
 type ValidatedRow = {
@@ -164,6 +165,16 @@ function clean(value: unknown): string {
 
 function nullable(value: string): string | null {
   return value || null
+}
+
+function emailDomain(email: string): string {
+  return email.slice(email.lastIndexOf('@') + 1).toLowerCase()
+}
+
+function importPriority(position: ImportRow['position']): number {
+  if (position === 'Senior Manager') return 0
+  if (position === 'Manager') return 1
+  return 2
 }
 
 function validDate(value: string): boolean {
@@ -305,7 +316,7 @@ async function prepareRows(
     admin.from('profiles').select('id, email, org_id, username, active, position'),
     admin
       .from('organisations')
-      .select('id, name, logo_path, banner_path')
+      .select('id, name, logo_path, banner_path, email_domain')
       .eq('id', organisationId)
       .maybeSingle(),
   ])
@@ -416,6 +427,16 @@ async function prepareRows(
       ? profileById.get(authUser.id)
       : profileByEmail.get(values.email)
 
+    if (!message && !organisation.email_domain) {
+      message = 'Configure the organisation email domain before importing users.'
+    }
+    if (
+      !message &&
+      emailDomain(values.email) !== organisation.email_domain!.toLowerCase()
+    ) {
+      message = `Email must use the organisation domain @${organisation.email_domain}.`
+    }
+
     if (!message && (emailCounts.get(values.email) || 0) > 1) {
       message = 'Email is duplicated in this import.'
     }
@@ -525,8 +546,12 @@ async function runImport(
   const results: ImportResult[] = []
   const userIdByEmail = new Map<string, string>()
   const successfulRows: Array<ValidatedRow & { userId: string }> = []
+  const orderedRows = [...rows].sort((first, second) =>
+    importPriority(first.values.position) - importPriority(second.values.position) ||
+    first.rowNumber - second.rowNumber,
+  )
 
-  for (const row of rows) {
+  for (const row of orderedRows) {
     const { values } = row
     let createdUserId: string | null = null
 
@@ -556,6 +581,11 @@ async function runImport(
       })
       if (authError) throw authError
 
+      const managerId = values.managerEmail
+        ? userIdByEmail.get(values.managerEmail) ||
+          existingAuthByEmail.get(values.managerEmail)?.id || null
+        : null
+
       const { error: profileError } = await admin
         .from('profiles')
         .upsert(
@@ -563,7 +593,7 @@ async function runImport(
             userId,
             organisationId,
             values,
-            null,
+            managerId,
             status === 'created',
           ),
           { onConflict: 'id' },
@@ -636,7 +666,7 @@ async function runImport(
     }
   }
 
-  return results
+  return results.sort((first, second) => first.rowNumber - second.rowNumber)
 }
 
 async function route(request: Request): Promise<Response> {

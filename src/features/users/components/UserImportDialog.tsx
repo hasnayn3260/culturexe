@@ -44,7 +44,7 @@ type UserImportSubmission = {
 
 type UserImportDialogProps = {
   open: boolean
-  organisations: OrganisationReference[]
+  organisations: Array<OrganisationReference & { emailDomain: string | null }>
   submitting?: boolean
   onOpenChange: (open: boolean) => void
   onImport: (submission: UserImportSubmission) => Promise<BulkUserImportResponse>
@@ -75,6 +75,9 @@ export default function UserImportDialog({
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [serverFailures, setServerFailures] = useState<UserImportResult[]>([])
+  const selectedOrganisation = organisations.find(
+    (organisation) => organisation.id === organisationId,
+  )
 
   useEffect(() => {
     if (!open) return
@@ -91,8 +94,11 @@ export default function UserImportDialog({
 
   useEffect(() => {
     if (!csvText) return
-    setPreview(parseUserImportCsv(csvText, { organisationId }))
-  }, [csvText, organisationId])
+    setPreview(parseUserImportCsv(csvText, {
+      organisationId,
+      emailDomain: selectedOrganisation?.emailDomain,
+    }))
+  }, [csvText, organisationId, selectedOrganisation?.emailDomain])
 
   async function readFile(file: File) {
     setError(null)
@@ -112,7 +118,10 @@ export default function UserImportDialog({
       const text = await file.text()
       setFileName(file.name)
       setCsvText(text)
-      setPreview(parseUserImportCsv(text, { organisationId }))
+      setPreview(parseUserImportCsv(text, {
+        organisationId,
+        emailDomain: selectedOrganisation?.emailDomain,
+      }))
     } catch {
       setError('The CSV could not be read. Save it as UTF-8 and try again.')
     } finally {
@@ -229,6 +238,16 @@ export default function UserImportDialog({
               {csvText && !organisationId && (
                 <p className="mt-1 text-xs font-medium text-[#D94A3A]">
                   Select the organisation these users belong to.
+                </p>
+              )}
+              {organisationId && selectedOrganisation?.emailDomain && (
+                <p className="mt-1 text-xs font-medium text-[#087C72]">
+                  Imported users must use @{selectedOrganisation.emailDomain}.
+                </p>
+              )}
+              {organisationId && !selectedOrganisation?.emailDomain && (
+                <p className="mt-1 text-xs font-medium text-[#D94A3A]">
+                  Configure this organisation’s email domain before importing users.
                 </p>
               )}
             </div>

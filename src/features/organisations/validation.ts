@@ -210,7 +210,9 @@ export function validateOrganisationForm(
     errors.mainPhone = 'Enter a valid main telephone number.'
   }
 
-  if (data.emailDomain && !DOMAIN_PATTERN.test(data.emailDomain)) {
+  if (!data.emailDomain) {
+    errors.emailDomain = 'Enter the email domain allowed for user imports.'
+  } else if (!DOMAIN_PATTERN.test(data.emailDomain)) {
     errors.emailDomain = 'Enter a valid email domain, such as company.com.'
   }
 

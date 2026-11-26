@@ -14,6 +14,7 @@ import {
 
 type ParseOptions = {
   organisationId: string
+  emailDomain?: string | null
 }
 
 export type UserImportPreviewRow = ParsedUserImportRow & {
@@ -157,6 +158,7 @@ function emptyValues(): UserImportValues {
 function validateRow(
   source: Partial<Record<UserImportColumnKey, string>>,
   organisationId: string,
+  emailDomain?: string | null,
 ): { values: UserImportValues; errors: UserImportFieldErrors } {
   const values = emptyValues()
   const errors: UserImportFieldErrors = {}
@@ -187,6 +189,10 @@ function validateRow(
   }
   if (!EMAIL_PATTERN.test(values.email) || values.email.length > 254) {
     errors.email = 'Enter a valid email address.'
+  } else if (!emailDomain) {
+    errors.email = 'Configure the organisation email domain before importing.'
+  } else if (values.email.split('@').pop() !== emailDomain.toLowerCase()) {
+    errors.email = `Email must use the organisation domain @${emailDomain}.`
   }
   if (!role || !USER_IMPORT_ROLES.includes(role)) {
     errors.role = 'Use client or superadmin.'
@@ -308,7 +314,11 @@ export function parseUserImportCsv(
       rowErrors.push('Row contains more values than the header.')
     }
 
-    const { values, errors } = validateRow(source, options.organisationId)
+    const { values, errors } = validateRow(
+      source,
+      options.organisationId,
+      options.emailDomain,
+    )
     if (values.email) {
       emailCounts.set(values.email, (emailCounts.get(values.email) || 0) + 1)
     }
