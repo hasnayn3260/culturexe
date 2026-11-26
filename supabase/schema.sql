@@ -244,6 +244,107 @@ $$;
 ALTER FUNCTION "public"."is_superadmin"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") RETURNS TABLE("respondent_id" "uuid", "first_accessed_at" timestamp with time zone, "last_accessed_at" timestamp with time zone, "access_count" integer, "access_type" "text")
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO 'public', 'pg_temp'
+    AS $$
+declare
+  v_respondent public.survey_respondents%rowtype;
+  v_accessed_at timestamptz := clock_timestamp();
+  v_access_type text;
+  v_inserted boolean := false;
+begin
+  if p_token is null then
+    raise exception 'A survey access token is required.' using errcode = 'CX001';
+  end if;
+
+  if p_access_id is null then
+    raise exception 'A survey access identifier is required.' using errcode = 'CX007';
+  end if;
+
+  select sr.*
+    into v_respondent
+  from public.survey_respondents as sr
+  where sr.token = p_token
+  for update;
+
+  if not found then
+    raise exception 'This survey link is invalid.' using errcode = 'CX004';
+  end if;
+
+  v_access_type := case
+    when v_respondent.access_count = 0 then 'first'
+    else 'repeat'
+  end;
+
+  insert into public.survey_access_events (
+    survey_id,
+    respondent_id,
+    access_id,
+    accessed_at,
+    access_type
+  )
+  values (
+    v_respondent.survey_id,
+    v_respondent.id,
+    p_access_id,
+    v_accessed_at,
+    v_access_type
+  )
+  on conflict (respondent_id, access_id) do nothing
+  returning true into v_inserted;
+
+  if v_inserted then
+    update public.survey_respondents as sr
+    set
+      access_count = sr.access_count + 1,
+      first_accessed_at = coalesce(sr.first_accessed_at, v_accessed_at),
+      last_accessed_at = v_accessed_at
+    where sr.id = v_respondent.id
+    returning
+      sr.id,
+      sr.first_accessed_at,
+      sr.last_accessed_at,
+      sr.access_count
+    into
+      respondent_id,
+      first_accessed_at,
+      last_accessed_at,
+      access_count;
+  else
+    select event.access_type
+      into v_access_type
+    from public.survey_access_events as event
+    where event.respondent_id = v_respondent.id
+      and event.access_id = p_access_id;
+
+    select
+      sr.id,
+      sr.first_accessed_at,
+      sr.last_accessed_at,
+      sr.access_count
+    into
+      respondent_id,
+      first_accessed_at,
+      last_accessed_at,
+      access_count
+    from public.survey_respondents as sr
+    where sr.id = v_respondent.id;
+  end if;
+
+  access_type := v_access_type;
+  return next;
+end;
+$$;
+
+
+ALTER FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") IS 'Records one idempotent survey page access. The first event is unique; later page loads are repeat accesses.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."register_open_respondent"("p_open_token" "uuid", "p_department" "text", "p_job_title" "text", "p_tenure" "text", "p_job_grade" "text", "p_name" "text" DEFAULT NULL::"text") RETURNS TABLE("respondent_token" "uuid")
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
@@ -652,6 +753,24 @@ COMMENT ON COLUMN "public"."survey"."reminder_max_sends" IS 'Maximum number of r
 
 
 
+CREATE TABLE IF NOT EXISTS "public"."survey_access_events" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "survey_id" "uuid" NOT NULL,
+    "respondent_id" "uuid" NOT NULL,
+    "access_id" "uuid" NOT NULL,
+    "accessed_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "access_type" "text" NOT NULL,
+    CONSTRAINT "survey_access_events_access_type_check" CHECK (("access_type" = ANY (ARRAY['first'::"text", 'repeat'::"text"])))
+);
+
+
+ALTER TABLE "public"."survey_access_events" OWNER TO "postgres";
+
+
+COMMENT ON TABLE "public"."survey_access_events" IS 'Append-only ledger of idempotent survey page accesses used to distinguish first and repeat visits.';
+
+
+
 CREATE TABLE IF NOT EXISTS "public"."survey_questions" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "survey_id" "uuid" NOT NULL,
@@ -693,6 +812,10 @@ CREATE TABLE IF NOT EXISTS "public"."survey_respondents" (
     "last_reminder_attempted_at" timestamp with time zone,
     "last_reminder_error" "text",
     "completion_duration_seconds" integer,
+    "first_accessed_at" timestamp with time zone,
+    "last_accessed_at" timestamp with time zone,
+    "access_count" integer DEFAULT 0 NOT NULL,
+    CONSTRAINT "survey_respondents_access_summary_valid" CHECK (((("access_count" = 0) AND ("first_accessed_at" IS NULL) AND ("last_accessed_at" IS NULL)) OR (("access_count" > 0) AND ("first_accessed_at" IS NOT NULL) AND ("last_accessed_at" IS NOT NULL) AND ("last_accessed_at" >= "first_accessed_at")))),
     CONSTRAINT "survey_respondents_completion_duration_nonnegative" CHECK ((("completion_duration_seconds" IS NULL) OR (("completion_duration_seconds" >= 0) AND ("started_at" IS NOT NULL) AND ("submitted_at" IS NOT NULL) AND ("submitted_at" >= "started_at")))),
     CONSTRAINT "survey_respondents_reminder_count_check" CHECK (("reminder_count" >= 0))
 );
@@ -714,6 +837,10 @@ COMMENT ON COLUMN "public"."survey_respondents"."last_reminder_error" IS 'Latest
 
 
 COMMENT ON COLUMN "public"."survey_respondents"."completion_duration_seconds" IS 'Elapsed whole seconds from the respondent first opening the survey to final submission.';
+
+
+
+COMMENT ON COLUMN "public"."survey_respondents"."access_count" IS 'Total valid survey page loads recorded for this respondent after page-load deduplication.';
 
 
 
@@ -797,6 +924,16 @@ ALTER TABLE ONLY "public"."profiles"
 
 
 
+ALTER TABLE ONLY "public"."survey_access_events"
+    ADD CONSTRAINT "survey_access_events_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."survey_access_events"
+    ADD CONSTRAINT "survey_access_events_respondent_access_key" UNIQUE ("respondent_id", "access_id");
+
+
+
 ALTER TABLE ONLY "public"."survey"
     ADD CONSTRAINT "survey_pkey" PRIMARY KEY ("id");
 
@@ -804,6 +941,11 @@ ALTER TABLE ONLY "public"."survey"
 
 ALTER TABLE ONLY "public"."survey_questions"
     ADD CONSTRAINT "survey_questions_pkey" PRIMARY KEY ("id");
+
+
+
+ALTER TABLE ONLY "public"."survey_respondents"
+    ADD CONSTRAINT "survey_respondents_id_survey_key" UNIQUE ("id", "survey_id");
 
 
 
@@ -878,6 +1020,18 @@ CREATE UNIQUE INDEX "profiles_username_idx" ON "public"."profiles" USING "btree"
 
 
 
+CREATE UNIQUE INDEX "survey_access_events_first_per_respondent_idx" ON "public"."survey_access_events" USING "btree" ("respondent_id") WHERE ("access_type" = 'first'::"text");
+
+
+
+CREATE INDEX "survey_access_events_respondent_accessed_idx" ON "public"."survey_access_events" USING "btree" ("respondent_id", "accessed_at" DESC);
+
+
+
+CREATE INDEX "survey_access_events_survey_accessed_idx" ON "public"."survey_access_events" USING "btree" ("survey_id", "accessed_at" DESC);
+
+
+
 CREATE INDEX "survey_org_id_idx" ON "public"."survey" USING "btree" ("org_id");
 
 
@@ -943,6 +1097,21 @@ ALTER TABLE ONLY "public"."profiles"
 
 ALTER TABLE ONLY "public"."profiles"
     ADD CONSTRAINT "profiles_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organisations"("id") ON DELETE SET NULL;
+
+
+
+ALTER TABLE ONLY "public"."survey_access_events"
+    ADD CONSTRAINT "survey_access_events_respondent_id_fkey" FOREIGN KEY ("respondent_id") REFERENCES "public"."survey_respondents"("id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."survey_access_events"
+    ADD CONSTRAINT "survey_access_events_respondent_survey_fkey" FOREIGN KEY ("respondent_id", "survey_id") REFERENCES "public"."survey_respondents"("id", "survey_id") ON DELETE CASCADE;
+
+
+
+ALTER TABLE ONLY "public"."survey_access_events"
+    ADD CONSTRAINT "survey_access_events_survey_id_fkey" FOREIGN KEY ("survey_id") REFERENCES "public"."survey"("id") ON DELETE CASCADE;
 
 
 
@@ -1084,6 +1253,13 @@ CREATE POLICY "staff_delete_responses" ON "public"."survey_responses" FOR DELETE
 ALTER TABLE "public"."survey" ENABLE ROW LEVEL SECURITY;
 
 
+ALTER TABLE "public"."survey_access_events" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "survey_access_events_staff_read" ON "public"."survey_access_events" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
+
+
+
 CREATE POLICY "survey_admin_write" ON "public"."survey" TO "authenticated" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
 
 
@@ -1171,6 +1347,13 @@ GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") TO "service_role";
+
+
+
 REVOKE ALL ON FUNCTION "public"."register_open_respondent"("p_open_token" "uuid", "p_department" "text", "p_job_title" "text", "p_tenure" "text", "p_job_grade" "text", "p_name" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."register_open_respondent"("p_open_token" "uuid", "p_department" "text", "p_job_title" "text", "p_tenure" "text", "p_job_grade" "text", "p_name" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."register_open_respondent"("p_open_token" "uuid", "p_department" "text", "p_job_title" "text", "p_tenure" "text", "p_job_grade" "text", "p_name" "text") TO "authenticated";
@@ -1226,6 +1409,11 @@ GRANT ALL ON TABLE "public"."profiles" TO "service_role";
 GRANT ALL ON TABLE "public"."survey" TO "anon";
 GRANT ALL ON TABLE "public"."survey" TO "authenticated";
 GRANT ALL ON TABLE "public"."survey" TO "service_role";
+
+
+
+GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."survey_access_events" TO "authenticated";
+GRANT ALL ON TABLE "public"."survey_access_events" TO "service_role";
 
 
 

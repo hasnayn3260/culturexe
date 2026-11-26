@@ -1,6 +1,6 @@
 # CultureXe Platform Architecture and Roadmap
 
-Last updated: 25 November 2026
+Last updated: 26 November 2026
 
 ## Purpose
 
@@ -504,7 +504,7 @@ Execution order follows these rules:
 | 9 | CXW-14 | Medium | XS acceptance | Apply the draft-saving migration, then confirm token and signed-in surveys restore progress and closed-survey analytics/exports label incomplete responses without increasing completion totals. |
 | 10 | CXW-16 | Medium | XS acceptance | Apply and validate the access-ledger migration, then confirm one page load is idempotent and a later reload increments repeat access without changing survey start or completion totals. This supplies engagement data to CXW-21. |
 | 11 | CXW-18 | Medium | XS acceptance plus privacy decision | Confirm organisation-wide and group-level calculations/exports for Department, Team/Branch, Grade/Employment Level, Location/Site, Job Title and Tenure. Define the minimum reporting-group size before organisation-owner analytics are released. |
-| 12 | CXW-20 | Medium | L | Calculate average completion time, open-text response length and agreed quality indicators using CXW-19 timing data. |
+| 12 | CXW-20 | Medium | XS acceptance | Confirm average completion time, open-ended response length, scope filtering and transparent submission-quality review signals in the browser and exports. |
 | 13 | CXW-21 | Medium | L | Build engagement analytics for sent, opened, accessed, started, completed, abandoned and repeat-access events. Depends on CXW-7, CXW-8 and CXW-16 event data. |
 | 14 | CXW-23 | Medium | L-XL | Replace authenticator-based client access with the approved email authentication flow without weakening super-administrator security. Requires a security and migration plan. |
 | 15 | CXW-17 | Medium | XL | Add AI analysis only after analytics, demographic filtering, anonymisation and access controls are stable. |
@@ -604,6 +604,7 @@ These are implementation notes and do not change Jira statuses automatically.
 | CXW-19 | Implemented, browser acceptance pending | Production migration and all 12 validation checks pass. Both survey entry paths record first open through a secured function. The response finalisation trigger persists elapsed whole seconds without resetting resumed sessions. The Users table, respondent management view, Excel/CSV data and dashboard PDF now display Started At, Submitted At and Time Taken consistently. |
 | CXW-16 | Implemented, browser acceptance pending | The production migration and all 16 validation checks pass. An append-only access ledger records idempotent page-load events separately from survey starts and submissions. Dashboard and calculated exports reconcile total accesses into accesses by users who completed and accesses by users who did not complete, while participant views expose first access, last access, total accesses and repeats. Historical started/submitted respondents receive one backfilled first access; historical repeat visits cannot be reconstructed. |
 | CXW-18 | Implemented for super-admin analytics, browser acceptance pending | A reusable two-stage scope selector filters every analytics headline, dimension score, group score, per-question result and export by Department, Team/Branch, Grade/Employment Level, Location/Site, Job Title or Tenure. Organisation-wide remains the default. The organisation-owner privacy threshold remains an explicit pre-release decision. |
+| CXW-20 | Implemented, browser acceptance pending | Submission-quality analytics now calculate average completion time, average open-ended response words and sentences, open-response coverage and transparent engagement signals. Potentially rushed submissions are compared with the scoped cohort median, paragraph detail is assessed only where qualitative questions exist, and every review flag exposes its reason. The Users table and analytics exports include individual indicators. |
 
 ## Open decisions
 
@@ -615,6 +616,13 @@ These are implementation notes and do not change Jira statuses automatically.
 - Required retention rules for respondent identities, responses and email delivery records.
 
 ## Change log
+
+### 26 November 2026
+
+- Implemented CXW-20 submission-quality analytics without a schema change. The analytics scope now controls average completion time, average open-ended word and sentence counts, response coverage and engagement indicators.
+- Added transparent per-submission review signals for potentially rushed completion and minimal paragraph feedback. Missing timing or qualitative questions do not lower a submission's score.
+- Added a shadcn-based submission-quality summary, sortable quality indicators in the Users table, dedicated Excel worksheet data and PDF/raw export fields.
+- Added focused automated tests for word and sentence counting, timing averages, review thresholds, qualitative applicability and insufficient-data handling.
 
 ### 25 November 2026
 
@@ -630,7 +638,7 @@ These are implementation notes and do not change Jira statuses automatically.
 - Hardened invitation and reminder endpoints against missing, invalid and reversed survey dates.
 - Added production RLS migration `20261125120000_enforce_survey_response_window.sql` so direct anonymous or authenticated inserts cannot bypass the live response window.
 - Applied the CXW-15 response-window migration in production and confirmed all 14 function, permission, policy, relationship, timestamp and constraint validation checks pass.
-- Added a pre-production release gate requiring the current ESLint baseline of 43 errors and 3 warnings to be resolved or reviewed before go-live.
+- Added a pre-production release gate requiring the current ESLint baseline of 45 errors and 3 warnings to be resolved or reviewed before go-live.
 - Corrected CXW-5 Likert normalisation so averages 1, 3 and 5 map to 0%, 50% and 100%, while displaying the original average beside the normalised score.
 - Added reusable `PercentageBar` and `ScoreBar` analytics components and adopted them across consultant, dashboard, insights and client report views.
 - Added six automated Likert calculation tests covering boundaries, averages, invalid values and empty datasets.

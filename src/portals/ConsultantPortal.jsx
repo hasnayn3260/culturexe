@@ -17,8 +17,15 @@ import UsersPage from '../features/users/pages/UsersPage'
 import PercentageBar from '../features/analytics/components/PercentageBar'
 import ScoreBar from '../features/analytics/components/ScoreBar'
 import AnalysisScopeFilter from '../features/analytics/components/AnalysisScopeFilter'
+import SubmissionQualitySummary from '../features/analytics/components/SubmissionQualitySummary'
 import { calculateLikertMetrics } from '../features/analytics/utils/likertScore'
+import {
+  calculateSubmissionQuality,
+  submissionQualityLabel,
+} from '../features/analytics/utils/submissionQuality'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/sidebar'
+import { Badge } from '../components/ui/badge'
+import { Card } from '../components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import './consultant.css'
 
@@ -1198,6 +1205,22 @@ export default function ConsultantPortal() {
   const analyticsCompletionPct = analyticsScopeRespondents.length > 0
     ? Math.round((analyticsSubmittedCount / analyticsScopeRespondents.length) * 100)
     : 0
+  const submissionQuality = calculateSubmissionQuality({
+    questions,
+    responses,
+    respondents,
+  })
+  const submissionQualityByRespondent = new Map(
+    submissionQuality.submissions.map(result => [result.respondentId, result]),
+  )
+  const analyticsSubmissionQuality = calculateSubmissionQuality({
+    questions,
+    responses: analyticsScopeResponses.filter(response => !response._isPartial),
+    respondents: analyticsScopeRespondents,
+  })
+  const analyticsQualityByRespondent = new Map(
+    analyticsSubmissionQuality.submissions.map(result => [result.respondentId, result]),
+  )
 
   const displayName = profile?.full_name?.split(' ')[0] || 'Consultant'
 
@@ -1218,6 +1241,7 @@ export default function ConsultantPortal() {
         ? Math.floor((submittedAt - startedAt) / 1000)
         : null
     const responded = hasResponded(respondent)
+    const quality = submissionQualityByRespondent.get(respondent.id)
 
     return {
       id: respondent.id,
@@ -1233,6 +1257,11 @@ export default function ConsultantPortal() {
       lastAccessedAt: respondent.last_accessed_at,
       startedAt: respondent.started_at,
       completionSeconds,
+      qualityScore: quality?.score ?? null,
+      qualityLevel: quality?.level ?? 'insufficient',
+      qualityLabel: quality?.label ?? submissionQualityLabel('insufficient'),
+      qualitySignals: quality?.signals ?? [],
+      openEndedWordCount: quality?.openEndedWordCount ?? 0,
       timing: responded
         ? (respondent.response_timing || calcTiming(respondent.submitted_at, survey?.live_start, survey?.live_end))
         : null,
@@ -1302,6 +1331,10 @@ export default function ConsultantPortal() {
       'Last Accessed At': row.lastAccessedAt ? new Date(row.lastAccessedAt).toLocaleString('en-ZA') : '',
       'Started At':     row.startedAt ? new Date(row.startedAt).toLocaleString('en-ZA') : '',
       'Time Taken':     exportedDuration(row.completionSeconds),
+      'Submission Quality': row.qualityLabel,
+      'Quality Score':  row.qualityScore != null ? `${row.qualityScore}%` : '',
+      'Quality Signals': row.qualitySignals.join(' '),
+      'Open-ended Words': row.openEndedWordCount,
       Timing:           exportedTiming(row.timing),
       'Submitted At':   row.submittedAt ? new Date(row.submittedAt).toLocaleString('en-ZA') : '',
     }))
@@ -1316,6 +1349,7 @@ export default function ConsultantPortal() {
     return analyticsExportResponses.map(resp => {
       const r = respondents.find(rd => rd.id === resp.respondent_id)
       const matchingProfile = profileForRespondent(r)
+      const quality = analyticsQualityByRespondent.get(resp.respondent_id)
       const row = {
         'Organisation ID': survey?.org_id || '',
         Organisation:      organisationContext,
@@ -1344,6 +1378,13 @@ export default function ConsultantPortal() {
         'Time Taken': r?.completion_duration_seconds != null
           ? exportedDuration(r.completion_duration_seconds)
           : '',
+        'Submission Quality': quality?.label || '',
+        'Quality Score': quality?.score != null ? `${quality.score}%` : '',
+        'Quality Signals': quality?.signals.join(' ') || '',
+        'Potentially Rushed': quality ? (quality.potentiallyRushed ? 'Yes' : 'No') : '',
+        'Open-ended Answers': quality?.openEndedAnswerCount ?? '',
+        'Open-ended Words': quality?.openEndedWordCount ?? '',
+        'Open-ended Sentences': quality?.openEndedSentenceCount ?? '',
         'Draft Saved At': resp._isPartial && resp.draft_saved_at
           ? new Date(resp.draft_saved_at).toLocaleString('en-ZA')
           : '',
@@ -1434,7 +1475,47 @@ export default function ConsultantPortal() {
       { Metric: 'Questions', Value: questions.length },
       { Metric: 'Likert average', Value: filteredMetrics ? `${filteredMetrics.average.toFixed(2)} / 5` : '' },
       { Metric: 'Calculated Likert score', Value: filteredMetrics ? `${Math.round(filteredMetrics.percentage)}%` : '' },
+      { Metric: 'Average completion time', Value: exportedDuration(analyticsSubmissionQuality.averageCompletionSeconds) },
+      { Metric: 'Timed submissions', Value: `${analyticsSubmissionQuality.timedSubmissionCount} of ${analyticsSubmissionQuality.submittedCount}` },
+      { Metric: 'Average open-ended response length', Value: analyticsSubmissionQuality.averageOpenEndedWords != null ? `${analyticsSubmissionQuality.averageOpenEndedWords.toFixed(1)} words` : 'Not applicable' },
+      { Metric: 'Average open-ended sentences', Value: analyticsSubmissionQuality.averageOpenEndedSentences != null ? analyticsSubmissionQuality.averageOpenEndedSentences.toFixed(1) : 'Not applicable' },
+      { Metric: 'Open-response coverage', Value: analyticsSubmissionQuality.openEndedCoveragePercentage != null ? `${Math.round(analyticsSubmissionQuality.openEndedCoveragePercentage)}%` : 'Not applicable' },
+      { Metric: 'Submission quality', Value: analyticsSubmissionQuality.label },
+      { Metric: 'Submission quality score', Value: analyticsSubmissionQuality.score != null ? `${analyticsSubmissionQuality.score}%` : '' },
+      { Metric: 'Potentially rushed submissions', Value: analyticsSubmissionQuality.potentiallyRushedCount },
+      { Metric: 'Minimal qualitative feedback', Value: analyticsSubmissionQuality.minimalFeedbackCount },
+      { Metric: 'Strong engagement submissions', Value: analyticsSubmissionQuality.distribution.strong },
+      { Metric: 'Mixed engagement submissions', Value: analyticsSubmissionQuality.distribution.mixed },
+      { Metric: 'Submissions suggested for review', Value: analyticsSubmissionQuality.distribution.review },
     ]
+  }
+
+  function buildSubmissionQualityRows() {
+    return analyticsSubmissionQuality.submissions.map(result => {
+      const respondent = respondents.find(item => item.id === result.respondentId)
+      const profileMatch = profileForRespondent(respondent)
+      return {
+        Organisation: organisationContext,
+        Survey: surveyContext,
+        'Analysis Scope': analysisScopeLabel,
+        'Respondent ID': result.respondentId,
+        Name: profileMatch?.full_name || respondent?.name || '',
+        Email: respondent?.email || '',
+        Department: resolveDept(respondent) || '',
+        'Completion Time': exportedDuration(result.completionSeconds),
+        'Open-ended Answers': result.openEndedAnswerCount,
+        'Open-ended Words': result.openEndedWordCount,
+        'Open-ended Sentences': result.openEndedSentenceCount,
+        'Average Words per Open Answer': result.averageWordsPerOpenAnswer != null
+          ? result.averageWordsPerOpenAnswer.toFixed(1)
+          : '',
+        'Potentially Rushed': result.potentiallyRushed ? 'Yes' : 'No',
+        'Minimal Qualitative Feedback': result.minimalQualitativeFeedback ? 'Yes' : 'No',
+        'Quality Score': result.score != null ? `${result.score}%` : '',
+        'Quality Indicator': result.label,
+        'Review Signals': result.signals.join(' '),
+      }
+    })
   }
 
   function buildDimensionExportRows() {
@@ -1477,6 +1558,7 @@ export default function ConsultantPortal() {
       { name: 'Calculated Analytics', rows: buildCalculatedAnalyticsRows() },
       { name: 'Dimension Scores', rows: buildDimensionExportRows() },
       { name: 'Department Scores', rows: buildDepartmentExportRows() },
+      { name: 'Submission Quality', rows: buildSubmissionQualityRows() },
     ]
   }
 
@@ -1523,7 +1605,7 @@ export default function ConsultantPortal() {
       head: [[
         'Organisation', 'Survey', 'First Name', 'Surname', 'Email', 'Source',
         'Department', 'Position', 'Status', 'Accesses', 'Repeats', 'Access Outcome', 'First Accessed',
-        'Last Accessed', 'Started At', 'Time Taken', 'Timing', 'Submitted At',
+        'Last Accessed', 'Started At', 'Time Taken', 'Quality', 'Quality Score', 'Timing', 'Submitted At',
       ]],
       body: rows.map(row => [
         row.Organisation,
@@ -1542,6 +1624,8 @@ export default function ConsultantPortal() {
         row['Last Accessed At'],
         row['Started At'],
         row['Time Taken'],
+        row['Submission Quality'],
+        row['Quality Score'],
         row.Timing,
         row['Submitted At'],
       ]),
@@ -1556,6 +1640,7 @@ export default function ConsultantPortal() {
     const calculatedRows = buildCalculatedAnalyticsRows()
     const dimensionRows = buildDimensionExportRows()
     const departmentRows = buildDepartmentExportRows()
+    const qualityRows = buildSubmissionQualityRows()
     const rawRows = buildAnalyticsRows()
 
     pdfHeader(doc, `Analytics — ${organisationContext} — ${analysisScopeLabel}`)
@@ -1609,6 +1694,28 @@ export default function ConsultantPortal() {
           row['Calculated Score'],
         ]),
         styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: NAVY },
+        didDrawPage: () => pdfHeaderRepeat(doc),
+      })
+    }
+
+    if (qualityRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 7,
+        head: [['Name', 'Department', 'Completion Time', 'Open Words', 'Open Sentences', 'Rushed', 'Minimal Feedback', 'Quality', 'Signals']],
+        body: qualityRows.map(row => [
+          row.Name || row['Respondent ID'],
+          row.Department,
+          row['Completion Time'],
+          row['Open-ended Words'],
+          row['Open-ended Sentences'],
+          row['Potentially Rushed'],
+          row['Minimal Qualitative Feedback'],
+          row['Quality Indicator'],
+          row['Review Signals'],
+        ]),
+        styles: { fontSize: 7, cellPadding: 1.2, overflow: 'linebreak' },
+        columnStyles: { 8: { cellWidth: 55 } },
         headStyles: { fillColor: NAVY },
         didDrawPage: () => pdfHeaderRepeat(doc),
       })
@@ -2394,11 +2501,19 @@ export default function ConsultantPortal() {
                     onValueChange={setAnalysisGroupValue}
                   />
 
-                  <div className="card mb-24" style={{ background: 'linear-gradient(135deg, #0D1F3C 0%, #0E3462 100%)', color: 'white', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: -40, right: -40, width: 200, height: 200, background: 'radial-gradient(circle, rgba(27,191,176,0.1) 0%, transparent 70%)', borderRadius: '50%' }} />
-                    <div style={{ display: 'flex', gap: 40, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
+                  <Card className="relative mb-6 w-full items-stretch gap-0 overflow-hidden border-0 bg-[linear-gradient(135deg,#0D1F3C_0%,#0E3462_100%)] py-0 text-white ring-0">
+                    <div className="pointer-events-none absolute -right-10 -top-10 size-52 rounded-full bg-[radial-gradient(circle,rgba(27,191,176,0.14)_0%,transparent_70%)]" />
+                    <div className="relative flex w-full flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-5">
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-[0.12em] text-white/45">Analysis overview</div>
+                        <div className="mt-1 text-sm text-white/70">Headline results for the selected analysis scope</div>
+                      </div>
+                      <Badge variant="outline" className="h-auto border-[#1BBFB0]/40 bg-[#1BBFB0]/10 px-3 py-1.5 text-sm font-semibold text-[#32D4C4]">
+                        {analysisScopeLabel}
+                      </Badge>
+                    </div>
+                    <div className="relative grid w-full grid-cols-2 gap-px bg-white/10 lg:grid-cols-4">
                       {[
-                        { label: 'Analysis Scope', value: analysisScopeLabel },
                         { label: 'Assigned Users', value: analyticsScopeRespondents.length },
                         { label: 'Submitted Responses', value: analyticsSubmittedCount },
                         ...(isClosed && analyticsIncompleteCount > 0
@@ -2410,13 +2525,15 @@ export default function ConsultantPortal() {
                         { label: 'Questions', value: questions.length },
                         ...(analyticsDimensionScores.length > 0 ? [{ label: 'Dimensions', value: analyticsDimensionScores.length }] : []),
                       ].map(s => (
-                        <div key={s.label} style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: s.label === 'Analysis Scope' ? 19 : 36, fontWeight: 800, color: s.highlight ? scoreColor(analyticsOverallScore) : '#1BBFB0' }}>{s.value}</div>
-                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 3, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</div>
+                        <div key={s.label} className="flex min-h-28 flex-col items-center justify-center bg-[#102C50]/95 px-4 py-5 text-center">
+                          <div className="text-3xl font-extrabold leading-none" style={{ color: s.highlight ? scoreColor(analyticsOverallScore) : '#1BC7B7' }}>{s.value}</div>
+                          <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50">{s.label}</div>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </Card>
+
+                  <SubmissionQualitySummary metrics={analyticsSubmissionQuality} />
 
                   {/* Group + dimension summaries */}
                   {(analyticsGroupScores.length > 0 || analyticsDimensionScores.length > 0) && likertQs.length > 0 && (

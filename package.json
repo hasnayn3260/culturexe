@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "test:likert": "node --test --experimental-strip-types src/features/analytics/utils/likertScore.test.mjs",
+    "test:quality": "node --test --experimental-strip-types src/features/analytics/utils/submissionQuality.test.mjs",
+    "test:analytics": "npm run test:likert && npm run test:quality",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -6,6 +6,10 @@ import {
 } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
+
+import type { SubmissionQualityLevel } from '../../analytics/utils/submissionQuality'
+
 export type SurveyUserTableRow = {
   id: string
   firstName: string
@@ -20,6 +24,11 @@ export type SurveyUserTableRow = {
   lastAccessedAt: string | null
   startedAt: string | null
   completionSeconds: number | null
+  qualityScore: number | null
+  qualityLevel: SubmissionQualityLevel
+  qualityLabel: string
+  qualitySignals: string[]
+  openEndedWordCount: number
   timing: 'early' | 'on_time' | 'late' | null
   submittedAt: string | null
 }
@@ -52,6 +61,7 @@ const columns: Array<{ key: SurveyUserSortKey; label: string }> = [
   { key: 'lastAccessedAt', label: 'Last accessed' },
   { key: 'startedAt', label: 'Started' },
   { key: 'completionSeconds', label: 'Time taken' },
+  { key: 'qualityScore', label: 'Quality' },
   { key: 'timing', label: 'Timing' },
   { key: 'submittedAt', label: 'Submitted' },
 ]
@@ -121,6 +131,13 @@ function timingLabel(timing: SurveyUserTableRow['timing']): string {
   if (timing === 'on_time') return 'On time'
   if (timing === 'late') return 'Late'
   return '—'
+}
+
+function qualityClasses(level: SubmissionQualityLevel): string {
+  if (level === 'strong') return 'border-[#BDE7DF] bg-[#E7F9F7] text-[#087C72]'
+  if (level === 'mixed') return 'border-[#E8D9AE] bg-[#FFF7E2] text-[#8A6520]'
+  if (level === 'review') return 'border-[#F1C4B8] bg-[#FDECE7] text-[#A0442E]'
+  return 'border-[#DCE5EE] bg-[#F3F5F7] text-[#6D7D90]'
 }
 
 export default function SurveyUsersTable({
@@ -228,7 +245,7 @@ export default function SurveyUsersTable({
         className={`overflow-x-auto touch-pan-y ${dragging ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
         aria-label="Survey users table. Drag horizontally to view more columns."
       >
-        <table className="w-full min-w-[1320px] border-collapse text-left">
+        <table className="w-full min-w-[1450px] border-collapse text-left">
           <thead className="bg-[#F7F9FC]">
             <tr>
               {columns.map((column) => {
@@ -278,6 +295,17 @@ export default function SurveyUsersTable({
                 <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.lastAccessedAt)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.startedAt)}</td>
                 <td className="px-4 py-3 text-[#314966]">{formatDuration(row.completionSeconds)}</td>
+                <td className="px-4 py-3">
+                  <Badge
+                    variant="outline"
+                    className={qualityClasses(row.qualityLevel)}
+                    title={row.qualitySignals.length > 0
+                      ? row.qualitySignals.join(' ')
+                      : `${row.openEndedWordCount} open-ended words recorded.`}
+                  >
+                    {row.qualityLabel}{row.qualityScore !== null ? ` · ${row.qualityScore}%` : ''}
+                  </Badge>
+                </td>
                 <td className="px-4 py-3 text-[#314966]">{timingLabel(row.timing)}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-[#6D7D90]">{formatDateTime(row.submittedAt)}</td>
               </tr>
