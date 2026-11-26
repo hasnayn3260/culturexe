@@ -17,6 +17,7 @@ const ADMIN_USERS_IMPORT_ENDPOINT = '/api/users/import'
 type ApiErrorBody = {
   error?: string
   message?: string
+  results?: unknown
 }
 
 type UsersResponse = {
@@ -49,12 +50,34 @@ type RequestOptions = {
 
 export class AdminUsersApiError extends Error {
   readonly status: number
+  readonly results: UserImportResult[]
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    results: UserImportResult[] = [],
+  ) {
     super(message)
     this.name = 'AdminUsersApiError'
     this.status = status
+    this.results = results
   }
+}
+
+function isUserImportResult(value: unknown): value is UserImportResult {
+  if (!value || typeof value !== 'object') return false
+
+  const result = value as Record<string, unknown>
+  const statuses = ['pending', 'created', 'updated', 'skipped', 'failed']
+
+  return typeof result.rowNumber === 'number' &&
+    typeof result.email === 'string' &&
+    typeof result.status === 'string' && statuses.includes(result.status) &&
+    (result.message === undefined || typeof result.message === 'string')
+}
+
+function readImportResults(value: unknown): UserImportResult[] {
+  return Array.isArray(value) ? value.filter(isUserImportResult) : []
 }
 
 async function getAccessToken(): Promise<string> {
@@ -108,6 +131,7 @@ async function adminUsersRequest<T>(
     throw new AdminUsersApiError(
       errorBody?.error || errorBody?.message || 'Unable to manage users.',
       response.status,
+      readImportResults(errorBody?.results),
     )
   }
 

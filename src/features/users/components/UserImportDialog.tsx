@@ -10,6 +10,7 @@ import {
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/Toast'
 import {
   Dialog,
   DialogContent,
@@ -27,8 +28,13 @@ import {
 } from '../import/parseUserImportCsv'
 import {
   USER_IMPORT_COLUMNS,
+  type UserImportResult,
   type UserImportValues,
 } from '../import/userImportSchema'
+import {
+  AdminUsersApiError,
+  type BulkUserImportResponse,
+} from '../services/usersClient'
 import type { OrganisationReference } from '../types'
 
 type UserImportSubmission = {
@@ -41,7 +47,7 @@ type UserImportDialogProps = {
   organisations: OrganisationReference[]
   submitting?: boolean
   onOpenChange: (open: boolean) => void
-  onImport: (submission: UserImportSubmission) => Promise<unknown>
+  onImport: (submission: UserImportSubmission) => Promise<BulkUserImportResponse>
 }
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -59,6 +65,7 @@ export default function UserImportDialog({
   onOpenChange,
   onImport,
 }: UserImportDialogProps) {
+  const showToast = useToast()
   const fileInput = useRef<HTMLInputElement>(null)
   const [organisationId, setOrganisationId] = useState('')
   const [fileName, setFileName] = useState('')
@@ -67,6 +74,7 @@ export default function UserImportDialog({
   const [reading, setReading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [serverFailures, setServerFailures] = useState<UserImportResult[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +85,7 @@ export default function UserImportDialog({
     setReading(false)
     setDragging(false)
     setError(null)
+    setServerFailures([])
     if (fileInput.current) fileInput.current.value = ''
   }, [open])
 
@@ -87,6 +96,7 @@ export default function UserImportDialog({
 
   async function readFile(file: File) {
     setError(null)
+    setServerFailures([])
 
     if (!file.name.toLowerCase().endsWith('.csv')) {
       setError('Select a CSV file ending in .csv.')
@@ -125,24 +135,50 @@ export default function UserImportDialog({
   async function submitImport() {
     if (!preview?.canImport) return
     setError(null)
+    setServerFailures([])
 
     try {
-      await onImport({
+      const result = await onImport({
         organisationId,
         rows: preview.rows.map((row) => row.values),
       })
+      const imported = result.created + result.updated
+      showToast(
+        `Import complete: ${imported} ${imported === 1 ? 'user' : 'users'} imported${
+          result.skipped > 0 ? `, ${result.skipped} skipped` : ''
+        }.`,
+      )
       onOpenChange(false)
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'The users could not be imported. Please try again.',
+      const message = requestError instanceof Error
+        ? requestError.message
+        : 'The users could not be imported. Please try again.'
+      const failures = requestError instanceof AdminUsersApiError
+        ? requestError.results.filter((result) => result.status === 'failed')
+        : []
+
+      setError(message)
+      setServerFailures(failures)
+      showToast(
+        failures.length > 0
+          ? `Import blocked: ${failures.length} ${failures.length === 1 ? 'row needs' : 'rows need'} attention.`
+          : message,
+        'error',
       )
     }
   }
 
   const importDisabled =
     submitting || reading || !preview?.canImport || !organisationId
+  const failedRowNumbers = new Set(
+    serverFailures.map((failure) => failure.rowNumber),
+  )
+  const displayedInvalidCount = (preview?.invalidRowCount || 0) +
+    failedRowNumbers.size
+  const displayedValidCount = Math.max(
+    0,
+    (preview?.validRowCount || 0) - failedRowNumbers.size,
+  )
 
   return (
     <Dialog open={open} onOpenChange={submitting ? undefined : onOpenChange}>
@@ -174,7 +210,11 @@ export default function UserImportDialog({
               <select
                 id="import-organisation"
                 value={organisationId}
-                onChange={(event) => setOrganisationId(event.target.value)}
+                onChange={(event) => {
+                  setOrganisationId(event.target.value)
+                  setError(null)
+                  setServerFailures([])
+                }}
                 required
                 aria-invalid={Boolean(csvText && !organisationId)}
                 className="h-10 w-full rounded-[10px] border border-[#DCE4EE] bg-white px-3 text-[14px] text-[#0D1F3C] outline-none transition focus:border-[#1BBFB0] focus:ring-3 focus:ring-[#1BBFB0]/20 aria-invalid:border-[#D94A3A] aria-invalid:ring-3 aria-invalid:ring-[#D94A3A]/15"
@@ -268,7 +308,20 @@ export default function UserImportDialog({
           {error && (
             <Alert variant="destructive" className="border-[#F4B6AE] bg-[#FFF5F3]">
               <AlertCircle />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>
+                <p className="font-semibold">{error}</p>
+                {serverFailures.length > 0 && (
+                  <ul className="mt-2 max-h-36 list-disc space-y-1 overflow-y-auto pl-5">
+                    {serverFailures.map((failure) => (
+                      <li key={`${failure.rowNumber}-${failure.email}`}>
+                        <span className="font-semibold">Row {failure.rowNumber}</span>
+                        {failure.email ? ` · ${failure.email}` : ''}
+                        {failure.message ? ` — ${failure.message}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 
@@ -306,14 +359,14 @@ export default function UserImportDialog({
 
               <div className="flex flex-wrap items-center gap-3">
                 <div className="rounded-full bg-[#E7F9F7] px-3 py-1 text-xs font-bold text-[#087C72]">
-                  {preview.validRowCount} valid
+                  {displayedValidCount} valid
                 </div>
                 <div className={`rounded-full px-3 py-1 text-xs font-bold ${
-                  preview.invalidRowCount > 0
+                  displayedInvalidCount > 0
                     ? 'bg-[#FFF0EE] text-[#C33D2F]'
                     : 'bg-[#F0F3F6] text-[#6D7D90]'
                 }`}>
-                  {preview.invalidRowCount} invalid
+                  {displayedInvalidCount} invalid
                 </div>
                 <div className="text-xs text-[#8A9BB0]">
                   Required fields are marked <span className="font-extrabold text-[#D94A3A]">*</span>
@@ -350,53 +403,71 @@ export default function UserImportDialog({
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.rows.map((row) => (
-                      <tr key={row.rowNumber} className="border-b border-[#EDF1F5] last:border-0">
-                        <td className="bg-white px-1.5 py-2.5 text-center align-top font-bold text-[#526A88]">
-                          {row.rowNumber}
-                        </td>
-                        <td className="px-1.5 py-2.5 align-top">
-                          {row.valid ? (
-                            <span className="inline-flex items-center gap-0.5 font-bold text-[#087C72]">
-                              <CheckCircle2 className="size-3 shrink-0" /> Valid
-                            </span>
-                          ) : (
-                            <span
-                              title={[
-                                ...Object.values(row.errors),
-                                ...row.rowErrors,
-                              ].join('\n')}
-                              className="inline-flex items-center gap-0.5 font-bold text-[#C33D2F]"
-                            >
-                              <AlertCircle className="size-3 shrink-0" /> Invalid
-                            </span>
-                          )}
-                        </td>
-                        {USER_IMPORT_COLUMNS.map((column) => {
-                          const message = row.errors[column.key]
-                          return (
-                            <td
-                              key={column.key}
-                              title={message}
-                              className={`break-words px-1.5 py-2.5 align-top leading-4 ${
-                                message
-                                  ? 'bg-[#FFF0EE] font-semibold text-[#B8372A]'
-                                  : 'text-[#526A88]'
-                              }`}
-                            >
-                              <span className="block break-words">
-                                {fieldValue(row.values, column.key)}
+                    {preview.rows.map((row) => {
+                      const serverFailure = serverFailures.find(
+                        (failure) => failure.rowNumber === row.rowNumber,
+                      )
+
+                      return (
+                        <tr
+                          key={row.rowNumber}
+                          className={`border-b border-[#EDF1F5] last:border-0 ${
+                            serverFailure ? 'bg-[#FFF5F3]' : ''
+                          }`}
+                        >
+                          <td className="bg-white px-1.5 py-2.5 text-center align-top font-bold text-[#526A88]">
+                            {row.rowNumber}
+                          </td>
+                          <td className="px-1.5 py-2.5 align-top">
+                            {serverFailure ? (
+                              <span
+                                title={serverFailure.message}
+                                className="inline-flex items-center gap-0.5 font-bold text-[#C33D2F]"
+                              >
+                                <AlertCircle className="size-3 shrink-0" /> Failed
                               </span>
-                              {message && (
-                                <span className="mt-1 block whitespace-normal text-[10px] leading-4">
-                                  {message}
+                            ) : row.valid ? (
+                              <span className="inline-flex items-center gap-0.5 font-bold text-[#087C72]">
+                                <CheckCircle2 className="size-3 shrink-0" /> Valid
+                              </span>
+                            ) : (
+                              <span
+                                title={[
+                                  ...Object.values(row.errors),
+                                  ...row.rowErrors,
+                                ].join('\n')}
+                                className="inline-flex items-center gap-0.5 font-bold text-[#C33D2F]"
+                              >
+                                <AlertCircle className="size-3 shrink-0" /> Invalid
+                              </span>
+                            )}
+                          </td>
+                          {USER_IMPORT_COLUMNS.map((column) => {
+                            const message = row.errors[column.key]
+                            return (
+                              <td
+                                key={column.key}
+                                title={message}
+                                className={`break-words px-1.5 py-2.5 align-top leading-4 ${
+                                  message
+                                    ? 'bg-[#FFF0EE] font-semibold text-[#B8372A]'
+                                    : 'text-[#526A88]'
+                                }`}
+                              >
+                                <span className="block break-words">
+                                  {fieldValue(row.values, column.key)}
                                 </span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
+                                {message && (
+                                  <span className="mt-1 block whitespace-normal text-[10px] leading-4">
+                                    {message}
+                                  </span>
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
