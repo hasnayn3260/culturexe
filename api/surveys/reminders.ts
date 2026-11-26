@@ -3,7 +3,10 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyReminderEmail } from '../email/postmark.js'
-import { isReminderRecipientEligible } from './reminderPolicy.js'
+import {
+  firstReminderEligibleAt,
+  isReminderRecipientEligible,
+} from './reminderPolicy.js'
 
 type SurveyRow = {
   id: string
@@ -16,6 +19,7 @@ type SurveyRow = {
   reminder_frequency_days: number
   reminder_max_sends: number
   reminder_timezone: string
+  reminder_first_send_at: string
 }
 
 type OrganisationRow = {
@@ -194,7 +198,7 @@ export async function route(request: Request): Promise<Response> {
 
     const { data: surveyData, error: surveyError } = await auth.admin
       .from('survey')
-      .select('id, org_id, title, status, live_start, live_end, email_reminders_enabled, reminder_frequency_days, reminder_max_sends, reminder_timezone')
+      .select('id, org_id, title, status, live_start, live_end, email_reminders_enabled, reminder_frequency_days, reminder_max_sends, reminder_timezone, reminder_first_send_at')
       .eq('id', surveyId)
       .maybeSingle()
     if (surveyError) throw surveyError
@@ -304,6 +308,23 @@ export async function route(request: Request): Promise<Response> {
           message: `The maximum of ${survey.reminder_max_sends} reminders has been reached.`,
         })
         continue
+      }
+
+      if (respondent.reminder_count === 0 && respondent.invited_at) {
+        const firstEligibleTime = firstReminderEligibleAt({
+          firstScheduledAt: survey.reminder_first_send_at,
+          invitedAt: respondent.invited_at,
+          frequencyDays: survey.reminder_frequency_days,
+        })
+        if (Number.isFinite(firstEligibleTime) && now < firstEligibleTime) {
+          results.push({
+            email: respondent.email,
+            respondentId: respondent.id,
+            status: 'skipped',
+            message: `The first reminder may be sent after ${formatSurveyDate(new Date(firstEligibleTime).toISOString(), survey.reminder_timezone)}.`,
+          })
+          continue
+        }
       }
 
       const lastReminderTime = respondent.reminded_at

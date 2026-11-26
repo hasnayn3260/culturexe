@@ -11,6 +11,7 @@
     "test:quality": "node --test --experimental-strip-types src/features/analytics/utils/submissionQuality.test.ts",
     "test:survey-files": "node --test --experimental-strip-types api/surveys/filePolicy.test.ts",
     "test:reminders": "node --test --experimental-strip-types api/surveys/reminderPolicy.test.ts",
+    "test:invitations": "node --test --experimental-strip-types api/surveys/invitationPolicy.test.ts",
     "test:analytics": "npm run test:likert && npm run test:quality",
     "preview": "vite preview"
   },

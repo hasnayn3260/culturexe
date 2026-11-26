@@ -10,6 +10,7 @@ import {
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { DateTime24HourInput } from '@/components/ui/date-time-24-hour-input'
 import {
   Dialog,
   DialogContent,
@@ -460,16 +461,18 @@ export default function SurveyFormDialog({
               <FieldLabel htmlFor="survey-live-start" required={values.status === 'live'}>
                 Opening date and time
               </FieldLabel>
-              <Input
+              <DateTime24HourInput
                 id="survey-live-start"
-                type="datetime-local"
                 value={values.liveStart}
                 max={values.liveEnd || undefined}
-                onChange={(event) => update('liveStart', event.target.value)}
+                onValueChange={(value) => update('liveStart', value)}
                 disabled={submitting}
-                aria-invalid={Boolean(errors.liveStart)}
+                invalid={Boolean(errors.liveStart)}
+                dateAriaLabel="Survey opening date"
+                timeAriaLabel="Survey opening time in 24-hour format"
                 className={inputClassName}
               />
+              <p className="mt-1 text-[11px] text-[#8A9BB0]">Time uses 24-hour format (HH:mm).</p>
               <FieldError message={errors.liveStart} />
             </div>
 
@@ -477,16 +480,18 @@ export default function SurveyFormDialog({
               <FieldLabel htmlFor="survey-live-end" required={values.status === 'live'}>
                 Closing date and time
               </FieldLabel>
-              <Input
+              <DateTime24HourInput
                 id="survey-live-end"
-                type="datetime-local"
                 value={values.liveEnd}
                 min={values.liveStart || undefined}
-                onChange={(event) => update('liveEnd', event.target.value)}
+                onValueChange={(value) => update('liveEnd', value)}
                 disabled={submitting}
-                aria-invalid={Boolean(errors.liveEnd)}
+                invalid={Boolean(errors.liveEnd)}
+                dateAriaLabel="Survey closing date"
+                timeAriaLabel="Survey closing time in 24-hour format"
                 className={inputClassName}
               />
+              <p className="mt-1 text-[11px] text-[#8A9BB0]">Time uses 24-hour format (HH:mm).</p>
               <FieldError message={errors.liveEnd} />
             </div>
 

@@ -66,7 +66,7 @@ type InvitationRow = {
 type RowErrors = Partial<Record<'email' | 'name', string>>
 type InvitationResult = {
   email: string
-  status: 'sent' | 'failed' | 'skipped'
+  status: 'sent' | 'queued' | 'failed' | 'skipped'
   message: string
 }
 type StatusFilter = 'all' | 'pending' | 'started' | 'completed'
@@ -146,7 +146,7 @@ function invitationResults(value: unknown): InvitationResult[] {
     const record = result as Record<string, unknown>
     if (
       typeof record.email !== 'string' ||
-      !['sent', 'failed', 'skipped'].includes(String(record.status))
+      !['sent', 'queued', 'failed', 'skipped'].includes(String(record.status))
     ) return []
 
     return [{
@@ -176,7 +176,7 @@ export function pendingReminderRespondentCount(
   return respondents.filter(
     (respondent) =>
       respondent.source !== 'open_link' &&
-      Boolean(respondent.invited_at || respondent.user_id) &&
+      Boolean(respondent.invited_at) &&
       !completed.has(respondent.id),
   ).length
 }
@@ -435,10 +435,12 @@ export default function SurveyRespondentsPanel({
       })))
       const results = invitationResults(result)
       const sent = results.filter(({ status }) => status === 'sent').length
+      const queued = results.filter(({ status }) => status === 'queued').length
       const failed = results.filter(({ status }) => status === 'failed')
       const skipped = results.filter(({ status }) => status === 'skipped').length
       const summary = [
-        `${sent} invitation${sent === 1 ? '' : 's'} sent`,
+        sent > 0 ? `${sent} invitation${sent === 1 ? '' : 's'} sent` : null,
+        queued > 0 ? `${queued} queued for survey opening` : null,
         failed.length > 0 ? `${failed.length} failed` : null,
         skipped > 0 ? `${skipped} skipped` : null,
       ].filter(Boolean).join(', ')

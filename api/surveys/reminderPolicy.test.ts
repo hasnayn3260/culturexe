@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  firstReminderEligibleAt,
   isAutomaticReminderScheduleDue,
   isReminderRecipientEligible,
 } from './reminderPolicy.ts'
@@ -14,12 +15,20 @@ test('includes respondents invited directly by email', () => {
   }), true)
 })
 
-test('includes company users added to the survey', () => {
+test('includes company users after their invitation has been sent', () => {
+  assert.equal(isReminderRecipientEligible({
+    invited_at: '2026-11-26T08:00:00.000Z',
+    user_id: '861f5df0-ba23-4624-bc8c-c75745329472',
+    source: 'assigned',
+  }), true)
+})
+
+test('does not send a reminder before an added user receives an invitation', () => {
   assert.equal(isReminderRecipientEligible({
     invited_at: null,
     user_id: '861f5df0-ba23-4624-bc8c-c75745329472',
     source: 'assigned',
-  }), true)
+  }), false)
 })
 
 test('excludes anonymous open-link respondents', () => {
@@ -98,4 +107,20 @@ test('never sends before the saved first reminder timestamp', () => {
     reminder_send_time: '11:50:00',
     reminder_timezone: 'Africa/Johannesburg',
   }, new Date('2026-11-26T09:59:00.000Z')), false)
+})
+
+test('delays the first reminder when its invitation was sent late', () => {
+  assert.equal(firstReminderEligibleAt({
+    firstScheduledAt: '2026-11-26T09:50:00.000Z',
+    invitedAt: '2026-11-26T10:20:00.000Z',
+    frequencyDays: 1,
+  }), new Date('2026-11-27T10:20:00.000Z').getTime())
+})
+
+test('keeps the configured first reminder when invitation arrived on time', () => {
+  assert.equal(firstReminderEligibleAt({
+    firstScheduledAt: '2026-11-26T09:50:00.000Z',
+    invitedAt: '2026-11-26T08:00:00.000Z',
+    frequencyDays: 1,
+  }), new Date('2026-11-26T09:50:00.000Z').getTime())
 })

@@ -15,7 +15,26 @@ export function isReminderRecipientEligible(
 ): boolean {
   if (respondent.source === 'open_link') return false
 
-  return Boolean(respondent.invited_at || respondent.user_id)
+  return Boolean(respondent.invited_at)
+}
+
+export function firstReminderEligibleAt({
+  firstScheduledAt,
+  invitedAt,
+  frequencyDays,
+}: {
+  firstScheduledAt: string
+  invitedAt: string
+  frequencyDays: number
+}): number {
+  const firstScheduledTime = new Date(firstScheduledAt).getTime()
+  const invitedTime = new Date(invitedAt).getTime()
+  if (!Number.isFinite(firstScheduledTime)) return Number.NaN
+  if (!Number.isFinite(invitedTime) || invitedTime <= firstScheduledTime) {
+    return firstScheduledTime
+  }
+
+  return invitedTime + frequencyDays * 24 * 60 * 60 * 1_000
 }
 
 type LocalDateTime = {

@@ -15,6 +15,11 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  DateTime24HourInput,
+  isTwentyFourHourTime,
+  Time24HourInput,
+} from '@/components/ui/date-time-24-hour-input'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -69,7 +74,7 @@ type SettingsForm = {
 
 type FormErrors = Partial<Record<
   'title' | 'description' | 'liveStart' | 'liveEnd' | 'reminderFirstSendAt' |
-  'reminderFrequencyDays' | 'reminderMaxSends' | 'channels',
+  'reminderFrequencyDays' | 'reminderSendTime' | 'reminderMaxSends' | 'channels',
   string
 >>
 
@@ -101,8 +106,27 @@ function toIsoDateTime(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
+function effectiveFirstReminderIso(
+  firstReminderValue: string,
+  openingValue: string,
+): string | null {
+  const firstReminder = toIsoDateTime(firstReminderValue)
+  if (!firstReminder) return null
+
+  const opening = toIsoDateTime(openingValue)
+  if (!opening) return firstReminder
+
+  return new Date(firstReminder).getTime() < new Date(opening).getTime()
+    ? opening
+    : firstReminder
+}
+
 function normalizedTime(value: string): string {
   return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value
+}
+
+function reminderTimePart(value: string): string {
+  return value.match(/T(\d{2}:\d{2})/)?.[1] || ''
 }
 
 function settingsForm(survey: SurveySettingsRecord): SettingsForm {
@@ -229,15 +253,19 @@ export default function SurveySettingsPanel({
       if (!form.emailRemindersEnabled) {
         next.channels = 'Enable the email reminder channel before automatic reminders.'
       }
-      if (firstReminder === null || !Number.isFinite(firstReminder)) {
-        next.reminderFirstSendAt = 'Choose when automatic reminders should begin.'
+      if (
+        firstReminder === null ||
+        !Number.isFinite(firstReminder) ||
+        !isTwentyFourHourTime(reminderTimePart(form.reminderFirstSendAt))
+      ) {
+        next.reminderFirstSendAt = 'Choose a valid date and 24-hour time (HH:mm).'
       } else {
-        if (opening !== null && firstReminder < opening) {
-          next.reminderFirstSendAt = 'The first reminder cannot be before the survey opens.'
-        }
         if (closing !== null && firstReminder >= closing) {
           next.reminderFirstSendAt = 'The first reminder must be before the survey closes.'
         }
+      }
+      if (!isTwentyFourHourTime(form.reminderSendTime)) {
+        next.reminderSendTime = 'Enter a valid 24-hour time from 00:00 to 23:59.'
       }
     }
 
@@ -257,7 +285,10 @@ export default function SurveySettingsPanel({
         live_start: toIsoDateTime(form.liveStart),
         live_end: toIsoDateTime(form.liveEnd),
         reminders_enabled: form.remindersEnabled,
-        reminder_first_send_at: toIsoDateTime(form.reminderFirstSendAt),
+        reminder_first_send_at: effectiveFirstReminderIso(
+          form.reminderFirstSendAt,
+          form.liveStart,
+        ),
         reminder_frequency_days: Number(form.reminderFrequencyDays),
         reminder_send_time: normalizedTime(form.reminderSendTime),
         reminder_timezone: form.reminderTimezone,
@@ -346,30 +377,35 @@ export default function SurveySettingsPanel({
             <Label htmlFor="survey-settings-open" className="mb-1.5 text-sm font-bold text-[#314966]">
               Opening date and time
             </Label>
-            <Input
+            <DateTime24HourInput
               id="survey-settings-open"
-              type="datetime-local"
               value={form.liveStart}
-              onChange={(event) => update('liveStart', event.target.value)}
+              onValueChange={(value) => update('liveStart', value)}
               disabled={scheduleLocked}
-              aria-invalid={Boolean(errors.liveStart)}
+              invalid={Boolean(errors.liveStart)}
+              dateAriaLabel="Survey opening date"
+              timeAriaLabel="Survey opening time in 24-hour format"
               className={fieldClassName}
             />
+            <p className="mt-1 text-xs text-[#7C8EA5]">Time uses 24-hour format (HH:mm).</p>
             <FieldError message={errors.liveStart} />
           </div>
           <div>
             <Label htmlFor="survey-settings-close" className="mb-1.5 text-sm font-bold text-[#314966]">
               Closing date and time
             </Label>
-            <Input
+            <DateTime24HourInput
               id="survey-settings-close"
-              type="datetime-local"
               value={form.liveEnd}
-              onChange={(event) => update('liveEnd', event.target.value)}
+              min={form.liveStart}
+              onValueChange={(value) => update('liveEnd', value)}
               disabled={settingsLocked}
-              aria-invalid={Boolean(errors.liveEnd)}
+              invalid={Boolean(errors.liveEnd)}
+              dateAriaLabel="Survey closing date"
+              timeAriaLabel="Survey closing time in 24-hour format"
               className={fieldClassName}
             />
+            <p className="mt-1 text-xs text-[#7C8EA5]">Time uses 24-hour format (HH:mm).</p>
             <FieldError message={errors.liveEnd} />
           </div>
         </div>
@@ -398,15 +434,17 @@ export default function SurveySettingsPanel({
             <Label htmlFor="survey-settings-first-reminder" className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-[#314966]">
               <CalendarClock className="size-4" /> First reminder
             </Label>
-            <Input
+            <DateTime24HourInput
               id="survey-settings-first-reminder"
-              type="datetime-local"
               value={form.reminderFirstSendAt}
-              onChange={(event) => update('reminderFirstSendAt', event.target.value)}
+              onValueChange={(value) => update('reminderFirstSendAt', value)}
               disabled={!form.remindersEnabled || settingsLocked}
-              aria-invalid={Boolean(errors.reminderFirstSendAt)}
+              invalid={Boolean(errors.reminderFirstSendAt)}
+              dateAriaLabel="First reminder date"
+              timeAriaLabel="First reminder time in 24-hour format"
               className={fieldClassName}
             />
+            <p className="mt-1 text-xs text-[#7C8EA5]">Time uses 24-hour format (HH:mm).</p>
             <FieldError message={errors.reminderFirstSendAt} />
           </div>
           <div>
@@ -431,16 +469,19 @@ export default function SurveySettingsPanel({
           </div>
           <div>
             <Label htmlFor="survey-settings-time" className="mb-1.5 flex items-center gap-1.5 text-sm font-bold text-[#314966]">
-              <Clock3 className="size-4" /> Send time
+              <Clock3 className="size-4" /> Send time (24-hour)
             </Label>
-            <Input
+            <Time24HourInput
               id="survey-settings-time"
-              type="time"
               value={form.reminderSendTime}
-              onChange={(event) => update('reminderSendTime', event.target.value)}
+              onValueChange={(value) => update('reminderSendTime', value)}
               disabled={!form.remindersEnabled || settingsLocked}
+              invalid={Boolean(errors.reminderSendTime)}
+              ariaLabel="Reminder send time in 24-hour format"
               className={fieldClassName}
             />
+            <p className="mt-1 text-xs text-[#7C8EA5]">For example, 00:45 or 18:30.</p>
+            <FieldError message={errors.reminderSendTime} />
           </div>
           <div>
             <Label htmlFor="survey-settings-maximum" className="mb-1.5 text-sm font-bold text-[#314966]">

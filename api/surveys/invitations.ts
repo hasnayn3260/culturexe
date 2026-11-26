@@ -1,6 +1,9 @@
+import { timingSafeEqual } from 'node:crypto'
+
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyInvitationEmail } from '../email/postmark.js'
+import { isPendingSurveyInvitation } from './invitationPolicy.js'
 
 type InvitationRowInput = {
   email?: unknown
@@ -36,12 +39,14 @@ type RespondentRow = {
   token: string
   user_id: string | null
   submitted_at: string | null
+  invited_at: string | null
+  source: string | null
 }
 
 type InvitationResult = {
   email: string
   respondentId?: string
-  status: 'sent' | 'failed' | 'skipped'
+  status: 'sent' | 'queued' | 'failed' | 'skipped'
   message: string
 }
 
@@ -94,6 +99,13 @@ function bearerToken(request: Request): string | null {
   return match?.[1]?.trim() || null
 }
 
+function secureEqual(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  return leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+}
+
 async function requireSurveyManager(request: Request) {
   const token = bearerToken(request)
   if (!token) {
@@ -104,6 +116,15 @@ async function requireSurveyManager(request: Request) {
   }
 
   const admin = createAdminClient()
+  const cronSecret = env('CRON_SECRET')
+  if (cronSecret && secureEqual(token, cronSecret)) {
+    return {
+      ok: true as const,
+      admin,
+      profile: { role: 'superadmin', active: true, org_id: null },
+      isCron: true,
+    }
+  }
   const {
     data: { user },
     error: authError,
@@ -134,7 +155,7 @@ async function requireSurveyManager(request: Request) {
     }
   }
 
-  return { ok: true as const, admin, profile }
+  return { ok: true as const, admin, profile, isCron: false }
 }
 
 function formatSurveyDate(value: string): string {
@@ -154,7 +175,7 @@ function publicAssetUrl(
   return admin.storage.from(bucket).getPublicUrl(path).data.publicUrl
 }
 
-async function route(request: Request): Promise<Response> {
+export async function route(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed.' }, 405)
   }
@@ -163,7 +184,7 @@ async function route(request: Request): Promise<Response> {
     const auth = await requireSurveyManager(request)
     if (!auth.ok) return auth.response
 
-    let body: { surveyId?: unknown; rows?: unknown }
+    let body: { surveyId?: unknown; rows?: unknown; queueUnsent?: unknown }
     try {
       body = await request.json()
     } catch {
@@ -171,20 +192,24 @@ async function route(request: Request): Promise<Response> {
     }
 
     const surveyId = clean(body.surveyId)
+    const queueUnsent = body.queueUnsent === true
     if (!UUID_PATTERN.test(surveyId)) {
       return json({ error: 'A valid survey ID is required.' }, 400)
     }
-    if (!Array.isArray(body.rows) || body.rows.length === 0) {
+    if (queueUnsent && !auth.isCron) {
+      return json({ error: 'The automatic invitation queue is internal only.' }, 403)
+    }
+    if (!queueUnsent && (!Array.isArray(body.rows) || body.rows.length === 0)) {
       return json({ error: 'Add at least one respondent.' }, 400)
     }
-    if (body.rows.length > MAX_INVITATIONS) {
+    if (!queueUnsent && (body.rows as unknown[]).length > MAX_INVITATIONS) {
       return json(
         { error: `Send no more than ${MAX_INVITATIONS} invitations at once.` },
         400,
       )
     }
 
-    const rows = body.rows as InvitationRowInput[]
+    const rows = queueUnsent ? [] : body.rows as InvitationRowInput[]
     const normalized = rows.map((row) => ({
       email: clean(row.email).toLowerCase(),
       name: clean(row.name),
@@ -254,6 +279,9 @@ async function route(request: Request): Promise<Response> {
     if (survey.status === 'closed' || closingTime <= now) {
       return json({ error: 'Invitations cannot be sent after the survey has closed.' }, 409)
     }
+    if (queueUnsent && (survey.status !== 'live' || openingTime > now)) {
+      return json({ error: 'Queued invitations are sent only while the survey is live.' }, 409)
+    }
 
     const { data: organisationData, error: organisationError } = await auth.admin
       .from('organisations')
@@ -271,43 +299,44 @@ async function route(request: Request): Promise<Response> {
     }
 
     const emails = normalized.map((row) => row.email)
-    const [respondentsResult, profilesResult] = await Promise.all([
-      auth.admin
-        .from('survey_respondents')
-        .select('id, survey_id, email, name, department, job_title, token, user_id, submitted_at')
-        .eq('survey_id', survey.id)
-        .in('email', emails),
-      auth.admin
-        .from('profiles')
-        .select('id, email')
-        .eq('org_id', survey.org_id)
-        .eq('active', true)
-        .in('email', emails),
-    ])
-    if (respondentsResult.error) throw respondentsResult.error
-    if (profilesResult.error) throw profilesResult.error
-
-    const existingByEmail = new Map<string, RespondentRow>(
-      ((respondentsResult.data || []) as RespondentRow[]).map((respondent) => [
-        respondent.email.toLowerCase(),
-        respondent,
-      ]),
-    )
-    const profileIdByEmail = new Map<string, string>(
-      (profilesResult.data || [])
-        .filter((profile) => profile.email)
-        .map((profile) => [profile.email.toLowerCase(), profile.id]),
-    )
-    const existingIds = [...existingByEmail.values()].map((respondent) => respondent.id)
+    const existingByEmail = new Map<string, RespondentRow>()
+    const profileIdByEmail = new Map<string, string>()
     const completedIds = new Set<string>()
-    if (existingIds.length > 0) {
-      const { data, error } = await auth.admin
-        .from('survey_responses')
-        .select('respondent_id')
-        .eq('survey_id', survey.id)
-        .in('respondent_id', existingIds)
-      if (error) throw error
-      for (const response of data || []) completedIds.add(response.respondent_id)
+    if (!queueUnsent) {
+      const [respondentsResult, profilesResult] = await Promise.all([
+        auth.admin
+          .from('survey_respondents')
+          .select('id, survey_id, email, name, department, job_title, token, user_id, submitted_at, invited_at, source')
+          .eq('survey_id', survey.id)
+          .in('email', emails),
+        auth.admin
+          .from('profiles')
+          .select('id, email')
+          .eq('org_id', survey.org_id)
+          .eq('active', true)
+          .in('email', emails),
+      ])
+      if (respondentsResult.error) throw respondentsResult.error
+      if (profilesResult.error) throw profilesResult.error
+
+      for (const respondent of (respondentsResult.data || []) as RespondentRow[]) {
+        existingByEmail.set(respondent.email.toLowerCase(), respondent)
+      }
+      for (const profile of profilesResult.data || []) {
+        if (profile.email) profileIdByEmail.set(profile.email.toLowerCase(), profile.id)
+      }
+
+      const existingIds = [...existingByEmail.values()]
+        .map((respondent) => respondent.id)
+      if (existingIds.length > 0) {
+        const { data, error } = await auth.admin
+          .from('survey_responses')
+          .select('respondent_id')
+          .eq('survey_id', survey.id)
+          .in('respondent_id', existingIds)
+        if (error) throw error
+        for (const response of data || []) completedIds.add(response.respondent_id)
+      }
     }
 
     const siteUrl = (env('PUBLIC_SITE_URL') || env('SITE_URL') ||
@@ -316,6 +345,104 @@ async function route(request: Request): Promise<Response> {
     const logoUrl = publicAssetUrl(auth.admin, 'Company Logos', organisation.logo_path)
     const bannerUrl = publicAssetUrl(auth.admin, 'Company Banners', organisation.banner_path)
     const results: InvitationResult[] = []
+
+    if (queueUnsent) {
+      const { data, error } = await auth.admin
+        .from('survey_respondents')
+        .select('id, survey_id, email, name, department, job_title, token, user_id, submitted_at, invited_at, source')
+        .eq('survey_id', survey.id)
+        .is('invited_at', null)
+      if (error) throw error
+
+      const pendingRespondents = ((data || []) as RespondentRow[])
+        .filter(isPendingSurveyInvitation)
+      const pendingIds = pendingRespondents.map((respondent) => respondent.id)
+      const completedIds = new Set<string>()
+      if (pendingIds.length > 0) {
+        const { data: responses, error: responseError } = await auth.admin
+          .from('survey_responses')
+          .select('respondent_id')
+          .eq('survey_id', survey.id)
+          .in('respondent_id', pendingIds)
+        if (responseError) throw responseError
+        for (const response of responses || []) completedIds.add(response.respondent_id)
+      }
+
+      for (const respondent of pendingRespondents) {
+        if (completedIds.has(respondent.id)) {
+          results.push({
+            email: respondent.email,
+            respondentId: respondent.id,
+            status: 'skipped',
+            message: 'This respondent has already completed the survey.',
+          })
+          continue
+        }
+        if (!EMAIL_PATTERN.test(respondent.email)) {
+          results.push({
+            email: respondent.email,
+            respondentId: respondent.id,
+            status: 'failed',
+            message: 'The respondent email address is invalid.',
+          })
+          continue
+        }
+
+        try {
+          await sendSurveyInvitationEmail({
+            to: respondent.email,
+            organisationId: organisation.id,
+            surveyId: survey.id,
+            respondentId: respondent.id,
+            model: {
+              organisation_name: organisation.name,
+              survey_title: survey.title,
+              organisation_logo_url: logoUrl,
+              organisation_banner_url: bannerUrl,
+              recipient_name: respondent.name || respondent.email,
+              opening_date: formatSurveyDate(survey.live_start),
+              closing_date: formatSurveyDate(survey.live_end),
+              survey_url: `${siteUrl}/assess/${respondent.token}`,
+              support_email: supportEmail,
+            },
+          })
+
+          const invitedAt = new Date().toISOString()
+          const { error: invitedAtError } = await auth.admin
+            .from('survey_respondents')
+            .update({ invited_at: invitedAt })
+            .eq('id', respondent.id)
+            .eq('survey_id', survey.id)
+            .is('invited_at', null)
+          if (invitedAtError) throw invitedAtError
+
+          results.push({
+            email: respondent.email,
+            respondentId: respondent.id,
+            status: 'sent',
+            message: 'Invitation sent.',
+          })
+        } catch (error) {
+          results.push({
+            email: respondent.email,
+            respondentId: respondent.id,
+            status: 'failed',
+            message: error instanceof Error ? error.message : 'Invitation could not be sent.',
+          })
+        }
+      }
+
+      const count = (status: InvitationResult['status']) =>
+        results.filter((result) => result.status === status).length
+      return json({
+        results,
+        total: results.length,
+        sent: count('sent'),
+        queued: count('queued'),
+        failed: count('failed'),
+        skipped: count('skipped'),
+      })
+    }
 
     for (const row of normalized) {
       try {
@@ -360,6 +487,16 @@ async function route(request: Request): Promise<Response> {
             .single()
           if (error) throw error
           respondent = data as RespondentRow
+        }
+
+        if (openingTime > now) {
+          results.push({
+            email: row.email,
+            respondentId: respondent.id,
+            status: 'queued',
+            message: 'Invitation queued for the survey opening.',
+          })
+          continue
         }
 
         await sendSurveyInvitationEmail({
@@ -415,6 +552,7 @@ async function route(request: Request): Promise<Response> {
       results,
       total: results.length,
       sent: count('sent'),
+      queued: count('queued'),
       failed: count('failed'),
       skipped: count('skipped'),
     })
