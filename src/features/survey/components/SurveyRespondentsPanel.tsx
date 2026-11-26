@@ -168,13 +168,16 @@ export function completedRespondentIds(
   return ids
 }
 
-export function pendingInvitedRespondentCount(
+export function pendingReminderRespondentCount(
   respondents: SurveyRespondent[],
   responses: SurveyResponse[],
 ): number {
   const completed = completedRespondentIds(respondents, responses)
   return respondents.filter(
-    (respondent) => respondent.invited_at && !completed.has(respondent.id),
+    (respondent) =>
+      respondent.source !== 'open_link' &&
+      Boolean(respondent.invited_at || respondent.user_id) &&
+      !completed.has(respondent.id),
   ).length
 }
 

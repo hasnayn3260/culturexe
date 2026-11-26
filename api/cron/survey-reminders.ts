@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { route as sendSurveyReminders } from '../surveys/reminders.js'
+import { isInReminderDeliveryWindow } from '../surveys/reminderPolicy.js'
 
 type ScheduledSurvey = {
   id: string
@@ -56,43 +57,6 @@ function createAdminClient() {
   })
 }
 
-function localMinutes(date: Date, timeZone: string): number | null {
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(date)
-    const hour = Number(parts.find(({ type }) => type === 'hour')?.value)
-    const minute = Number(parts.find(({ type }) => type === 'minute')?.value)
-    return Number.isInteger(hour) && Number.isInteger(minute)
-      ? hour * 60 + minute
-      : null
-  } catch {
-    return null
-  }
-}
-
-function scheduledMinutes(value: string): number | null {
-  const match = value.match(/^(\d{2}):(\d{2})/)
-  if (!match) return null
-  const hour = Number(match[1])
-  const minute = Number(match[2])
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
-    ? hour * 60 + minute
-    : null
-}
-
-function isInHourlyDeliveryWindow(survey: ScheduledSurvey, now: Date): boolean {
-  const current = localMinutes(now, survey.reminder_timezone)
-  const scheduled = scheduledMinutes(survey.reminder_send_time)
-  if (current === null || scheduled === null) return false
-
-  const minutesSinceScheduled = (current - scheduled + 24 * 60) % (24 * 60)
-  return minutesSinceScheduled < 60
-}
-
 function numericField(value: unknown, key: string): number {
   if (!value || typeof value !== 'object') return 0
   const field = (value as Record<string, unknown>)[key]
@@ -133,7 +97,7 @@ export async function route(request: Request): Promise<Response> {
     if (error) throw error
 
     const dueSurveys = ((data || []) as ScheduledSurvey[])
-      .filter((survey) => isInHourlyDeliveryWindow(survey, now))
+      .filter((survey) => isInReminderDeliveryWindow(survey, now))
     const results: CronResult[] = []
 
     for (const survey of dueSurveys) {

@@ -16,7 +16,7 @@ import SurveyBuilderWorkspace from '../components/SurveyBuilderWorkspace'
 import SurveyLifecyclePanel from '../components/SurveyLifecyclePanel'
 import SurveyManagementTabs from '../components/SurveyManagementTabs'
 import SurveyRespondentsPanel, {
-  pendingInvitedRespondentCount,
+  pendingReminderRespondentCount,
 } from '../components/SurveyRespondentsPanel'
 import SurveySettingsPanel from '../components/SurveySettingsPanel'
 import { useSurveyDetails } from '../hooks/useSurveyDetails'
@@ -103,7 +103,7 @@ export default function SurveyManagementPage() {
 
   const selectedWorkspace =
     activeTab === 'list' ? null : workspaceCopy[activeTab]
-  const pendingRespondentCount = pendingInvitedRespondentCount(
+  const pendingRespondentCount = pendingReminderRespondentCount(
     details.respondents,
     details.responses,
   )

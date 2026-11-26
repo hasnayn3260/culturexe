@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyReminderEmail } from '../email/postmark.js'
+import { isReminderRecipientEligible } from './reminderPolicy.js'
 
 type SurveyRow = {
   id: string
@@ -31,6 +32,8 @@ type RespondentRow = {
   token: string
   submitted_at: string | null
   invited_at: string | null
+  user_id: string | null
+  source: string | null
   reminded_at: string | null
   reminder_count: number
 }
@@ -256,11 +259,11 @@ export async function route(request: Request): Promise<Response> {
 
     const { data: respondentData, error: respondentError } = await auth.admin
       .from('survey_respondents')
-      .select('id, email, name, token, submitted_at, invited_at, reminded_at, reminder_count')
+      .select('id, email, name, token, submitted_at, invited_at, user_id, source, reminded_at, reminder_count')
       .eq('survey_id', survey.id)
-      .not('invited_at', 'is', null)
     if (respondentError) throw respondentError
-    const respondents = (respondentData || []) as RespondentRow[]
+    const respondents = ((respondentData || []) as RespondentRow[])
+      .filter(isReminderRecipientEligible)
 
     const respondentIds = respondents.map((respondent) => respondent.id)
     const completedIds = new Set<string>()
