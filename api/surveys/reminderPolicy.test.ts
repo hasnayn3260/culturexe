@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
-  isInReminderDeliveryWindow,
+  isAutomaticReminderScheduleDue,
   isReminderRecipientEligible,
 } from './reminderPolicy.ts'
 
@@ -46,47 +46,56 @@ test('excludes uninvited respondents without a linked company user', () => {
   }), false)
 })
 
-test('uses the configured survey timezone for the delivery window', () => {
-  const survey = {
+test('waits for the configured local send time on the first reminder day', () => {
+  const schedule = {
+    reminder_first_send_at: '2026-11-26T09:47:00.000Z',
     reminder_send_time: '11:50:00',
     reminder_timezone: 'Africa/Johannesburg',
   }
 
   assert.equal(
-    isInReminderDeliveryWindow(survey, new Date('2026-11-26T09:50:00.000Z')),
-    true,
-  )
-  assert.equal(
-    isInReminderDeliveryWindow(survey, new Date('2026-11-26T09:59:00.000Z')),
-    true,
-  )
-  assert.equal(
-    isInReminderDeliveryWindow(survey, new Date('2026-11-26T10:00:00.000Z')),
+    isAutomaticReminderScheduleDue(
+      schedule,
+      new Date('2026-11-26T09:49:00.000Z'),
+    ),
     false,
+  )
+  assert.equal(
+    isAutomaticReminderScheduleDue(
+      schedule,
+      new Date('2026-11-26T09:50:00.000Z'),
+    ),
+    true,
   )
 })
 
-test('handles reminder windows across midnight', () => {
-  const survey = {
-    reminder_send_time: '23:58:00',
+test('keeps a missed reminder due after its send-time window has passed', () => {
+  const schedule = {
+    reminder_first_send_at: '2026-11-26T09:47:00.000Z',
+    reminder_send_time: '11:50:00',
     reminder_timezone: 'Africa/Johannesburg',
   }
 
   assert.equal(
-    isInReminderDeliveryWindow(survey, new Date('2026-11-26T22:03:00.000Z')),
+    isAutomaticReminderScheduleDue(
+      schedule,
+      new Date('2026-11-26T13:30:00.000Z'),
+    ),
+    true,
+  )
+  assert.equal(
+    isAutomaticReminderScheduleDue(
+      schedule,
+      new Date('2026-11-27T05:00:00.000Z'),
+    ),
     true,
   )
 })
 
-test('rejects invalid reminder times and timezones', () => {
-  const now = new Date('2026-11-26T09:50:00.000Z')
-
-  assert.equal(isInReminderDeliveryWindow({
-    reminder_send_time: '25:99',
+test('never sends before the saved first reminder timestamp', () => {
+  assert.equal(isAutomaticReminderScheduleDue({
+    reminder_first_send_at: '2026-11-26T10:00:00.000Z',
+    reminder_send_time: '11:50:00',
     reminder_timezone: 'Africa/Johannesburg',
-  }, now), false)
-  assert.equal(isInReminderDeliveryWindow({
-    reminder_send_time: '11:50',
-    reminder_timezone: 'Not/A_Timezone',
-  }, now), false)
+  }, new Date('2026-11-26T09:59:00.000Z')), false)
 })

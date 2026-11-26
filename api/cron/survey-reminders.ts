@@ -3,10 +3,11 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { route as sendSurveyReminders } from '../surveys/reminders.js'
-import { isInReminderDeliveryWindow } from '../surveys/reminderPolicy.js'
+import { isAutomaticReminderScheduleDue } from '../surveys/reminderPolicy.js'
 
 type ScheduledSurvey = {
   id: string
+  reminder_first_send_at: string
   reminder_send_time: string
   reminder_timezone: string
 }
@@ -19,8 +20,6 @@ type CronResult = {
   skipped: number
   message?: string
 }
-
-const MAX_SURVEYS_PER_RUN = 50
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, {
@@ -85,7 +84,7 @@ export async function route(request: Request): Promise<Response> {
     const nowIso = now.toISOString()
     const { data, error } = await admin
       .from('survey')
-      .select('id, reminder_send_time, reminder_timezone')
+      .select('id, reminder_first_send_at, reminder_send_time, reminder_timezone')
       .eq('status', 'live')
       .eq('reminders_enabled', true)
       .eq('email_reminders_enabled', true)
@@ -93,11 +92,13 @@ export async function route(request: Request): Promise<Response> {
       .gt('live_end', nowIso)
       .lte('reminder_first_send_at', nowIso)
       .order('reminder_first_send_at', { ascending: true })
-      .limit(MAX_SURVEYS_PER_RUN)
     if (error) throw error
 
+    // Once the first scheduled send time has passed, keep processing the survey.
+    // The reminder route applies each respondent's frequency, completion and
+    // maximum-send rules, so a missed cron run is caught up on the next run.
     const dueSurveys = ((data || []) as ScheduledSurvey[])
-      .filter((survey) => isInReminderDeliveryWindow(survey, now))
+      .filter((survey) => isAutomaticReminderScheduleDue(survey, now))
     const results: CronResult[] = []
 
     for (const survey of dueSurveys) {

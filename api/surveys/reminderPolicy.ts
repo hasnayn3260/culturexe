@@ -4,12 +4,11 @@ export type ReminderRecipient = {
   source: string | null
 }
 
-export type ReminderSchedule = {
+export type AutomaticReminderSchedule = {
+  reminder_first_send_at: string
   reminder_send_time: string
   reminder_timezone: string
 }
-
-export const REMINDER_DELIVERY_WINDOW_MINUTES = 10
 
 export function isReminderRecipientEligible(
   respondent: ReminderRecipient,
@@ -19,19 +18,35 @@ export function isReminderRecipientEligible(
   return Boolean(respondent.invited_at || respondent.user_id)
 }
 
-function localMinutes(date: Date, timeZone: string): number | null {
+type LocalDateTime = {
+  dateKey: number
+  minutes: number
+}
+
+function localDateTime(date: Date, timeZone: string): LocalDateTime | null {
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hourCycle: 'h23',
     }).formatToParts(date)
-    const hour = Number(parts.find(({ type }) => type === 'hour')?.value)
-    const minute = Number(parts.find(({ type }) => type === 'minute')?.value)
-    return Number.isInteger(hour) && Number.isInteger(minute)
-      ? hour * 60 + minute
-      : null
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((candidate) => candidate.type === type)?.value)
+    const year = part('year')
+    const month = part('month')
+    const day = part('day')
+    const hour = part('hour')
+    const minute = part('minute')
+    if (![year, month, day, hour, minute].every(Number.isInteger)) return null
+
+    return {
+      dateKey: year * 10_000 + month * 100 + day,
+      minutes: hour * 60 + minute,
+    }
   } catch {
     return null
   }
@@ -47,14 +62,27 @@ function scheduledMinutes(value: string): number | null {
     : null
 }
 
-export function isInReminderDeliveryWindow(
-  survey: ReminderSchedule,
+export function isAutomaticReminderScheduleDue(
+  survey: AutomaticReminderSchedule,
   now: Date,
 ): boolean {
-  const current = localMinutes(now, survey.reminder_timezone)
-  const scheduled = scheduledMinutes(survey.reminder_send_time)
-  if (current === null || scheduled === null) return false
+  const firstSendAt = new Date(survey.reminder_first_send_at)
+  const firstSendTime = firstSendAt.getTime()
+  if (!Number.isFinite(firstSendTime) || now.getTime() < firstSendTime) {
+    return false
+  }
 
-  const minutesSinceScheduled = (current - scheduled + 24 * 60) % (24 * 60)
-  return minutesSinceScheduled < REMINDER_DELIVERY_WINDOW_MINUTES
+  const scheduled = scheduledMinutes(survey.reminder_send_time)
+  const firstLocal = localDateTime(firstSendAt, survey.reminder_timezone)
+  const currentLocal = localDateTime(now, survey.reminder_timezone)
+
+  // Invalid legacy schedule data must not leave an already-overdue reminder
+  // permanently stranded. The saved first-send timestamp remains the fallback.
+  if (scheduled === null || firstLocal === null || currentLocal === null) {
+    return true
+  }
+
+  if (currentLocal.dateKey > firstLocal.dateKey) return true
+  if (currentLocal.dateKey < firstLocal.dateKey) return false
+  return currentLocal.minutes >= scheduled
 }
