@@ -124,6 +124,16 @@ export type SurveyQuestionInput = Pick<
 
 export type SurveyQuestionUpdate = Partial<SurveyQuestionInput>
 export type SurveyRespondentImportRow = Record<string, unknown>
+export type SurveyOrganisationUser = {
+  id: string
+  email: string
+  fullName: string | null
+  department: string | null
+  jobTitle: string | null
+  position: string | null
+  branch: string | null
+  locationSite: string | null
+}
 export type QuestionMoveDirection = 'up' | 'down'
 
 type RefetchOptions = {
@@ -477,6 +487,65 @@ export function useSurveyDetails(surveyId?: string | null) {
     [refetch, requireSurveyId],
   )
 
+  const listOrganisationUsers = useCallback(async () => {
+    const selectedSurveyId = requireSurveyId()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      throw new Error('Your session has expired. Sign in again.')
+    }
+
+    const response = await fetch(
+      `/api/surveys/respondent-users?surveyId=${encodeURIComponent(selectedSurveyId)}`,
+      { headers: { Authorization: `Bearer ${session.access_token}` } },
+    )
+    const body: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      const message = body && typeof body === 'object' && 'error' in body &&
+        typeof body.error === 'string'
+        ? body.error
+        : 'Organisation users could not be loaded.'
+      throw new Error(message)
+    }
+
+    if (!body || typeof body !== 'object' || !('users' in body) ||
+      !Array.isArray(body.users)) return []
+    return body.users as SurveyOrganisationUser[]
+  }, [requireSurveyId])
+
+  const addOrganisationUsers = useCallback(async (userIds: string[]) => {
+    const selectedSurveyId = requireSurveyId()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      throw new Error('Your session has expired. Sign in again.')
+    }
+
+    const response = await fetch('/api/surveys/respondent-users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ surveyId: selectedSurveyId, userIds }),
+    })
+    const body: unknown = await response.json().catch(() => null)
+    if (!response.ok) {
+      const message = body && typeof body === 'object' && 'error' in body &&
+        typeof body.error === 'string'
+        ? body.error
+        : 'The selected users could not be added.'
+      throw new Error(message)
+    }
+
+    await refetch()
+    return body
+  }, [refetch, requireSurveyId])
+
   const removeRespondent = useCallback(
     async (respondentId: string) => {
       const selectedSurveyId = requireSurveyId()
@@ -552,6 +621,8 @@ export function useSurveyDetails(surveyId?: string | null) {
     deleteAllQuestions,
     moveQuestion,
     addRespondents,
+    listOrganisationUsers,
+    addOrganisationUsers,
     removeRespondent,
     sendReminders,
   }

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 
 import type { SurveyLifecycleStatus } from '../utils/surveyStatus'
 
@@ -151,22 +152,12 @@ function ChannelToggle({
         <div className="text-sm font-bold text-[#0D1F3C]">{label}</div>
         <div className="mt-0.5 text-xs leading-5 text-[#8A9BB0]">{description}</div>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
+      <Switch
+        checked={checked}
         disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-45 ${
-          checked ? 'bg-[#1BBFB0]' : 'bg-[#CBD5E1]'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-5' : 'translate-x-0.5'
-          }`}
-        />
-      </button>
+        onCheckedChange={onChange}
+        aria-label={label}
+      />
     </div>
   )
 }
@@ -394,20 +385,12 @@ export default function SurveySettingsPanel({
               Configure how often incomplete respondents should be reminded.
             </p>
           </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={form.remindersEnabled}
+          <Switch
+            checked={form.remindersEnabled}
             disabled={settingsLocked}
-            onClick={() => update('remindersEnabled', !form.remindersEnabled)}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-45 ${
-              form.remindersEnabled ? 'bg-[#1BBFB0]' : 'bg-[#CBD5E1]'
-            }`}
-          >
-            <span className={`absolute top-0.5 size-6 rounded-full bg-white shadow-sm transition-transform ${
-              form.remindersEnabled ? 'translate-x-5.5' : 'translate-x-0.5'
-            }`} />
-          </button>
+            onCheckedChange={(checked) => update('remindersEnabled', checked)}
+            aria-label="Toggle automatic reminders"
+          />
         </div>
 
         <div className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-4">

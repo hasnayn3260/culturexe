@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 
 import type {
   SurveyDetail,
@@ -420,23 +421,13 @@ export default function SurveyLifecyclePanel({
                   Allow participation without an email invitation.
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={survey.open_link_enabled}
+              <Switch
+                checked={survey.open_link_enabled}
                 aria-label="Toggle open-link access"
-                onClick={() => void toggleOpenLink()}
+                onCheckedChange={() => void toggleOpenLink()}
                 disabled={pendingAction !== null || effectiveStatus === 'closed'}
-                className={`relative mt-1 h-6 w-11 shrink-0 rounded-full transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                  survey.open_link_enabled ? 'bg-[#1BBFB0]' : 'bg-[#CBD5E1]'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 size-5 rounded-full bg-white shadow-sm transition-transform ${
-                    survey.open_link_enabled ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
+                className="mt-1"
+              />
             </div>
           </div>
 

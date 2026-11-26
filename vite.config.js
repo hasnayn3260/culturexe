@@ -30,6 +30,7 @@ function localApiPlugin() {
     ['/api/surveys', '/api/surveys/index.ts'],
     ['/api/surveys/files', '/api/surveys/files.ts'],
     ['/api/surveys/invitations', '/api/surveys/invitations.ts'],
+    ['/api/surveys/respondent-users', '/api/surveys/respondent-users.ts'],
     ['/api/surveys/reminders', '/api/surveys/reminders.ts'],
     ['/api/surveys/receipt', '/api/surveys/receipt.ts'],
   ])

@@ -120,6 +120,6 @@ export const SURVEY_MANAGEMENT_TABS: Array<{
 }> = [
   { id: 'list', label: 'Survey List', requiresSurvey: false },
   { id: 'builder', label: 'Survey Builder', requiresSurvey: true },
-  { id: 'controls', label: 'Survey Controls', requiresSurvey: true },
   { id: 'settings', label: 'Survey Settings', requiresSurvey: true },
+  { id: 'controls', label: 'Survey Controls', requiresSurvey: true },
 ]

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   Check,
@@ -10,6 +10,7 @@ import {
   Search,
   Trash2,
   UserCheck,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -35,14 +36,19 @@ import { Label } from '@/components/ui/label'
 import type {
   SurveyRespondent,
   SurveyRespondentImportRow,
+  SurveyOrganisationUser,
   SurveyResponse,
 } from '../hooks/useSurveyDetails'
 
 type SurveyRespondentsPanelProps = {
   respondents: SurveyRespondent[]
   responses: SurveyResponse[]
+  respondentAssignmentEnabled: boolean
+  respondentAssignmentDisabledReason?: string
   invitationsEnabled: boolean
   invitationDisabledReason?: string
+  onLoadOrganisationUsers: () => Promise<SurveyOrganisationUser[]>
+  onAddOrganisationUsers: (userIds: string[]) => Promise<unknown> | unknown
   onAddRespondents: (
     rows: SurveyRespondentImportRow[],
   ) => Promise<unknown> | unknown
@@ -198,12 +204,22 @@ function RespondentStatusBadge({ status }: { status: Exclude<StatusFilter, 'all'
 export default function SurveyRespondentsPanel({
   respondents,
   responses,
+  respondentAssignmentEnabled,
+  respondentAssignmentDisabledReason = 'Respondents cannot be added to this survey.',
   invitationsEnabled,
   invitationDisabledReason = 'Invitations are unavailable for this survey.',
+  onLoadOrganisationUsers,
+  onAddOrganisationUsers,
   onAddRespondents,
   onRemoveRespondent,
 }: SurveyRespondentsPanelProps) {
   const [showInvitationForm, setShowInvitationForm] = useState(false)
+  const [showUserPicker, setShowUserPicker] = useState(false)
+  const [organisationUsers, setOrganisationUsers] = useState<SurveyOrganisationUser[]>([])
+  const [userSearch, setUserSearch] = useState('')
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [addingUsers, setAddingUsers] = useState(false)
   const [rows, setRows] = useState<InvitationRow[]>(() => [createInvitationRow()])
   const [rowErrors, setRowErrors] = useState<Record<string, RowErrors>>({})
   const [search, setSearch] = useState('')
@@ -268,6 +284,89 @@ export default function SurveyRespondentsPanel({
     (safePage - 1) * PAGE_SIZE,
     safePage * PAGE_SIZE,
   )
+
+  const filteredOrganisationUsers = useMemo(() => {
+    const query = userSearch.trim().toLocaleLowerCase()
+    if (!query) return organisationUsers
+    return organisationUsers.filter((user) => [
+      user.fullName,
+      user.email,
+      user.department,
+      user.jobTitle,
+      user.position,
+      user.branch,
+      user.locationSite,
+    ].some((value) => value?.toLocaleLowerCase().includes(query)))
+  }, [organisationUsers, userSearch])
+
+  useEffect(() => {
+    if (!showUserPicker || !respondentAssignmentEnabled) return
+    let active = true
+    setLoadingUsers(true)
+    setFeedback(null)
+    void onLoadOrganisationUsers()
+      .then((users) => {
+        if (active) setOrganisationUsers(users)
+      })
+      .catch((error) => {
+        if (active) setFeedback({ tone: 'error', message: messageFrom(error) })
+      })
+      .finally(() => {
+        if (active) setLoadingUsers(false)
+      })
+    return () => { active = false }
+  }, [onLoadOrganisationUsers, respondentAssignmentEnabled, showUserPicker])
+
+  function toggleUser(userId: string) {
+    setSelectedUserIds((current) => {
+      const next = new Set(current)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
+  function toggleVisibleUsers() {
+    setSelectedUserIds((current) => {
+      const next = new Set(current)
+      const visibleIds = filteredOrganisationUsers.map((user) => user.id)
+      const everyVisibleSelected = visibleIds.length > 0 &&
+        visibleIds.every((userId) => next.has(userId))
+      visibleIds.forEach((userId) => {
+        if (everyVisibleSelected) next.delete(userId)
+        else next.add(userId)
+      })
+      return next
+    })
+  }
+
+  async function addSelectedUsers() {
+    if (addingUsers || selectedUserIds.size === 0) return
+    setAddingUsers(true)
+    setFeedback(null)
+    try {
+      const result = await onAddOrganisationUsers([...selectedUserIds])
+      const record = result && typeof result === 'object'
+        ? result as Record<string, unknown>
+        : {}
+      const added = typeof record.added === 'number'
+        ? record.added
+        : selectedUserIds.size
+      const skipped = typeof record.skipped === 'number' ? record.skipped : 0
+      setFeedback({
+        tone: 'success',
+        message: `${added} organisation user${added === 1 ? '' : 's'} added${skipped > 0 ? `, ${skipped} already on the survey` : ''}.`,
+      })
+      setSelectedUserIds(new Set())
+      setShowUserPicker(false)
+      setOrganisationUsers([])
+      setUserSearch('')
+    } catch (error) {
+      setFeedback({ tone: 'error', message: messageFrom(error) })
+    } finally {
+      setAddingUsers(false)
+    }
+  }
 
   function updateRow(
     rowId: string,
@@ -392,15 +491,15 @@ export default function SurveyRespondentsPanel({
   return (
     <section className="rounded-2xl border border-[#DFE6EE] bg-white shadow-[0_8px_24px_rgba(13,31,60,0.04)]">
       <div className="flex flex-col gap-4 border-b border-[#E8EDF3] px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
+        <div className="min-w-0 lg:flex-1">
           <h2 className="font-['Plus_Jakarta_Sans'] text-xl font-extrabold text-[#0D1F3C]">
             Respondents
           </h2>
           <p className="mt-1 text-sm text-[#8A9BB0]">
-            Invite employees and monitor participation for this survey only.
+            Add company users, invite by email and monitor participation for this survey only.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:flex-nowrap">
           <Badge variant="outline" className="border-[#DCE4EE] bg-[#F7F9FB] text-[#526A88]">
             <Users className="size-3" /> {stats.total} total
           </Badge>
@@ -409,8 +508,26 @@ export default function SurveyRespondentsPanel({
           </Badge>
           <Button
             type="button"
+            variant="outline"
+            onClick={() => {
+              setShowUserPicker(true)
+              setShowInvitationForm(false)
+              setFeedback(null)
+            }}
+            disabled={!respondentAssignmentEnabled || addingUsers}
+            title={!respondentAssignmentEnabled
+              ? respondentAssignmentDisabledReason
+              : undefined}
+            className="border-[#A9D8D3] bg-white font-bold text-[#087C72] hover:bg-[#EAF8F6] hover:text-[#087C72]"
+          >
+            <UserPlus />
+            Add company users
+          </Button>
+          <Button
+            type="button"
             onClick={() => {
               setShowInvitationForm(true)
+              setShowUserPicker(false)
               setFeedback(null)
             }}
             disabled={!invitationsEnabled || sending}
@@ -418,19 +535,12 @@ export default function SurveyRespondentsPanel({
             className="bg-[#1BBFB0] font-bold text-white hover:bg-[#16A99C]"
           >
             <MailPlus />
-            Invite respondents
+            Invite by email
           </Button>
         </div>
       </div>
 
       <div className="space-y-5 p-5">
-        {!invitationsEnabled && (
-          <Alert className="border-[#E7D6AE] bg-[#FFF9EA] text-[#785817]">
-            <AlertCircle />
-            <AlertDescription>{invitationDisabledReason}</AlertDescription>
-          </Alert>
-        )}
-
         {feedback && (
           <Alert
             variant={feedback.tone === 'error' ? 'destructive' : 'default'}
@@ -440,6 +550,125 @@ export default function SurveyRespondentsPanel({
           >
             {feedback.tone === 'error' ? <AlertCircle /> : <Check />}
             <AlertDescription>{feedback.message}</AlertDescription>
+          </Alert>
+        )}
+
+        {showUserPicker && respondentAssignmentEnabled && (
+          <div className="rounded-2xl border border-[#B8DDD9] bg-[#F5FBFA] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="font-bold text-[#0D1F3C]">Add company users</h3>
+                <p className="mt-1 text-xs text-[#8A9BB0]">
+                  Select active users from this survey&apos;s organisation. They are added without sending an email.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setShowUserPicker(false)}
+                disabled={addingUsers}
+                aria-label="Close company user picker"
+              >
+                <X />
+              </Button>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-md">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8A9BB0]" />
+                <Input
+                  type="search"
+                  value={userSearch}
+                  onChange={(event) => setUserSearch(event.target.value)}
+                  placeholder="Search company users"
+                  className="h-9 rounded-[9px] border-[#DCE4EE] bg-white pr-3 pl-9 text-[13px]"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={toggleVisibleUsers}
+                disabled={loadingUsers || filteredOrganisationUsers.length === 0}
+                className="border-[#DCE4EE] text-[#526A88]"
+              >
+                {filteredOrganisationUsers.length > 0 &&
+                filteredOrganisationUsers.every((user) => selectedUserIds.has(user.id))
+                  ? 'Clear visible'
+                  : 'Select visible'}
+              </Button>
+            </div>
+
+            <div className="mt-3 max-h-80 overflow-y-auto rounded-xl border border-[#DFE8EC] bg-white">
+              {loadingUsers ? (
+                <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-[#7C8EA5]">
+                  <LoaderCircle className="size-4 animate-spin" /> Loading company users…
+                </div>
+              ) : filteredOrganisationUsers.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <div className="font-semibold text-[#314966]">
+                    {organisationUsers.length === 0
+                      ? 'All eligible company users are already respondents.'
+                      : 'No company users match this search.'}
+                  </div>
+                  <div className="mt-1 text-xs text-[#8A9BB0]">
+                    Only active client accounts from this organisation are shown.
+                  </div>
+                </div>
+              ) : (
+                filteredOrganisationUsers.map((user) => (
+                  <label
+                    key={user.id}
+                    className="flex cursor-pointer items-center gap-3 border-b border-[#EDF1F4] px-4 py-3 last:border-b-0 hover:bg-[#F7FBFB]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUserIds.has(user.id)}
+                      onChange={() => toggleUser(user.id)}
+                      disabled={addingUsers}
+                      className="size-4 accent-[#1BBFB0]"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold text-[#0D1F3C]">
+                        {user.fullName || 'Name not supplied'}
+                      </div>
+                      <div className="truncate text-xs text-[#7C8EA5]">{user.email}</div>
+                    </div>
+                    <div className="hidden min-w-0 text-right text-xs text-[#526A88] sm:block">
+                      <div className="max-w-48 truncate font-semibold">
+                        {user.department || 'No department'}
+                      </div>
+                      <div className="max-w-48 truncate text-[#8A9BB0]">
+                        {user.jobTitle || user.position || 'No job title'}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-xs font-semibold text-[#526A88]">
+                {selectedUserIds.size} selected
+              </div>
+              <Button
+                type="button"
+                onClick={() => void addSelectedUsers()}
+                disabled={addingUsers || selectedUserIds.size === 0}
+                className="bg-[#1BBFB0] font-bold text-white hover:bg-[#16A99C]"
+              >
+                {addingUsers ? <LoaderCircle className="animate-spin" /> : <UserPlus />}
+                Add {selectedUserIds.size || ''} user{selectedUserIds.size === 1 ? '' : 's'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {showUserPicker && !respondentAssignmentEnabled && (
+          <Alert className="border-[#E7D6AE] bg-[#FFF9EA] text-[#785817]">
+            <AlertCircle />
+            <AlertDescription>{respondentAssignmentDisabledReason}</AlertDescription>
           </Alert>
         )}
 
@@ -573,6 +802,13 @@ export default function SurveyRespondentsPanel({
           </div>
         )}
 
+        {showInvitationForm && !invitationsEnabled && (
+          <Alert className="border-[#E7D6AE] bg-[#FFF9EA] text-[#785817]">
+            <AlertCircle />
+            <AlertDescription>{invitationDisabledReason}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-md">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8A9BB0]" />
@@ -613,7 +849,7 @@ export default function SurveyRespondentsPanel({
             </h3>
             <p className="mt-1 text-sm text-[#8A9BB0]">
               {respondents.length === 0
-                ? 'Invite employees when the survey schedule and branding are ready.'
+                ? 'Add company users now, or invite respondents by email when the schedule and branding are ready.'
                 : 'Change the search or status filter to see more results.'}
             </p>
           </div>

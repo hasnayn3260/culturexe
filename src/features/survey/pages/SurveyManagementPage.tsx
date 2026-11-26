@@ -118,6 +118,9 @@ export default function SurveyManagementPage() {
     : details.survey && !details.survey.email_invitations_enabled
       ? 'Email invitations are disabled in this survey’s settings.'
     : 'Set both the opening and closing dates before inviting respondents.'
+  const respondentAssignmentEnabled = details.effectiveStatus !== 'closed'
+  const respondentAssignmentDisabledReason =
+    'Respondents cannot be added after the survey has closed.'
 
   return (
     <div className="min-w-0">
@@ -258,8 +261,12 @@ export default function SurveyManagementPage() {
                 <SurveyRespondentsPanel
                   respondents={details.respondents}
                   responses={details.responses}
+                  respondentAssignmentEnabled={respondentAssignmentEnabled}
+                  respondentAssignmentDisabledReason={respondentAssignmentDisabledReason}
                   invitationsEnabled={invitationsEnabled}
                   invitationDisabledReason={invitationDisabledReason}
+                  onLoadOrganisationUsers={details.listOrganisationUsers}
+                  onAddOrganisationUsers={details.addOrganisationUsers}
                   onAddRespondents={details.addRespondents}
                   onRemoveRespondent={details.removeRespondent}
                 />

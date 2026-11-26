@@ -280,6 +280,8 @@ async function route(request: Request): Promise<Response> {
       auth.admin
         .from('profiles')
         .select('id, email')
+        .eq('org_id', survey.org_id)
+        .eq('active', true)
         .in('email', emails),
     ])
     if (respondentsResult.error) throw respondentsResult.error
