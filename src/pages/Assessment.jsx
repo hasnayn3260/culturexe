@@ -3,6 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom'
 import supabase from '../lib/supabaseClient'
 import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
 import { createSurveyAccessId } from '../features/survey/utils/surveyAccess'
+import {
+  SURVEY_FILE_ACCEPT,
+  surveyFileName,
+  uploadSurveyFile,
+} from '../features/survey/services/surveyFilesClient'
 
 const SCALE = [1, 2, 3, 4, 5]
 const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
@@ -47,7 +52,7 @@ function inputStyle(answered) {
 
 // ── Question renderers ─────────────────────────────────────
 
-function QuestionRenderer({ q, value, onChange, respondentId, previewMode = false }) {
+function QuestionRenderer({ q, value, onChange, respondentToken, previewMode = false }) {
   const type = q.question_type
   const answered = isAnswered(q, value)
 
@@ -61,15 +66,18 @@ function QuestionRenderer({ q, value, onChange, respondentId, previewMode = fals
     if (!file) return
     setUploading(true); setUploadErr('')
     try {
-      const path = `${respondentId}/${q.id}/${Date.now()}_${file.name}`
-      const { data, error } = await supabase.storage.from('survey-files').upload(path, file)
-      if (error) throw error
-      const { data: { publicUrl } } = supabase.storage.from('survey-files').getPublicUrl(data.path)
-      onChange(publicUrl)
+      const reference = await uploadSurveyFile({
+        file,
+        respondentToken,
+        questionId: q.id,
+        previousValue: value,
+      })
+      onChange(reference)
     } catch (err) {
       setUploadErr(err.message || 'Upload failed')
     } finally {
       setUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -271,13 +279,13 @@ function QuestionRenderer({ q, value, onChange, respondentId, previewMode = fals
 
     return (
       <div>
-        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFileChange} />
+        <input ref={fileRef} type="file" accept={SURVEY_FILE_ACCEPT} style={{ display: 'none' }} onChange={handleFileChange} />
         {value ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ padding: '10px 14px', borderRadius: 9, border: '1.5px solid #1BBFB0', background: 'rgba(27,191,176,0.07)', fontSize: 13, color: '#0A8A7E', flex: 1, wordBreak: 'break-all' }}>
-              📎 {typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
+              📎 {surveyFileName(value)}
             </div>
-            <button onClick={() => { onChange(null); if (fileRef.current) fileRef.current.value = '' }} style={{ background: 'none', border: '1.5px solid #D1D9E6', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ background: 'none', border: '1.5px solid #D1D9E6', borderRadius: 9, padding: '10px 14px', fontSize: 13, color: '#637082', cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
               Change
             </button>
           </div>
@@ -889,7 +897,7 @@ export default function Assessment({ previewMode = false }) {
               q={q}
               value={answers[q.id]}
               onChange={val => handleAnswer(q.id, val)}
-              respondentId={respondent?.id}
+              respondentToken={respondent?.token}
               previewMode={previewMode}
             />
           </div>

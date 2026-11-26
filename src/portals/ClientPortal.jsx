@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useClientSurvey } from '../hooks/useClientSurvey'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
+import {
+  SURVEY_FILE_ACCEPT,
+  surveyFileName,
+  uploadSurveyFile,
+} from '../features/survey/services/surveyFilesClient'
 import supabase from '../lib/supabaseClient'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -96,7 +101,7 @@ const IconPaperclip = () => (
 
 // ── Question renderer ──────────────────────────────────────
 
-function QuestionInput({ q, value, onChange, userId, showError }) {
+function QuestionInput({ q, value, onChange, respondentToken, showError }) {
   const type = q.question_type
   const answered = isAnswered(q, value)
   const [uploading, setUploading] = useState(false)
@@ -110,13 +115,18 @@ function QuestionInput({ q, value, onChange, userId, showError }) {
     const file = e.target.files?.[0]; if (!file) return
     setUploading(true); setUploadErr('')
     try {
-      const path = `${userId || 'anon'}/${q.id}/${Date.now()}_${file.name}`
-      const { data, error } = await supabase.storage.from('survey-files').upload(path, file)
-      if (error) throw error
-      const { data: { publicUrl } } = supabase.storage.from('survey-files').getPublicUrl(data.path)
-      onChange(publicUrl)
+      const reference = await uploadSurveyFile({
+        file,
+        respondentToken,
+        questionId: q.id,
+        previousValue: value,
+      })
+      onChange(reference)
     } catch (err) { setUploadErr(err.message || 'Upload failed') }
-    finally { setUploading(false) }
+    finally {
+      setUploading(false)
+      e.target.value = ''
+    }
   }
 
   if (type === 'SHORT_TEXT') return <input type="text" style={base} placeholder="Your answer…" value={value || ''} onChange={e => onChange(e.target.value)} />
@@ -219,13 +229,13 @@ function QuestionInput({ q, value, onChange, userId, showError }) {
   if (type === 'FILE') {
     return (
       <div>
-        <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleFile} />
+        <input ref={fileRef} type="file" accept={SURVEY_FILE_ACCEPT} style={{ display: 'none' }} onChange={handleFile} />
         {value ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #1BBFB0', background: '#F0FAFA', fontSize: 13.5, color: '#0A8A7E', flex: 1, wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: 7 }}>
-              <IconPaperclip />{typeof value === 'string' ? value.split('/').pop().replace(/^\d+_/, '') : 'File uploaded'}
+              <IconPaperclip />{surveyFileName(value)}
             </div>
-            <button onClick={() => { onChange(null); if (fileRef.current) fileRef.current.value = '' }} style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', fontSize: 13, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>Change</button>
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', background: 'white', fontSize: 13, color: '#637082', cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>Change</button>
           </div>
         ) : (
           <button onClick={() => fileRef.current.click()} disabled={uploading}
@@ -733,7 +743,7 @@ export default function ClientPortal() {
                           {required && <span style={{ color: showError ? '#E8563A' : '#BCC8D4', marginLeft: 4, fontSize: 13, fontWeight: 500 }}>*</span>}
                         </div>
                         {q.hint && <div style={{ fontSize: 13, color: '#7A9BB0', marginBottom: 12, lineHeight: 1.55 }}>{q.hint}</div>}
-                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} userId={user?.id} showError={showError} />
+                        <QuestionInput q={q} value={answers[q.id]} onChange={val => handleAnswer(q.id, val)} respondentToken={respondent?.token} showError={showError} />
                         {showError && <div style={{ fontSize: 12, color: '#E8563A', marginTop: 6, fontWeight: 500 }}>This question is required.</div>}
                       </div>
                     )

@@ -8,6 +8,10 @@ import { useAdminData } from '../hooks/useAdminData'
 import { useSurvey } from '../hooks/useSurvey'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
+import {
+  signedSurveyFileUrl,
+  surveyFileName,
+} from '../features/survey/services/surveyFilesClient'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
@@ -94,7 +98,10 @@ function downloadBlob(filename, content, mime) {
 function cellToString(v) {
   if (v == null) return ''
   if (Array.isArray(v)) return v.join('; ')
-  if (typeof v === 'object') return Object.entries(v).map(([k, val]) => `${k}: ${val}`).join('; ')
+  if (typeof v === 'object') {
+    if (v.kind === 'survey_file') return surveyFileName(v)
+    return Object.entries(v).map(([k, val]) => `${k}: ${val}`).join('; ')
+  }
   return String(v)
 }
 
@@ -564,6 +571,42 @@ function CSVImportModal({ onImport, onClose }) {
 
 // ── Analytics: per-question card ───────────────────────────
 
+function SurveyFileLink({ value, index }) {
+  const [opening, setOpening] = useState(false)
+  const [error, setError] = useState('')
+
+  async function openFile() {
+    const downloadWindow = window.open('about:blank', '_blank')
+    if (downloadWindow) downloadWindow.opener = null
+    setOpening(true)
+    setError('')
+    try {
+      const url = await signedSurveyFileUrl(value)
+      if (downloadWindow) downloadWindow.location.replace(url)
+      else window.location.assign(url)
+    } catch (openError) {
+      downloadWindow?.close()
+      setError(openError?.message || 'The survey file could not be opened.')
+    } finally {
+      setOpening(false)
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={openFile}
+        disabled={opening}
+        style={{ width: '100%', border: 0, color: 'var(--teal)', fontSize: 13, textAlign: 'left', wordBreak: 'break-all', display: 'block', padding: '6px 10px', background: 'var(--bg)', borderRadius: 7, cursor: opening ? 'wait' : 'pointer', fontFamily: 'inherit' }}
+      >
+        📎 {opening ? 'Preparing secure download…' : surveyFileName(value, `File ${index + 1}`)}
+      </button>
+      {error && <div style={{ marginTop: 4, fontSize: 11.5, color: 'var(--coral)' }}>{error}</div>}
+    </div>
+  )
+}
+
 function QuestionAnalyticsCard({ q, responses }) {
   const rawAnswers = responses.map(r => r.answers?.[q.id]).filter(v => v != null)
   const type = q.question_type
@@ -640,10 +683,8 @@ function QuestionAnalyticsCard({ q, responses }) {
       <div style={cardStyle}>
         <Header />
         <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {rawAnswers.map((url, i) => (
-            <a key={i} href={url} target="_blank" rel="noreferrer" style={{ color: 'var(--teal)', fontSize: 13, wordBreak: 'break-all', display: 'block', padding: '6px 10px', background: 'var(--bg)', borderRadius: 7 }}>
-              📎 {typeof url === 'string' ? url.split('/').pop() : `File ${i + 1}`}
-            </a>
+          {rawAnswers.map((file, i) => (
+            <SurveyFileLink key={`${surveyFileName(file)}-${i}`} value={file} index={i} />
           ))}
         </div>
       </div>
