@@ -1378,10 +1378,21 @@ export default function ConsultantPortal() {
         'Time Taken': r?.completion_duration_seconds != null
           ? exportedDuration(r.completion_duration_seconds)
           : '',
+        'Expected Time': quality
+          ? exportedDuration(quality.expectedCompletionSeconds)
+          : '',
+        'Completion Time Ratio': quality?.completionTimeRatio != null
+          ? `${Math.round(quality.completionTimeRatio * 100)}%`
+          : '',
         'Submission Quality': quality?.label || '',
         'Quality Score': quality?.score != null ? `${quality.score}%` : '',
+        'Response Engagement': quality?.engagementLabel || '',
+        'Engagement Score': quality?.engagementScore != null
+          ? `${quality.engagementScore}%`
+          : '',
         'Quality Signals': quality?.signals.join(' ') || '',
         'Potentially Rushed': quality ? (quality.potentiallyRushed ? 'Yes' : 'No') : '',
+        'Severely Rushed': quality ? (quality.severelyRushed ? 'Yes' : 'No') : '',
         'Open-ended Answers': quality?.openEndedAnswerCount ?? '',
         'Open-ended Words': quality?.openEndedWordCount ?? '',
         'Open-ended Sentences': quality?.openEndedSentenceCount ?? '',
@@ -1476,12 +1487,15 @@ export default function ConsultantPortal() {
       { Metric: 'Likert average', Value: filteredMetrics ? `${filteredMetrics.average.toFixed(2)} / 5` : '' },
       { Metric: 'Calculated Likert score', Value: filteredMetrics ? `${Math.round(filteredMetrics.percentage)}%` : '' },
       { Metric: 'Average completion time', Value: exportedDuration(analyticsSubmissionQuality.averageCompletionSeconds) },
+      { Metric: 'Average weighted expected time', Value: exportedDuration(analyticsSubmissionQuality.averageExpectedCompletionSeconds) },
       { Metric: 'Timed submissions', Value: `${analyticsSubmissionQuality.timedSubmissionCount} of ${analyticsSubmissionQuality.submittedCount}` },
       { Metric: 'Average open-ended response length', Value: analyticsSubmissionQuality.averageOpenEndedWords != null ? `${analyticsSubmissionQuality.averageOpenEndedWords.toFixed(1)} words` : 'Not applicable' },
       { Metric: 'Average open-ended sentences', Value: analyticsSubmissionQuality.averageOpenEndedSentences != null ? analyticsSubmissionQuality.averageOpenEndedSentences.toFixed(1) : 'Not applicable' },
       { Metric: 'Open-response coverage', Value: analyticsSubmissionQuality.openEndedCoveragePercentage != null ? `${Math.round(analyticsSubmissionQuality.openEndedCoveragePercentage)}%` : 'Not applicable' },
       { Metric: 'Submission quality', Value: analyticsSubmissionQuality.label },
       { Metric: 'Submission quality score', Value: analyticsSubmissionQuality.score != null ? `${analyticsSubmissionQuality.score}%` : '' },
+      { Metric: 'Response engagement', Value: analyticsSubmissionQuality.engagementLabel },
+      { Metric: 'Response engagement score', Value: analyticsSubmissionQuality.engagementScore != null ? `${analyticsSubmissionQuality.engagementScore}%` : '' },
       { Metric: 'Potentially rushed submissions', Value: analyticsSubmissionQuality.potentiallyRushedCount },
       { Metric: 'Minimal qualitative feedback', Value: analyticsSubmissionQuality.minimalFeedbackCount },
       { Metric: 'Strong engagement submissions', Value: analyticsSubmissionQuality.distribution.strong },
@@ -1503,6 +1517,10 @@ export default function ConsultantPortal() {
         Email: respondent?.email || '',
         Department: resolveDept(respondent) || '',
         'Completion Time': exportedDuration(result.completionSeconds),
+        'Expected Time': exportedDuration(result.expectedCompletionSeconds),
+        'Completion Time Ratio': result.completionTimeRatio != null
+          ? `${Math.round(result.completionTimeRatio * 100)}%`
+          : '',
         'Open-ended Answers': result.openEndedAnswerCount,
         'Open-ended Words': result.openEndedWordCount,
         'Open-ended Sentences': result.openEndedSentenceCount,
@@ -1510,9 +1528,20 @@ export default function ConsultantPortal() {
           ? result.averageWordsPerOpenAnswer.toFixed(1)
           : '',
         'Potentially Rushed': result.potentiallyRushed ? 'Yes' : 'No',
+        'Severely Rushed': result.severelyRushed ? 'Yes' : 'No',
         'Minimal Qualitative Feedback': result.minimalQualitativeFeedback ? 'Yes' : 'No',
+        'Paragraph Coverage': result.qualitativeCoveragePercentage != null
+          ? `${Math.round(result.qualitativeCoveragePercentage)}%`
+          : '',
+        'Paragraph Depth Score': result.qualitativeDepthScore != null
+          ? `${Math.round(result.qualitativeDepthScore)}%`
+          : '',
         'Quality Score': result.score != null ? `${result.score}%` : '',
         'Quality Indicator': result.label,
+        'Response Engagement': result.engagementLabel,
+        'Engagement Score': result.engagementScore != null
+          ? `${result.engagementScore}%`
+          : '',
         'Review Signals': result.signals.join(' '),
       }
     })
@@ -1702,11 +1731,13 @@ export default function ConsultantPortal() {
     if (qualityRows.length) {
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 7,
-        head: [['Name', 'Department', 'Completion Time', 'Open Words', 'Open Sentences', 'Rushed', 'Minimal Feedback', 'Quality', 'Signals']],
+        head: [['Name', 'Department', 'Completion', 'Expected', 'Time Ratio', 'Open Words', 'Sentences', 'Rushed', 'Minimal Feedback', 'Quality', 'Signals']],
         body: qualityRows.map(row => [
           row.Name || row['Respondent ID'],
           row.Department,
           row['Completion Time'],
+          row['Expected Time'],
+          row['Completion Time Ratio'],
           row['Open-ended Words'],
           row['Open-ended Sentences'],
           row['Potentially Rushed'],
@@ -1715,7 +1746,7 @@ export default function ConsultantPortal() {
           row['Review Signals'],
         ]),
         styles: { fontSize: 7, cellPadding: 1.2, overflow: 'linebreak' },
-        columnStyles: { 8: { cellWidth: 55 } },
+        columnStyles: { 10: { cellWidth: 48 } },
         headStyles: { fillColor: NAVY },
         didDrawPage: () => pdfHeaderRepeat(doc),
       })

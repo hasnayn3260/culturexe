@@ -7,6 +7,8 @@ export type SubmissionQualityLevel =
 export type SubmissionQualityQuestion = {
   id: string
   question_type: string
+  text?: string | null
+  options?: unknown
 }
 
 export type SubmissionQualityResponse = {
@@ -22,15 +24,23 @@ export type SubmissionQualityRespondent = {
 export type SubmissionQualityRecord = {
   respondentId: string
   completionSeconds: number | null
+  expectedCompletionSeconds: number
+  completionTimeRatio: number | null
   openEndedAnswerCount: number
   openEndedWordCount: number
   openEndedSentenceCount: number
   averageWordsPerOpenAnswer: number | null
+  qualitativeCoveragePercentage: number | null
+  qualitativeDepthScore: number | null
+  severelyRushed: boolean
   potentiallyRushed: boolean
   minimalQualitativeFeedback: boolean
   score: number | null
   level: SubmissionQualityLevel
   label: string
+  engagementScore: number | null
+  engagementLevel: SubmissionQualityLevel
+  engagementLabel: string
   signals: string[]
 }
 
@@ -38,6 +48,7 @@ export type SubmissionQualityMetrics = {
   submittedCount: number
   timedSubmissionCount: number
   averageCompletionSeconds: number | null
+  averageExpectedCompletionSeconds: number | null
   medianCompletionSeconds: number | null
   rushedThresholdSeconds: number | null
   potentiallyRushedCount: number
@@ -52,6 +63,9 @@ export type SubmissionQualityMetrics = {
   score: number | null
   level: SubmissionQualityLevel
   label: string
+  engagementScore: number | null
+  engagementLevel: SubmissionQualityLevel
+  engagementLabel: string
   distribution: Record<SubmissionQualityLevel, number>
   submissions: SubmissionQualityRecord[]
 }
@@ -59,8 +73,11 @@ export type SubmissionQualityMetrics = {
 const OPEN_ENDED_TYPES = new Set(['SHORT_TEXT', 'LONG_TEXT', 'text'])
 const QUALITATIVE_TYPES = new Set(['LONG_TEXT', 'text'])
 const MINIMUM_QUALITATIVE_WORDS = 5
-const MINIMUM_RUSHED_THRESHOLD_SECONDS = 30
-const FALLBACK_SECONDS_PER_QUESTION = 3
+const BASELINE_SECONDS_PER_QUESTION = 30
+const COMPOSITION_WORDS_PER_MINUTE = 30
+const SECONDS_PER_COMPOSED_WORD = 60 / COMPOSITION_WORDS_PER_MINUTE
+const SECONDS_PER_QUESTION_WORD = 0.3
+const COHORT_SPEEDING_RATIO = 0.43
 
 function asAnswerRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -69,6 +86,11 @@ function asAnswerRecord(value: unknown): Record<string, unknown> {
 
 function answerText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function asOptionsRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
 }
 
 function average(values: number[]): number | null {
@@ -93,9 +115,16 @@ function qualityLevel(score: number | null): SubmissionQualityLevel {
 }
 
 export function submissionQualityLabel(level: SubmissionQualityLevel): string {
+  if (level === 'strong') return 'High quality'
+  if (level === 'mixed') return 'Moderate quality'
+  if (level === 'review') return 'Review suggested'
+  return 'Insufficient data'
+}
+
+export function submissionEngagementLabel(level: SubmissionQualityLevel): string {
   if (level === 'strong') return 'Strong engagement'
   if (level === 'mixed') return 'Mixed engagement'
-  if (level === 'review') return 'Review suggested'
+  if (level === 'review') return 'Low engagement'
   return 'Insufficient data'
 }
 
@@ -114,6 +143,66 @@ export function countSentences(value: unknown): number {
   return (text.match(/[^.!?]+(?:[.!?]+|$)/gu) || [])
     .filter(sentence => sentence.trim())
     .length
+}
+
+function qualitativeAnswerScore(value: unknown): number {
+  const words = countWords(value)
+  const sentences = countSentences(value)
+  if (words < 5) return 0
+  if (words < 15) return 40
+  if (words >= 30 || sentences >= 2) return 100
+  return 75
+}
+
+function expectedQuestionSeconds(
+  question: SubmissionQualityQuestion,
+  answer: unknown,
+): number {
+  const readingSeconds = Math.max(
+    2,
+    countWords(question.text) * SECONDS_PER_QUESTION_WORD,
+  )
+  const type = question.question_type
+  const answerWords = countWords(answer)
+  const answerSentences = countSentences(answer)
+  const typingSeconds = answerWords * SECONDS_PER_COMPOSED_WORD
+
+  if (type === 'LIKERT' || type === 'likert' || type === 'RATING_SCALE') {
+    return (BASELINE_SECONDS_PER_QUESTION / 3) + readingSeconds
+  }
+  if (type === 'SINGLE_CHOICE' || type === 'DROPDOWN') {
+    return (BASELINE_SECONDS_PER_QUESTION * 0.4) + readingSeconds
+  }
+  if (type === 'MULTI_CHOICE') {
+    return (BASELINE_SECONDS_PER_QUESTION * 0.6) + readingSeconds
+  }
+  if (type === 'MATRIX') {
+    const options = asOptionsRecord(question.options)
+    const rows = Array.isArray(options.rows) ? options.rows.length : 1
+    return Math.max(
+      BASELINE_SECONDS_PER_QUESTION * 0.5,
+      rows * 8,
+    ) + readingSeconds
+  }
+  if (type === 'SHORT_TEXT') {
+    return (BASELINE_SECONDS_PER_QUESTION * 0.5) +
+      readingSeconds +
+      typingSeconds +
+      (answerSentences * 2)
+  }
+  if (type === 'LONG_TEXT' || type === 'text') {
+    return BASELINE_SECONDS_PER_QUESTION +
+      readingSeconds +
+      typingSeconds +
+      (answerSentences * 3)
+  }
+  if (type === 'DATE' || type === 'TIME') {
+    return (BASELINE_SECONDS_PER_QUESTION * 0.4) + readingSeconds
+  }
+  if (type === 'FILE') {
+    return (BASELINE_SECONDS_PER_QUESTION * 1.5) + readingSeconds
+  }
+  return (BASELINE_SECONDS_PER_QUESTION * 0.5) + readingSeconds
 }
 
 export function calculateSubmissionQuality({
@@ -140,18 +229,6 @@ export function calculateSubmissionQuality({
       typeof value === 'number' && Number.isFinite(value) && value >= 0
     ))
   const medianCompletionSeconds = median(completionTimes)
-  const rushedThresholdSeconds = medianCompletionSeconds === null
-    ? null
-    : completionTimes.length >= 3
-      ? Math.max(
-          MINIMUM_RUSHED_THRESHOLD_SECONDS,
-          medianCompletionSeconds * 0.5,
-        )
-      : Math.max(
-          MINIMUM_RUSHED_THRESHOLD_SECONDS,
-          questions.length * FALLBACK_SECONDS_PER_QUESTION,
-        )
-
   const submissions = responses.map(response => {
     const respondent = respondentById.get(response.respondent_id)
     const duration = respondent?.completion_duration_seconds
@@ -160,6 +237,17 @@ export function calculateSubmissionQuality({
       ? duration
       : null
     const answers = asAnswerRecord(response.answers)
+    const expectedCompletionSeconds = questions.reduce(
+      (total, question) => total + expectedQuestionSeconds(
+        question,
+        answers[question.id],
+      ),
+      0,
+    )
+    const completionTimeRatio = completionSeconds !== null &&
+      expectedCompletionSeconds > 0
+      ? completionSeconds / expectedCompletionSeconds
+      : null
     const openEndedAnswers = openEndedQuestions
       .map(question => answerText(answers[question.id]))
       .filter(Boolean)
@@ -181,31 +269,66 @@ export function calculateSubmissionQuality({
     const averageQualitativeWords = qualitativeQuestions.length > 0
       ? qualitativeWordCount / qualitativeQuestions.length
       : null
-    const potentiallyRushed = completionSeconds !== null &&
-      rushedThresholdSeconds !== null &&
-      completionSeconds < rushedThresholdSeconds
+    const qualitativeCoveragePercentage = qualitativeQuestions.length > 0
+      ? (qualitativeAnswers.length / qualitativeQuestions.length) * 100
+      : null
+    const qualitativeDepthScore = qualitativeQuestions.length > 0
+      ? qualitativeQuestions.reduce(
+          (total, question) => total + qualitativeAnswerScore(answers[question.id]),
+          0,
+        ) / qualitativeQuestions.length
+      : null
+    const belowCohortThreshold = completionSeconds !== null &&
+      medianCompletionSeconds !== null &&
+      completionTimes.length >= 3 &&
+      completionSeconds < medianCompletionSeconds * COHORT_SPEEDING_RATIO
+    const severelyRushed = completionTimeRatio !== null && completionTimeRatio < 0.4
+    const potentiallyRushed = completionTimeRatio !== null &&
+      (completionTimeRatio < 0.6 || belowCohortThreshold)
     const minimalQualitativeFeedback = averageQualitativeWords !== null &&
       averageQualitativeWords < MINIMUM_QUALITATIVE_WORDS
-    const applicableIndicators = [
-      completionSeconds !== null,
-      qualitativeQuestions.length > 0,
+    const timingScore = completionTimeRatio === null
+      ? null
+      : Math.min(100, Math.max(0, (completionTimeRatio / 0.8) * 100))
+    const scoreParts = [
+      ...(timingScore === null ? [] : [{ score: timingScore, weight: 50 }]),
+      ...(qualitativeDepthScore === null
+        ? []
+        : [{ score: qualitativeDepthScore, weight: 35 }]),
+      ...(qualitativeCoveragePercentage === null
+        ? []
+        : [{ score: qualitativeCoveragePercentage, weight: 15 }]),
     ]
-    const passedIndicators = [
-      completionSeconds !== null && !potentiallyRushed,
-      qualitativeQuestions.length > 0 && !minimalQualitativeFeedback,
-    ]
-    const indicatorCount = applicableIndicators.filter(Boolean).length
-    const score = indicatorCount > 0
+    const availableWeight = scoreParts.reduce(
+      (total, part) => total + part.weight,
+      0,
+    )
+    let score = availableWeight > 0
+      ? Math.round(scoreParts.reduce(
+          (total, part) => total + (part.score * part.weight),
+          0,
+        ) / availableWeight)
+      : null
+    if (score !== null && severelyRushed) score = Math.min(score, 39)
+    else if (score !== null && potentiallyRushed) score = Math.min(score, 74)
+    const level = qualityLevel(score)
+    const engagementScore = qualitativeDepthScore !== null &&
+      qualitativeCoveragePercentage !== null
       ? Math.round(
-          (passedIndicators.filter(Boolean).length / indicatorCount) * 100,
+          (qualitativeDepthScore * 0.7) +
+          (qualitativeCoveragePercentage * 0.3),
         )
       : null
-    const level = qualityLevel(score)
+    const engagementLevel = qualityLevel(engagementScore)
     const signals: string[] = []
 
-    if (potentiallyRushed && rushedThresholdSeconds !== null) {
+    if (severelyRushed && completionTimeRatio !== null) {
       signals.push(
-        `Completion time was below the ${Math.round(rushedThresholdSeconds)} second review threshold.`,
+        `Completion time was ${Math.round(completionTimeRatio * 100)}% of the weighted expected time.`,
+      )
+    } else if (potentiallyRushed && completionTimeRatio !== null) {
+      signals.push(
+        `Completion time was faster than expected at ${Math.round(completionTimeRatio * 100)}% of the weighted baseline.`,
       )
     }
     if (minimalQualitativeFeedback) {
@@ -213,21 +336,37 @@ export function calculateSubmissionQuality({
         `Paragraph feedback averaged fewer than ${MINIMUM_QUALITATIVE_WORDS} words per question.`,
       )
     }
+    if (
+      qualitativeCoveragePercentage !== null &&
+      qualitativeCoveragePercentage < 100
+    ) {
+      signals.push(
+        `Answered ${qualitativeAnswers.length} of ${qualitativeQuestions.length} paragraph questions.`,
+      )
+    }
 
     return {
       respondentId: response.respondent_id,
       completionSeconds,
+      expectedCompletionSeconds,
+      completionTimeRatio,
       openEndedAnswerCount: openEndedAnswers.length,
       openEndedWordCount,
       openEndedSentenceCount,
       averageWordsPerOpenAnswer: openEndedAnswers.length > 0
         ? openEndedWordCount / openEndedAnswers.length
         : null,
+      qualitativeCoveragePercentage,
+      qualitativeDepthScore,
+      severelyRushed,
       potentiallyRushed,
       minimalQualitativeFeedback,
       score,
       level,
       label: submissionQualityLabel(level),
+      engagementScore,
+      engagementLevel,
+      engagementLabel: submissionEngagementLabel(engagementLevel),
       signals,
     }
   })
@@ -250,6 +389,14 @@ export function calculateSubmissionQuality({
   const score = average(assessedScores)
   const roundedScore = score === null ? null : Math.round(score)
   const level = qualityLevel(roundedScore)
+  const assessedEngagementScores = submissions
+    .map(submission => submission.engagementScore)
+    .filter((value): value is number => value !== null)
+  const engagementAverage = average(assessedEngagementScores)
+  const engagementScore = engagementAverage === null
+    ? null
+    : Math.round(engagementAverage)
+  const engagementLevel = qualityLevel(engagementScore)
   const distribution: Record<SubmissionQualityLevel, number> = {
     strong: 0,
     mixed: 0,
@@ -264,8 +411,13 @@ export function calculateSubmissionQuality({
     submittedCount: responses.length,
     timedSubmissionCount: completionTimes.length,
     averageCompletionSeconds: average(completionTimes),
+    averageExpectedCompletionSeconds: average(
+      submissions.map(submission => submission.expectedCompletionSeconds),
+    ),
     medianCompletionSeconds,
-    rushedThresholdSeconds,
+    rushedThresholdSeconds: medianCompletionSeconds === null
+      ? null
+      : medianCompletionSeconds * COHORT_SPEEDING_RATIO,
     potentiallyRushedCount: submissions.filter(
       submission => submission.potentiallyRushed,
     ).length,
@@ -288,6 +440,9 @@ export function calculateSubmissionQuality({
     score: roundedScore,
     level,
     label: submissionQualityLabel(level),
+    engagementScore,
+    engagementLevel,
+    engagementLabel: submissionEngagementLabel(engagementLevel),
     distribution,
     submissions,
   }

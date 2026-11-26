@@ -62,10 +62,11 @@ test('flags a submission that is fast and has minimal paragraph feedback', () =>
   })
 
   const flagged = metrics.submissions.find(item => item.respondentId === 'r1')
-  assert.equal(metrics.rushedThresholdSeconds, 60)
+  assert.equal(metrics.rushedThresholdSeconds, 51.6)
   assert.equal(flagged?.potentiallyRushed, true)
+  assert.equal(flagged?.severelyRushed, true)
   assert.equal(flagged?.minimalQualitativeFeedback, true)
-  assert.equal(flagged?.score, 0)
+  assert.equal((flagged?.score ?? 100) <= 39, true)
   assert.equal(flagged?.level, 'review')
   assert.equal(metrics.potentiallyRushedCount, 1)
   assert.equal(metrics.minimalFeedbackCount, 1)
@@ -81,6 +82,7 @@ test('does not penalise surveys without paragraph questions', () => {
   assert.equal(metrics.submissions[0].minimalQualitativeFeedback, false)
   assert.equal(metrics.submissions[0].score, 100)
   assert.equal(metrics.level, 'strong')
+  assert.equal(metrics.engagementLevel, 'insufficient')
   assert.equal(metrics.openEndedCoveragePercentage, null)
 })
 
@@ -94,4 +96,63 @@ test('returns insufficient data when neither indicator can be assessed', () => {
   assert.equal(metrics.score, null)
   assert.equal(metrics.level, 'insufficient')
   assert.equal(metrics.submissions[0].score, null)
+})
+
+test('flags a two-minute mixed survey against type-weighted thirty-second baselines', () => {
+  const weightedQuestions = [
+    ...Array.from({ length: 20 }, (_, index) => ({
+      id: `likert-${index}`,
+      question_type: 'LIKERT',
+      text: 'Please indicate how strongly you agree with this statement',
+    })),
+    ...Array.from({ length: 3 }, (_, index) => ({
+      id: `choice-${index}`,
+      question_type: 'DROPDOWN',
+      text: 'Please select the option that applies to you',
+    })),
+    { id: 'paragraph-1', question_type: 'LONG_TEXT', text: 'Please explain your experience' },
+    { id: 'paragraph-2', question_type: 'LONG_TEXT', text: 'What should improve next' },
+  ]
+  const metrics = calculateSubmissionQuality({
+    questions: weightedQuestions,
+    respondents: [{ id: 'r1', completion_duration_seconds: 120 }],
+    responses: [{
+      respondent_id: 'r1',
+      answers: {
+        'paragraph-1': 'Not sure',
+        'paragraph-2': 'No comment',
+      },
+    }],
+  })
+  const result = metrics.submissions[0]
+
+  assert.equal(result.expectedCompletionSeconds > 300, true)
+  assert.equal((result.completionTimeRatio ?? 1) < 0.4, true)
+  assert.equal(result.severelyRushed, true)
+  assert.equal(result.minimalQualitativeFeedback, true)
+  assert.equal(result.level, 'review')
+  assert.equal((result.score ?? 100) <= 39, true)
+})
+
+test('keeps qualitative engagement separate from overall response quality', () => {
+  const metrics = calculateSubmissionQuality({
+    questions: [
+      { id: 'q1', question_type: 'LIKERT', text: 'I understand our strategy' },
+      { id: 'q2', question_type: 'LONG_TEXT', text: 'Please explain your experience' },
+    ],
+    respondents: [{ id: 'r1', completion_duration_seconds: 10 }],
+    responses: [{
+      respondent_id: 'r1',
+      answers: {
+        q1: 4,
+        q2: 'Leaders communicate clearly and explain decisions with useful context. They invite questions, listen carefully, and respond with practical feedback.',
+      },
+    }],
+  })
+  const result = metrics.submissions[0]
+
+  assert.equal(result.engagementLevel, 'strong')
+  assert.equal(result.engagementLabel, 'Strong engagement')
+  assert.equal(result.level, 'review')
+  assert.equal(result.label, 'Review suggested')
 })

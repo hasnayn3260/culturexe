@@ -117,12 +117,20 @@ export default function SubmissionQualitySummary({
               Signals that help distinguish thoughtful submissions from potentially rushed or minimal responses.
             </CardDescription>
           </div>
-          <Badge
-            variant="outline"
-            className={`h-auto w-fit justify-self-start px-3 py-1.5 md:justify-self-end ${levelClasses(metrics.level)}`}
-          >
-            {metrics.label}{metrics.score !== null ? ` · ${metrics.score}%` : ''}
-          </Badge>
+          <div className="flex max-w-full flex-wrap items-center gap-2 justify-self-start md:justify-self-end">
+            <Badge
+              variant="outline"
+              className={`h-auto w-fit max-w-full whitespace-normal px-3 py-1.5 text-center ${levelClasses(metrics.engagementLevel)}`}
+            >
+              Response engagement · {metrics.engagementLabel}{metrics.engagementScore !== null ? ` · ${metrics.engagementScore}%` : ''}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`h-auto w-fit max-w-full whitespace-normal px-3 py-1.5 text-center ${levelClasses(metrics.level)}`}
+            >
+              Survey response quality · {metrics.label}{metrics.score !== null ? ` · ${metrics.score}%` : ''}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
 
@@ -132,7 +140,7 @@ export default function SubmissionQualitySummary({
             icon={Clock3}
             label="Average completion time"
             value={formatDuration(metrics.averageCompletionSeconds)}
-            detail={`${metrics.timedSubmissionCount} of ${metrics.submittedCount} submitted responses include timing data.`}
+            detail={`${metrics.timedSubmissionCount} of ${metrics.submittedCount} timed · weighted baseline ${formatDuration(metrics.averageExpectedCompletionSeconds)}.`}
           />
           <MetricCard
             icon={MessageSquareText}
