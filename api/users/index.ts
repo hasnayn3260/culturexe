@@ -1,6 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js'
 
 import { sendTemporaryAccessEmail } from '../email/postmark.js'
+import { describeError } from '../errors.js'
 import { generateTemporaryPassword } from './temporaryPassword.js'
 import { availableUsername } from './username.js'
 
@@ -637,7 +638,14 @@ async function handlePost(
     email_confirm: true,
     user_metadata: { full_name: values.fullName, role: values.role },
   })
-  if (error) return json({ error: error.message }, 400)
+  if (error) {
+    return json({
+      error: `Account creation failed: ${describeError(
+        error,
+        'The authentication service did not provide further details.',
+      )}`,
+    }, 400)
+  }
 
   try {
     const { error: profileError } = await admin
@@ -736,7 +744,14 @@ async function handlePatch(
     user_metadata: { full_name: values.fullName, role: values.role },
     ban_duration: values.active ? 'none' : '876000h',
   })
-  if (authError) return json({ error: authError.message }, 400)
+  if (authError) {
+    return json({
+      error: `Authentication update failed: ${describeError(
+        authError,
+        'The authentication service did not provide further details.',
+      )}`,
+    }, 400)
+  }
 
   const { error: profileError } = await admin
     .from('profiles')
@@ -798,7 +813,7 @@ async function route(request: Request): Promise<Response> {
         return json({ error: 'Method not allowed.' }, 405)
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected server error.'
+    const message = describeError(error, 'Unexpected user-management server error.')
     console.error('admin users API error', error)
     return json({ error: message }, message.includes('valid JSON') ? 400 : 500)
   }

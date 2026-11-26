@@ -286,9 +286,23 @@ export default function UsersPage() {
             ? <AlertCircle />
             : <CheckCircle2 />}
           <AlertDescription className="text-current">
-            Import complete: {importSummary.created} created,{' '}
-            {importSummary.updated} updated, {importSummary.skipped} skipped and{' '}
-            {importSummary.failed} failed.
+            <p>
+              Import complete: {importSummary.created} created,{' '}
+              {importSummary.updated} updated, {importSummary.skipped} skipped and{' '}
+              {importSummary.failed} failed.
+            </p>
+            {importSummary.failed > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {importSummary.results
+                  .filter((result) => result.status === 'failed')
+                  .map((result) => (
+                    <li key={`${result.rowNumber}-${result.email}`}>
+                      Row {result.rowNumber} · {result.email || 'unknown email'} —{' '}
+                      {result.message || 'Import failed without further details.'}
+                    </li>
+                  ))}
+              </ul>
+            )}
           </AlertDescription>
         </Alert>
       )}

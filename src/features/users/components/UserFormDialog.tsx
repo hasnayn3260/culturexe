@@ -3,6 +3,7 @@ import { AlertCircle, LoaderCircle, UserPen, UserPlus } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/Toast.tsx'
 import {
   Dialog,
   DialogContent,
@@ -135,6 +136,7 @@ export default function UserFormDialog({
   submitting = false,
   onSubmit,
 }: UserFormDialogProps) {
+  const showToast = useToast()
   const [values, setValues] = useState<UserFormValues>(() =>
     valuesFromUser(mode === 'edit' ? user : null),
   )
@@ -194,13 +196,14 @@ export default function UserFormDialog({
 
     try {
       await onSubmit(result.data)
+      showToast(isEdit ? 'User updated successfully.' : 'User created successfully.')
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(
-        error instanceof Error
-          ? error.message
-          : 'The user could not be saved. Please try again.',
-      )
+      const message = error instanceof Error
+        ? error.message
+        : 'The user could not be saved. Please try again.'
+      setSubmitError(message)
+      showToast(message, 'error')
     }
   }
 

@@ -11,9 +11,10 @@ export default function PasswordRequirements({
   password,
   visible,
 }: PasswordRequirementsProps) {
-  if (!visible) return null
-
   const requirements = getPasswordRequirementStatuses(password)
+  const allRequirementsMet = requirements.every((requirement) => requirement.met)
+
+  if (!visible || allRequirementsMet) return null
 
   return (
     <div

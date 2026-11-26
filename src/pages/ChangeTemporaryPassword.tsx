@@ -133,7 +133,7 @@ export default function ChangeTemporaryPassword() {
               </button>
               <PasswordRequirements
                 password={password}
-                visible={passwordFocused || Boolean(password)}
+                visible={passwordFocused}
               />
             </div>
           </div>

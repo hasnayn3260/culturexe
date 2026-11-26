@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useToast } from '@/components/Toast.tsx'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +84,7 @@ export default function UserActionDialog({
   onOpenChange,
   onConfirm,
 }: UserActionDialogProps) {
+  const showToast = useToast()
   const [confirmation, setConfirmation] = useState('')
   const [acknowledged, setAcknowledged] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -109,13 +111,14 @@ export default function UserActionDialog({
 
     try {
       await onConfirm(user, action)
+      showToast(`User ${action === 'delete' ? 'deleted' : `${action}d`} successfully.`)
       onOpenChange(false)
     } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : 'The account could not be updated. Please try again.',
-      )
+      const message = requestError instanceof Error
+        ? requestError.message
+        : 'The account could not be updated. Please try again.'
+      setError(message)
+      showToast(message, 'error')
     }
   }
 

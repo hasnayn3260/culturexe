@@ -151,6 +151,25 @@ export default function UserImportDialog({
         organisationId,
         rows: preview.rows.map((row) => row.values),
       })
+      const failures = result.results.filter((item) => item.status === 'failed')
+
+      if (failures.length > 0) {
+        const firstFailure = failures[0]
+        const message = `Import completed with ${failures.length} failed ${
+          failures.length === 1 ? 'row' : 'rows'
+        }. Fix the highlighted records before retrying.`
+
+        setError(message)
+        setServerFailures(failures)
+        showToast(
+          `Row ${firstFailure.rowNumber} · ${firstFailure.email || 'unknown email'} — ${
+            firstFailure.message || 'Import failed without further details.'
+          }${failures.length > 1 ? ` (+${failures.length - 1} more)` : ''}`,
+          'error',
+        )
+        return
+      }
+
       const imported = result.created + result.updated
       showToast(
         `Import complete: ${imported} ${imported === 1 ? 'user' : 'users'} imported${

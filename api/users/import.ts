@@ -1,6 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js'
 
 import { sendTemporaryAccessEmail } from '../email/postmark.js'
+import { describeError, stageError } from '../errors.js'
 import { generateTemporaryPassword } from './temporaryPassword.js'
 import { availableUsername } from './username.js'
 
@@ -568,7 +569,7 @@ async function runImport(
           email_confirm: true,
           user_metadata: { full_name: values.fullName, role: values.role },
         })
-        if (error) throw error
+        if (error) throw stageError('Account creation failed', error)
         userId = data.user.id
         createdUserId = userId
         status = 'created'
@@ -579,7 +580,7 @@ async function runImport(
         user_metadata: { full_name: values.fullName, role: values.role },
         ban_duration: values.active ? 'none' : '876000h',
       })
-      if (authError) throw authError
+      if (authError) throw stageError('Authentication update failed', authError)
 
       const managerId = values.managerEmail
         ? userIdByEmail.get(values.managerEmail) ||
@@ -598,18 +599,23 @@ async function runImport(
           ),
           { onConflict: 'id' },
         )
-      if (profileError) throw profileError
+      if (profileError) throw stageError('Profile save failed', profileError)
 
       if (status === 'created' && temporaryPassword) {
-        const messageId = await sendTemporaryAccessEmail({
-          to: values.email,
-          model: temporaryAccessTemplateModel(
-            admin,
-            organisation,
-            values,
-            temporaryPassword,
-          ),
-        })
+        let messageId: string
+        try {
+          messageId = await sendTemporaryAccessEmail({
+            to: values.email,
+            model: temporaryAccessTemplateModel(
+              admin,
+              organisation,
+              values,
+              temporaryPassword,
+            ),
+          })
+        } catch (error) {
+          throw stageError('Temporary-access email failed', error)
+        }
         const { error: deliveryError } = await admin
           .from('profiles')
           .update({
@@ -617,7 +623,9 @@ async function runImport(
             onboarding_email_sent_at: new Date().toISOString(),
           })
           .eq('id', userId)
-        if (deliveryError) throw deliveryError
+        if (deliveryError) {
+          throw stageError('Email delivery tracking failed', deliveryError)
+        }
       }
 
       userIdByEmail.set(values.email, userId)
@@ -637,7 +645,7 @@ async function runImport(
         rowNumber: row.rowNumber,
         email: values.email,
         status: 'failed',
-        message: error instanceof Error ? error.message : 'User could not be imported.',
+        message: describeError(error, 'User import failed without further details.'),
       })
     }
   }
@@ -661,7 +669,10 @@ async function runImport(
       const result = results.find((item) => item.rowNumber === row.rowNumber)
       if (result) {
         result.status = 'failed'
-        result.message = `Account saved, but manager link failed: ${error.message}`
+        result.message = `Account saved, but manager link failed: ${describeError(
+          error,
+          'The database did not provide further details.',
+        )}`
       }
     }
   }
@@ -726,7 +737,7 @@ async function route(request: Request): Promise<Response> {
   } catch (error) {
     console.error('user import API error', error)
     return json({
-      error: error instanceof Error ? error.message : 'Unexpected server error.',
+      error: describeError(error, 'Unexpected user import server error.'),
     }, 500)
   }
 }
