@@ -50,6 +50,11 @@ const POSITIONS: EmploymentPosition[] = [
   'Other',
 ]
 
+const MANAGER_POSITIONS = new Set<EmploymentPosition>([
+  'Manager',
+  'Senior Manager',
+])
+
 const EMPTY_VALUES: UserFormValues = {
   fullName: '',
   email: '',
@@ -150,7 +155,9 @@ export default function UserFormDialog({
       .filter((candidate) =>
         candidate.id !== user?.id &&
         candidate.organisationId === values.organisationId &&
-        candidate.active,
+        candidate.active &&
+        candidate.position !== null &&
+        MANAGER_POSITIONS.has(candidate.position),
       )
       .sort((first, second) =>
         (first.fullName || first.email || '').localeCompare(
@@ -393,6 +400,7 @@ export default function UserFormDialog({
                 {managerOptions.map((manager) => (
                   <option key={manager.id} value={manager.id}>
                     {manager.fullName || manager.email || manager.id}
+                    {manager.position ? ` — ${manager.position}` : ''}
                   </option>
                 ))}
               </select>

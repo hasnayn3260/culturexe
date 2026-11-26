@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import AdminLayout from './AdminLayout'
 import { useAdminData } from '../../hooks/useAdminData'
-import { useToast } from '../../components/Toast'
+import { useToast } from '../../components/Toast.tsx'
 import supabase from '../../lib/supabaseClient'
 
 function fmtDate(d) {

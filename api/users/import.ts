@@ -47,6 +47,8 @@ type ProfileRow = {
   email: string | null
   org_id: string | null
   username: string | null
+  active: boolean | null
+  position: EmploymentPosition | null
 }
 
 type OrganisationRow = {
@@ -74,6 +76,10 @@ const POSITIONS = new Set<EmploymentPosition>([
   'Intern',
   'Contractor',
   'Other',
+])
+const MANAGER_POSITIONS = new Set<EmploymentPosition>([
+  'Manager',
+  'Senior Manager',
 ])
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PHONE_PATTERN = /^[+\d][\d\s().-]{5,24}$/
@@ -296,7 +302,7 @@ async function prepareRows(
 ) {
   const [authUsers, profilesResult, organisationResult] = await Promise.all([
     listAllAuthUsers(admin),
-    admin.from('profiles').select('id, email, org_id, username'),
+    admin.from('profiles').select('id, email, org_id, username, active, position'),
     admin
       .from('organisations')
       .select('id, name, logo_path, banner_path')
@@ -384,6 +390,11 @@ async function prepareRows(
   const batchEmails = new Set(
     normalized.map((row) => row.values?.email).filter(Boolean) as string[],
   )
+  const batchUsersByEmail = new Map(
+    normalized
+      .filter((row): row is typeof row & { values: ImportRow } => Boolean(row.values))
+      .map((row) => [row.values.email, row.values]),
+  )
   const validRows: ValidatedRow[] = []
   const invalidResults: ImportResult[] = []
 
@@ -423,11 +434,25 @@ async function prepareRows(
     if (!message && profileByEmail.has(values.email) && !authUser) {
       message = 'A profile uses this email but its Auth account could not be matched.'
     }
-    if (!message && values.managerEmail && !batchEmails.has(values.managerEmail)) {
-      const manager = authByEmail.get(values.managerEmail)
-      const managerProfile = manager ? profileById.get(manager.id) : undefined
-      if (!managerProfile || managerProfile.org_id !== organisationId) {
-        message = 'Manager email was not found in this organisation or import.'
+    if (!message && values.managerEmail) {
+      const importedManager = batchUsersByEmail.get(values.managerEmail)
+
+      if (importedManager) {
+        if (!importedManager.active) {
+          message = 'The selected manager must be active.'
+        } else if (!MANAGER_POSITIONS.has(importedManager.position as EmploymentPosition)) {
+          message = 'The selected manager must have a Manager or Senior Manager employment level.'
+        }
+      } else if (!batchEmails.has(values.managerEmail)) {
+        const manager = authByEmail.get(values.managerEmail)
+        const managerProfile = manager ? profileById.get(manager.id) : undefined
+        if (!managerProfile || managerProfile.org_id !== organisationId) {
+          message = 'Manager email was not found in this organisation or import.'
+        } else if (managerProfile.active === false) {
+          message = 'The selected manager must be active.'
+        } else if (!MANAGER_POSITIONS.has(managerProfile.position as EmploymentPosition)) {
+          message = 'The selected manager must have a Manager or Senior Manager employment level.'
+        }
       }
     }
 

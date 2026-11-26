@@ -10,7 +10,7 @@ import {
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { useToast } from '@/components/Toast'
+import { useToast } from '@/components/Toast.tsx'
 import {
   Dialog,
   DialogContent,

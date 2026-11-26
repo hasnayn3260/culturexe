@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { OrganisationScopeProvider } from './context/OrganisationScopeContext'
-import { ToastProvider } from './components/Toast'
+import { ToastProvider } from './components/Toast.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import ProtectedRoute from './components/ProtectedRoute'
 import RequireMfa from './routes/guards/RequireMfa'

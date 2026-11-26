@@ -89,6 +89,10 @@ const POSITIONS = new Set<EmploymentPosition>([
   'Contractor',
   'Other',
 ])
+const MANAGER_POSITIONS = new Set<EmploymentPosition>([
+  'Manager',
+  'Senior Manager',
+])
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const USERNAME_PATTERN = /^[A-Za-z0-9._-]+$/
 const UUID_PATTERN =
@@ -413,13 +417,21 @@ async function ensureReferences(
 
     const { data, error } = await admin
       .from('profiles')
-      .select('id, org_id')
+      .select('id, org_id, active, position')
       .eq('id', values.managerId)
       .maybeSingle()
     if (error) throw error
     if (!data) throw new Error('The selected manager does not exist.')
     if (data.org_id !== nullable(values.organisationId)) {
       throw new Error('The manager must belong to the same organisation.')
+    }
+    if (data.active === false) {
+      throw new Error('The selected manager must be active.')
+    }
+    if (!MANAGER_POSITIONS.has(data.position as EmploymentPosition)) {
+      throw new Error(
+        'The selected manager must have a Manager or Senior Manager employment level.',
+      )
     }
   }
 }
