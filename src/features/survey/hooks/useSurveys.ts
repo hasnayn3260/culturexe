@@ -104,6 +104,12 @@ function emptyStats(): SurveyListStats {
   return { total: 0, draft: 0, scheduled: 0, live: 0, closed: 0 }
 }
 
+function realtimeChannelId(scope: string): string {
+  const instanceId = globalThis.crypto?.randomUUID?.()
+    || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `survey-list-${scope}-${instanceId}`
+}
+
 export function useSurveys(organisationId?: string | null) {
   const statusNow = useSurveyStatusClock()
   const [surveys, setSurveys] = useState<SurveyListItem[]>([])
@@ -272,7 +278,11 @@ export function useSurveys(organisationId?: string | null) {
       ? { event: '*' as const, schema: 'public', table: 'survey', filter: `org_id=eq.${organisationId}` }
       : { event: '*' as const, schema: 'public', table: 'survey' }
     const channel = supabase
-      .channel(`survey-list-${organisationId || 'all'}`)
+      // Supabase returns an existing channel when a topic is reused. React's
+      // Strict Mode and Vite HMR can mount a new effect before the asynchronous
+      // cleanup removes the previous channel, which would add callbacks to an
+      // already-subscribed channel. A unique topic keeps every effect isolated.
+      .channel(realtimeChannelId(organisationId || 'all'))
       .on('postgres_changes', surveyFilter, queueRefresh)
       .on(
         'postgres_changes',
