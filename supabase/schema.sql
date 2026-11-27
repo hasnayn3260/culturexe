@@ -244,6 +244,28 @@ $$;
 ALTER FUNCTION "public"."is_superadmin"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."list_my_profile_managers"() RETURNS TABLE("id" "uuid", "label" "text")
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select
+    manager.id,
+    coalesce(nullif(trim(manager.full_name), ''), manager.email, 'Manager')
+      || ' — ' || manager.position as label
+  from public.profiles as current_profile
+  join public.profiles as manager
+    on manager.org_id = current_profile.org_id
+  where current_profile.id = auth.uid()
+    and manager.id <> current_profile.id
+    and manager.active is not false
+    and manager.position in ('Manager', 'Senior Manager')
+  order by label;
+$$;
+
+
+ALTER FUNCTION "public"."list_my_profile_managers"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "public"."record_survey_access"("p_token" "uuid", "p_access_id" "uuid") RETURNS TABLE("respondent_id" "uuid", "first_accessed_at" timestamp with time zone, "last_accessed_at" timestamp with time zone, "access_count" integer, "access_type" "text")
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public', 'pg_temp'
@@ -1349,6 +1371,13 @@ GRANT ALL ON FUNCTION "public"."is_admin"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."list_my_profile_managers"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."list_my_profile_managers"() TO "anon";
+GRANT ALL ON FUNCTION "public"."list_my_profile_managers"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."list_my_profile_managers"() TO "service_role";
 
 
 

@@ -480,7 +480,7 @@ export default function ClientPortal() {
               <div className="shrink-0 text-lg font-extrabold text-[#0D1F3C]">
                 {screen === 'profile' ? 'My Profile' : screen === 'survey' ? 'Survey' : screen === 'complete' ? 'Survey complete' : 'Home'}
               </div>
-              {availableSurveys.length > 0 && !['home', 'profile', 'complete'].includes(screen) && (
+              {availableSurveys.length > 0 && (
                 <div className="hidden min-w-0 border-l border-[#E8EFF5] pl-3 sm:block sm:w-[320px]">
                   <Select value={survey?.id || null} onValueChange={switchSurvey}>
                     <SelectTrigger aria-label="Select survey" className="h-10 w-full border-[#DCE4EE] bg-[#F8FAFC] text-[#0D1F3C] shadow-none">
