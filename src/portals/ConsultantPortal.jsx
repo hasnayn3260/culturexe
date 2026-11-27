@@ -6,6 +6,7 @@ import {
 } from '../context/OrganisationScopeContext'
 import { useAdminData } from '../hooks/useAdminData'
 import { useSurvey } from '../hooks/useSurvey'
+import { useSurveys } from '../features/survey/hooks/useSurveys'
 import { QUESTION_TYPES, CHOICE_TYPES, typeInfo, parseQuestionsCSV, CSV_TEMPLATE } from '../data/surveyTypes'
 import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
 import {
@@ -857,6 +858,12 @@ export default function ConsultantPortal() {
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
     addRespondents, removeRespondent, sendReminders,
   } = useSurvey(organisationScope)
+  const {
+    surveys: managedSurveys,
+    loading: managedSurveysLoading,
+  } = useSurveys(
+    organisationScope === ALL_ORGANISATIONS ? null : organisationScope,
+  )
 
   // Every response must belong to a respondent in the organisation-scoped survey.
   // Keeping that comparison here prevents a mismatched response row from
@@ -970,6 +977,25 @@ export default function ConsultantPortal() {
   const completionPct  = totalInvited > 0
     ? Math.round((totalResponded / totalInvited) * 100)
     : 0
+
+  // Portfolio totals deliberately use every survey in scope. The detailed
+  // engagement cards below still describe the currently selected legacy survey
+  // and are preserved as separate metrics.
+  const portfolioAssessmentCount = managedSurveys.length
+  const portfolioInvitedCount = managedSurveys.reduce(
+    (total, item) => total + item.respondentCount,
+    0,
+  )
+  const portfolioCompletedCount = managedSurveys.reduce(
+    (total, item) => total + item.completedCount,
+    0,
+  )
+  const portfolioCompletionRate = portfolioInvitedCount > 0
+    ? Math.round((portfolioCompletedCount / portfolioInvitedCount) * 100)
+    : 0
+  const portfolioActiveCount = managedSurveys.filter(
+    (item) => item.effectiveStatus === 'live',
+  ).length
 
   // ── Registration & engagement funnel (client-requested metrics) ──────────
   // "Registered" = a plain count of the profiles table. Nothing else — no role
@@ -2210,7 +2236,7 @@ export default function ConsultantPortal() {
                 <div className="hero-title">Welcome back, {displayName}</div>
                 <div className="hero-sub">
                   {organisationScope === ALL_ORGANISATIONS
-                    ? `${surveys.length} organisation survey${surveys.length !== 1 ? 's' : ''} included`
+                    ? `${portfolioAssessmentCount} organisation survey${portfolioAssessmentCount !== 1 ? 's' : ''} included`
                     : survey
                       ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : isScheduled ? 'Survey scheduled' : 'Draft — not yet live'}`
                       : 'No survey found for this organisation.'}
@@ -2259,6 +2285,31 @@ export default function ConsultantPortal() {
                       </div>
                       <span style={{ color: 'var(--teal)', fontSize: 16 }}>→</span>
                     </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card mb-24">
+                <div className="section-title mb-2">Assessment portfolio</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
+                  Totals across every assessment in the selected organisation scope.
+                </div>
+                <div className="grid-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))' }}>
+                  {[
+                    { label: 'Total Assessments', value: portfolioAssessmentCount, color: '#1A6BAA' },
+                    { label: 'Invited Participants', value: portfolioInvitedCount, color: '#526A88' },
+                    { label: 'Completed Assessments', value: portfolioCompletedCount, color: '#0A8A7E' },
+                    { label: 'Completion Rate', value: `${portfolioCompletionRate}%`, color: '#7A6030' },
+                    { label: 'Active Assessments', value: portfolioActiveCount, color: '#1BBFB0' },
+                  ].map(item => (
+                    <div className="stat-card" key={item.label} aria-busy={managedSurveysLoading}>
+                      <div className="stat-accent" style={{ background: item.color }} />
+                      <div className="stat-label">{item.label}</div>
+                      <div className="stat-value" style={{ color: item.color }}>
+                        {managedSurveysLoading ? '—' : item.value}
+                      </div>
+                      <div className="stat-sub">All surveys in scope</div>
+                    </div>
                   ))}
                 </div>
               </div>

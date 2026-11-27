@@ -1,11 +1,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 type SurveyStatus = 'draft' | 'live' | 'closed'
+type SurveyAssessmentType = 'culture' | 'pulse' | '360' | 'other'
 
 type SurveyValues = {
   organisationId: string
   title: string
   description: string
+  assessmentType: SurveyAssessmentType
+  isFullCultureAssessment: boolean
   status: SurveyStatus
   liveStart: string
   liveEnd: string
@@ -18,6 +21,8 @@ type SurveyRow = {
   org_id: string
   title: string
   description: string | null
+  assessment_type: SurveyAssessmentType
+  is_full_culture_assessment: boolean
   status: SurveyStatus
   live_start: string | null
   live_end: string | null
@@ -57,7 +62,7 @@ type ValidationResult =
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SURVEY_COLUMNS =
-  'id, org_id, title, description, status, live_start, live_end, created_at, updated_at, open_link_enabled, open_link_token'
+  'id, org_id, title, description, assessment_type, is_full_culture_assessment, status, live_start, live_end, created_at, updated_at, open_link_enabled, open_link_token'
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, {
@@ -154,6 +159,8 @@ function validateValues(value: unknown, creating: boolean): ValidationResult {
     organisationId: text(input.organisationId),
     title: text(input.title).replace(/\s+/g, ' '),
     description: text(input.description),
+    assessmentType: text(input.assessmentType) as SurveyAssessmentType,
+    isFullCultureAssessment: input.isFullCultureAssessment === true,
     status,
     liveStart: text(input.liveStart),
     liveEnd: text(input.liveEnd),
@@ -169,6 +176,12 @@ function validateValues(value: unknown, creating: boolean): ValidationResult {
   }
   if (data.description.length > 5_000) {
     return { success: false, message: 'The survey description must be 5,000 characters or fewer.' }
+  }
+  if (!['culture', 'pulse', '360', 'other'].includes(data.assessmentType)) {
+    return { success: false, message: 'Select a valid assessment type.' }
+  }
+  if (data.assessmentType !== 'culture') {
+    data.isFullCultureAssessment = false
   }
   if (!['draft', 'live', 'closed'].includes(data.status)) {
     return { success: false, message: 'Select a valid survey lifecycle status.' }
@@ -248,6 +261,8 @@ function mapSurvey(row: SurveyRow) {
     organisationId: row.org_id,
     title: row.title,
     description: row.description,
+    assessmentType: row.assessment_type,
+    isFullCultureAssessment: row.is_full_culture_assessment,
     storedStatus: row.status,
     liveStart: row.live_start,
     liveEnd: row.live_end,
@@ -369,6 +384,8 @@ async function handleCreate(
       title: values.title,
       description:
         values.description || templateContentResult?.template.description || null,
+      assessment_type: values.assessmentType,
+      is_full_culture_assessment: values.isFullCultureAssessment,
       status: values.status,
       live_start: values.liveStart || null,
       live_end: values.liveEnd || null,
@@ -489,6 +506,8 @@ async function handleUpdate(
     .update({
       title: values.title,
       description: values.description || null,
+      assessment_type: values.assessmentType,
+      is_full_culture_assessment: values.isFullCultureAssessment,
       status: values.status,
       live_start: values.liveStart || null,
       live_end: values.liveEnd || null,

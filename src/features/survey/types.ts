@@ -1,6 +1,7 @@
 import type { SurveyLifecycleStatus } from './utils/surveyStatus'
 
 export type SurveyStoredStatus = 'draft' | 'live' | 'closed'
+export type SurveyAssessmentType = 'culture' | 'pulse' | '360' | 'other'
 export type SurveyManagementTab = 'list' | 'builder' | 'controls' | 'settings'
 export type SurveySortDirection = 'asc' | 'desc'
 
@@ -18,6 +19,8 @@ export type SurveyListItem = {
   organisation: SurveyOrganisationReference
   title: string
   description: string | null
+  assessmentType: SurveyAssessmentType
+  isFullCultureAssessment: boolean
   storedStatus: SurveyStoredStatus
   effectiveStatus: SurveyLifecycleStatus
   liveStart: string | null
@@ -64,6 +67,8 @@ export type SurveyFormValues = {
   organisationId: string
   title: string
   description: string
+  assessmentType: SurveyAssessmentType
+  isFullCultureAssessment: boolean
   status: SurveyStoredStatus
   liveStart: string
   liveEnd: string

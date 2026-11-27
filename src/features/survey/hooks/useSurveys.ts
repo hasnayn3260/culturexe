@@ -5,6 +5,7 @@ import supabase from '@/lib/supabaseClient'
 import type {
   SurveyListItem,
   SurveyListStats,
+  SurveyAssessmentType,
   SurveyOrganisationReference,
   SurveyStoredStatus,
 } from '../types'
@@ -16,6 +17,8 @@ type SurveyRow = {
   org_id: string
   title: string
   description: string | null
+  assessment_type: SurveyAssessmentType
+  is_full_culture_assessment: boolean
   status: string
   live_start: string | null
   live_end: string | null
@@ -120,7 +123,7 @@ export function useSurveys(organisationId?: string | null) {
       let surveyQuery = supabase
         .from('survey')
         .select(
-          'id, org_id, title, description, status, live_start, live_end, created_at, updated_at, open_link_enabled, open_link_token',
+          'id, org_id, title, description, assessment_type, is_full_culture_assessment, status, live_start, live_end, created_at, updated_at, open_link_enabled, open_link_token',
         )
         .order('updated_at', { ascending: false })
 
@@ -220,6 +223,8 @@ export function useSurveys(organisationId?: string | null) {
           organisation,
           title: survey.title,
           description: survey.description,
+          assessmentType: survey.assessment_type,
+          isFullCultureAssessment: survey.is_full_culture_assessment,
           storedStatus: normalStoredStatus(survey.status),
           effectiveStatus,
           liveStart: survey.live_start,

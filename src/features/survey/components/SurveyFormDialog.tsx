@@ -21,6 +21,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 import type {
   CreateSurveyInput,
@@ -54,6 +62,8 @@ const EMPTY_VALUES: DialogValues = {
   organisationId: '',
   title: '',
   description: '',
+  assessmentType: 'culture',
+  isFullCultureAssessment: false,
   status: 'draft',
   liveStart: '',
   liveEnd: '',
@@ -88,6 +98,8 @@ function valuesFromSurvey(survey?: SurveyListItem | null): DialogValues {
     organisationId: survey.organisationId,
     title: survey.title,
     description: survey.description || '',
+    assessmentType: survey.assessmentType,
+    isFullCultureAssessment: survey.isFullCultureAssessment,
     status: survey.storedStatus,
     liveStart: localDateTimeValue(survey.liveStart),
     liveEnd: localDateTimeValue(survey.liveEnd),
@@ -261,6 +273,9 @@ export default function SurveyFormDialog({
       organisationId: values.organisationId,
       title: values.title.trim(),
       description: values.description.trim(),
+      assessmentType: values.assessmentType,
+      isFullCultureAssessment:
+        values.assessmentType === 'culture' && values.isFullCultureAssessment,
       status: values.status,
       liveStart: isoDateTimeValue(values.liveStart),
       liveEnd: isoDateTimeValue(values.liveEnd),
@@ -387,6 +402,49 @@ export default function SurveyFormDialog({
                 className={inputClassName}
               />
               <FieldError message={errors.title} />
+            </div>
+
+            <div>
+              <FieldLabel htmlFor="survey-assessment-type" required>
+                Assessment type
+              </FieldLabel>
+              <Select
+                value={values.assessmentType}
+                onValueChange={(value) => {
+                  if (!value) return
+                  update('assessmentType', value as SurveyFormValues['assessmentType'])
+                  if (value !== 'culture') update('isFullCultureAssessment', false)
+                }}
+                disabled={submitting}
+              >
+                <SelectTrigger id="survey-assessment-type" className="h-10 w-full border-[#DCE4EE] shadow-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="culture">Culture assessment</SelectItem>
+                  <SelectItem value="pulse">Pulse survey</SelectItem>
+                  <SelectItem value="360">360 assessment</SelectItem>
+                  <SelectItem value="other">Other survey</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-[11px] text-[#8A9BB0]">
+                Classification keeps different assessment results separate.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[#DCE4EE] bg-[#F8FAFC] p-3.5">
+              <div>
+                <div className="text-sm font-bold text-[#0D1F3C]">Full culture model</div>
+                <div className="mt-0.5 text-[11px] leading-4 text-[#8A9BB0]">
+                  Include only complete-model culture assessments in the overall culture score.
+                </div>
+              </div>
+              <Switch
+                checked={values.isFullCultureAssessment}
+                onCheckedChange={(checked) => update('isFullCultureAssessment', checked)}
+                disabled={submitting || values.assessmentType !== 'culture'}
+                aria-label="Full culture model"
+              />
             </div>
 
             <div className="sm:col-span-2">

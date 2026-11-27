@@ -726,6 +726,8 @@ CREATE TABLE IF NOT EXISTS "public"."survey" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "title" "text" DEFAULT 'DBN Culture Survey'::"text" NOT NULL,
     "description" "text",
+    "assessment_type" "text" DEFAULT 'culture'::"text" NOT NULL,
+    "is_full_culture_assessment" boolean DEFAULT false NOT NULL,
     "status" "text" DEFAULT 'draft'::"text" NOT NULL,
     "live_start" timestamp with time zone,
     "live_end" timestamp with time zone,
@@ -747,6 +749,8 @@ CREATE TABLE IF NOT EXISTS "public"."survey" (
     "sms_reminders_enabled" boolean DEFAULT false NOT NULL,
     "sms_receipts_enabled" boolean DEFAULT false NOT NULL,
     CONSTRAINT "survey_reminder_frequency_days_check" CHECK ((("reminder_frequency_days" >= 1) AND ("reminder_frequency_days" <= 30))),
+    CONSTRAINT "survey_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['culture'::"text", 'pulse'::"text", '360'::"text", 'other'::"text"]))),
+    CONSTRAINT "survey_full_culture_assessment_check" CHECK (((NOT "is_full_culture_assessment") OR ("assessment_type" = 'culture'::"text"))),
     CONSTRAINT "survey_reminder_max_sends_check" CHECK ((("reminder_max_sends" >= 1) AND ("reminder_max_sends" <= 20))),
     CONSTRAINT "survey_reminder_timezone_check" CHECK ((("length"("btrim"("reminder_timezone")) >= 1) AND ("length"("btrim"("reminder_timezone")) <= 100))),
     CONSTRAINT "survey_schedule_dates_check" CHECK ((("live_start" IS NULL) OR ("live_end" IS NULL) OR ("live_end" > "live_start")))

@@ -2,6 +2,7 @@ import supabase from '@/lib/supabaseClient'
 
 import type {
   CreateSurveyInput,
+  SurveyAssessmentType,
   SurveyStoredStatus,
   UpdateSurveyInput,
 } from '../types'
@@ -33,6 +34,8 @@ export type SurveyMutationResult = {
   organisationId: string
   title: string
   description: string | null
+  assessmentType: SurveyAssessmentType
+  isFullCultureAssessment: boolean
   storedStatus: SurveyStoredStatus
   liveStart: string | null
   liveEnd: string | null

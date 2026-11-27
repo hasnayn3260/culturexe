@@ -90,6 +90,15 @@ function organisationInitials(survey: SurveyListItem): string {
     .toUpperCase() || '?'
 }
 
+function assessmentTypeLabel(survey: SurveyListItem): string {
+  if (survey.assessmentType === '360') return '360 assessment'
+  if (survey.assessmentType === 'pulse') return 'Pulse survey'
+  if (survey.assessmentType === 'other') return 'Other survey'
+  return survey.isFullCultureAssessment
+    ? 'Full culture assessment'
+    : 'Culture assessment'
+}
+
 function SurveyStatusBadge({
   status,
 }: {
@@ -318,8 +327,16 @@ export default function SurveyListTable({
                 className="group cursor-pointer border-b border-[#EDF1F5] text-[#526A88] transition-colors last:border-0 hover:bg-[#FAFBFD] focus-visible:bg-[#F3F9FA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1BBFB0]/40"
               >
                 <td className="px-4 py-3.5 align-middle">
-                  <div className="truncate font-semibold text-[#0D1F3C]">
-                    {survey.title}
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="truncate font-semibold text-[#0D1F3C]">
+                      {survey.title}
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 border-[#CBE5E2] bg-[#F1FAF9] text-[10px] font-bold text-[#087C72]"
+                    >
+                      {assessmentTypeLabel(survey)}
+                    </Badge>
                   </div>
                   <div className="mt-0.5 truncate text-xs text-[#8A9BB0]">
                     {survey.description || `${survey.questionCount} questions`}
