@@ -14,6 +14,7 @@ import { getEffectiveSurveyStatus } from '../../survey/utils/surveyStatus'
 import ProfilePage from '../../profile/pages/ProfilePage'
 import ClientSidebar from '../components/ClientSidebar'
 import ClientHomePage from './ClientHomePage'
+import ClientActiveSurveysPage from './ClientActiveSurveysPage'
 import '../../../portals/consultant.css'
 import {
   SURVEY_FILE_ACCEPT,
@@ -470,7 +471,7 @@ export default function ClientPortal() {
         }}
       >
         <ClientSidebar
-          screen={screen === 'profile' ? 'profile' : 'home'}
+          screen={screen === 'profile' ? 'profile' : screen === 'active-surveys' ? 'active-surveys' : 'home'}
           onScreenChange={(nextScreen) => setScreen(nextScreen)}
         />
         <SidebarInset className="consultant-main bg-[var(--bg)]">
@@ -478,7 +479,7 @@ export default function ClientPortal() {
             <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
               <div className="shrink-0 text-lg font-extrabold text-[#0D1F3C]">
-                {screen === 'profile' ? 'My Profile' : screen === 'survey' ? 'Survey' : screen === 'complete' ? 'Survey complete' : 'Home'}
+                {screen === 'profile' ? 'My Profile' : screen === 'active-surveys' ? 'Active Surveys' : screen === 'survey' ? 'Survey' : screen === 'complete' ? 'Survey complete' : 'Home'}
               </div>
               {availableSurveys.length > 0 && (
                 <div className="hidden min-w-0 border-l border-[#E8EFF5] pl-3 sm:block sm:w-[320px]">
@@ -528,6 +529,14 @@ export default function ClientPortal() {
         {screen === 'home' && (
           <ClientHomePage
             displayName={displayName}
+            surveys={availableSurveys}
+            onOpenSurvey={openSurvey}
+          />
+        )}
+
+        {/* ════════ ACTIVE SURVEYS ════════ */}
+        {screen === 'active-surveys' && (
+          <ClientActiveSurveysPage
             surveys={availableSurveys}
             onOpenSurvey={openSurvey}
           />

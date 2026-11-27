@@ -84,22 +84,18 @@ export default function OpenAssessmentEntry() {
   useEffect(() => {
     async function init() {
       if (!openToken) { setPhase('invalid'); return }
-      const { data, error: err } = await supabase
-        .from('survey')
-        .select('id, title, description, status, open_link_enabled, live_start, live_end')
-        .eq('open_link_token', openToken)
-        .eq('open_link_enabled', true)
-        .maybeSingle()
+      const { data: bundle, error: err } = await supabase.rpc(
+        'get_open_survey_bundle',
+        { p_open_token: openToken },
+      )
+      const data = bundle?.survey
 
       if (err || !data || !isSurveyAcceptingResponses(data)) { setPhase('invalid'); return }
       setSurvey(data)
 
       // Pull the exact same choice lists as the live "About You" questions,
       // so this intake form always matches the survey.
-      const { data: qs } = await supabase
-        .from('survey_questions')
-        .select('text, options')
-        .eq('survey_id', data.id)
+      const qs = Array.isArray(bundle.questions) ? bundle.questions : []
 
       if (qs?.length) {
         const deptQ   = qs.find(q => /department|division/i.test(q.text) && q.options?.choices?.length)

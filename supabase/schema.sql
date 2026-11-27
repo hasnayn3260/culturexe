@@ -164,7 +164,6 @@ CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
 DECLARE
   requested_role    text := COALESCE(NEW.raw_user_meta_data->>'role', 'client');
   safe_role         text;
-  current_survey_id uuid;
 BEGIN
   -- Never trust the role from user metadata (self-registrants control it).
   safe_role := CASE
@@ -185,29 +184,6 @@ BEGIN
     now()
   )
   ON CONFLICT (id) DO NOTHING;
-
-  -- Auto-enrol participants into the current survey (the oldest survey that
-  -- isn't closed — matches how the app picks the active survey). Skip silently
-  -- if no open survey exists yet; the backfill in Part 2 (re-run) will catch
-  -- them once a survey is live.
-  IF safe_role IN ('client', 'employee') THEN
-    SELECT id INTO current_survey_id
-    FROM public.survey
-    WHERE status <> 'closed'
-    ORDER BY created_at ASC
-    LIMIT 1;
-
-    IF current_survey_id IS NOT NULL THEN
-      INSERT INTO public.survey_respondents (survey_id, email, name, job_title)
-      VALUES (
-        current_survey_id,
-        NEW.email,
-        COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-        NULLIF(TRIM(NEW.raw_user_meta_data->>'job_title'), '')
-      )
-      ON CONFLICT (survey_id, email) DO NOTHING;  -- never clobber a manually-added respondent
-    END IF;
-  END IF;
 
   RETURN NEW;
 END;
@@ -1190,6 +1166,81 @@ ALTER TABLE ONLY "public"."survey_templates"
     ADD CONSTRAINT "survey_templates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organisations"("id") ON DELETE CASCADE;
 
 
+CREATE OR REPLACE FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select jsonb_build_object(
+    'respondent', to_jsonb(respondent),
+    'survey', to_jsonb(survey_record),
+    'questions', coalesce((
+      select jsonb_agg(to_jsonb(question) order by question.order_num)
+      from public.survey_questions as question
+      where question.survey_id = survey_record.id
+    ), '[]'::jsonb)
+  )
+  from public.survey_respondents as respondent
+  join public.survey as survey_record on survey_record.id = respondent.survey_id
+  where respondent.token = p_token
+  limit 1;
+$$;
+
+
+CREATE OR REPLACE FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select jsonb_build_object(
+    'survey', to_jsonb(survey_record),
+    'questions', coalesce((
+      select jsonb_agg(to_jsonb(question) order by question.order_num)
+      from public.survey_questions as question
+      where question.survey_id = survey_record.id
+    ), '[]'::jsonb)
+  )
+  from public.survey as survey_record
+  where survey_record.open_link_token = p_open_token
+    and survey_record.open_link_enabled
+  limit 1;
+$$;
+
+
+CREATE OR REPLACE FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  respondent public.survey_respondents%rowtype;
+  saved_response public.survey_responses%rowtype;
+  survey_record public.survey%rowtype;
+  submitted_time timestamptz := now();
+begin
+  select * into respondent from public.survey_respondents where token = p_token;
+  if not found then raise exception 'This survey invitation is invalid.'; end if;
+  if respondent.used or respondent.submitted_at is not null then
+    raise exception 'This survey has already been submitted.';
+  end if;
+  if not public.survey_accepting_responses(respondent.survey_id, respondent.id) then
+    raise exception 'This survey is not currently accepting responses.';
+  end if;
+  select * into survey_record from public.survey where id = respondent.survey_id;
+  insert into public.survey_responses (survey_id, respondent_id, answers, submitted_at)
+  values (respondent.survey_id, respondent.id, coalesce(p_answers, '{}'::jsonb), submitted_time)
+  returning * into saved_response;
+  update public.survey_respondents
+  set response_timing = case
+    when survey_record.live_end is not null and submitted_time > survey_record.live_end then 'late'
+    when survey_record.live_start is not null and survey_record.live_end is not null
+      and submitted_time < survey_record.live_start + ((survey_record.live_end - survey_record.live_start) / 2)
+      then 'early'
+    else 'on_time'
+  end
+  where id = respondent.id;
+  return to_jsonb(saved_response);
+end;
+$$;
+
+
 
 ALTER TABLE "public"."organisations" ENABLE ROW LEVEL SECURITY;
 
@@ -1225,23 +1276,16 @@ CREATE POLICY "sq_admin_write" ON "public"."survey_questions" TO "authenticated"
 
 
 
-CREATE POLICY "sq_read_all" ON "public"."survey_questions" FOR SELECT USING (true);
+CREATE POLICY "sq_staff_read" ON "public"."survey_questions" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
+
+
+CREATE POLICY "sq_assigned_read" ON "public"."survey_questions" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."survey_respondents" "assignment"
+  WHERE (("assignment"."survey_id" = "survey_questions"."survey_id") AND (("assignment"."user_id" = "auth"."uid"()) OR (lower("assignment"."email") = lower("auth"."email"())))))));
 
 
 
 CREATE POLICY "sr_admin_all" ON "public"."survey_respondents" TO "authenticated" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "sr_anon_token_select" ON "public"."survey_respondents" FOR SELECT TO "anon" USING (true);
-
-
-
-CREATE POLICY "sr_anon_token_update" ON "public"."survey_respondents" FOR UPDATE TO "anon" USING (true) WITH CHECK (true);
-
-
-
-CREATE POLICY "sr_own_insert" ON "public"."survey_respondents" FOR INSERT TO "authenticated" WITH CHECK (("auth"."uid"() IS NOT NULL));
 
 
 
@@ -1254,10 +1298,6 @@ CREATE POLICY "sr_own_update" ON "public"."survey_respondents" FOR UPDATE TO "au
 
 
 CREATE POLICY "sresp_admin_all" ON "public"."survey_responses" TO "authenticated" USING ("public"."is_admin"()) WITH CHECK ("public"."is_admin"());
-
-
-
-CREATE POLICY "sresp_anon_insert" ON "public"."survey_responses" FOR INSERT TO "anon" WITH CHECK ("public"."survey_accepting_responses"("survey_id", "respondent_id"));
 
 
 
@@ -1298,7 +1338,12 @@ CREATE POLICY "survey_admin_write" ON "public"."survey" TO "authenticated" USING
 ALTER TABLE "public"."survey_questions" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "survey_read_all" ON "public"."survey" FOR SELECT USING (true);
+CREATE POLICY "survey_staff_read" ON "public"."survey" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
+
+
+CREATE POLICY "survey_assigned_read" ON "public"."survey" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+   FROM "public"."survey_respondents" "assignment"
+  WHERE (("assignment"."survey_id" = "survey"."id") AND (("assignment"."user_id" = "auth"."uid"()) OR (lower("assignment"."email") = lower("auth"."email"())))))));
 
 
 
@@ -1345,6 +1390,21 @@ GRANT ALL ON FUNCTION "public"."finalize_respondent_on_response"() TO "service_r
 GRANT ALL ON FUNCTION "public"."get_email_by_username"("p_username" "text") TO "anon";
 GRANT ALL ON FUNCTION "public"."get_email_by_username"("p_username" "text") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_email_by_username"("p_username" "text") TO "service_role";
+
+
+REVOKE ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "anon";
+GRANT EXECUTE ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "authenticated";
+
+
+REVOKE ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "anon";
+GRANT EXECUTE ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "authenticated";
+
+
+REVOKE ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "anon";
+GRANT EXECUTE ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "authenticated";
 
 
 

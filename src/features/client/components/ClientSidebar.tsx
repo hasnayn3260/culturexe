@@ -3,7 +3,7 @@ import ConsultantSidebar, {
 } from '@/features/navigation/components/ConsultantSidebar'
 import CultureXeMark from '@/features/navigation/components/CultureXeMark'
 
-export type ClientScreen = 'home' | 'profile'
+export type ClientScreen = 'home' | 'active-surveys' | 'profile'
 
 type ClientSidebarProps = {
   screen: ClientScreen
@@ -16,7 +16,11 @@ export default function ClientSidebar({ screen, onScreenChange }: ClientSidebarP
       variant="client"
       screen={screen}
       onScreenChange={(nextScreen: ConsultantScreen) => {
-        if (nextScreen === 'home' || nextScreen === 'profile') onScreenChange(nextScreen)
+        if (
+          nextScreen === 'home' ||
+          nextScreen === 'active-surveys' ||
+          nextScreen === 'profile'
+        ) onScreenChange(nextScreen)
       }}
       logo={<span className="fluid-breathe"><CultureXeMark size={38} id="client-sidebar-logo" /></span>}
     />

@@ -44,6 +44,7 @@ import { useAuth } from '@/hooks/useAuth'
 
 export type ConsultantScreen =
   | 'home'
+  | 'active-surveys'
   | 'dashboard'
   | 'survey'
   | 'survey-templates'
@@ -112,6 +113,7 @@ const CLIENT_NAVIGATION_GROUPS = [
     icon: Blocks,
     items: [
       { key: 'home', label: 'Home', icon: LayoutDashboard },
+      { key: 'active-surveys', label: 'Active Surveys', icon: ClipboardList },
     ],
   },
 ] as const

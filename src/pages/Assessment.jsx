@@ -12,16 +12,6 @@ import {
 const SCALE = [1, 2, 3, 4, 5]
 const SCALE_LABELS = { 1: 'Strongly Disagree', 2: 'Disagree', 3: 'Neutral', 4: 'Agree', 5: 'Strongly Agree' }
 
-function calcTiming(submittedAt, liveStart, liveEnd) {
-  const sub = new Date(submittedAt).getTime()
-  if (liveEnd && sub > new Date(liveEnd).getTime()) return 'late'
-  if (liveStart && liveEnd) {
-    const mid = new Date(liveStart).getTime() + (new Date(liveEnd).getTime() - new Date(liveStart).getTime()) / 2
-    return sub < mid ? 'early' : 'on_time'
-  }
-  return 'on_time'
-}
-
 // Find the "About You" style questions that duplicate what the open-link
 // intake form already captured (department, tenure, job grade), so they can
 // be pre-filled and hidden rather than asked twice.
@@ -454,16 +444,15 @@ export default function Assessment({ previewMode = false }) {
 
       if (!token) { setPhase('invalid'); return }
       try {
-        const { data: respondentData, error: rErr } = await supabase
-          .from('survey_respondents')
-          .select('*, survey(*)')
-          .eq('token', token)
-          .maybeSingle()
+        const { data: bundle, error: rErr } = await supabase.rpc(
+          'get_survey_assignment_bundle',
+          { p_token: token },
+        )
 
         if (rErr) throw rErr
-        if (!respondentData) { setPhase('invalid'); return }
+        if (!bundle?.respondent || !bundle?.survey) { setPhase('invalid'); return }
 
-        let resp = respondentData
+        let resp = { ...bundle.respondent, survey: bundle.survey }
         const { data: accessRows } = await supabase.rpc('record_survey_access', {
           p_token: resp.token,
           p_access_id: accessIdRef.current,
@@ -478,13 +467,7 @@ export default function Assessment({ previewMode = false }) {
         setRespondent(resp)
         setSurvey(sv)
 
-        const { data: qs, error: qErr } = await supabase
-          .from('survey_questions')
-          .select('*')
-          .eq('survey_id', sv.id)
-          .order('order_num')
-
-        if (qErr) throw qErr
+        const qs = Array.isArray(bundle.questions) ? bundle.questions : []
         setQuestions(qs || [])
 
         const restoredDraft = resp.draft_answers && typeof resp.draft_answers === 'object'
@@ -636,26 +619,11 @@ export default function Assessment({ previewMode = false }) {
       if (!isSurveyAcceptingResponses(survey)) {
         throw new Error('This survey is closed and is no longer accepting responses.')
       }
-      const now = new Date().toISOString()
-      const timing = calcTiming(now, survey?.live_start, survey?.live_end)
-
-      await supabase.from('survey_responses').insert({
-        survey_id:     respondent.survey_id,
-        respondent_id: respondent.id,
-        answers,
-        submitted_at:  now,
+      const { error } = await supabase.rpc('submit_survey_response', {
+        p_token: respondent.token,
+        p_answers: answers,
       })
-
-      await supabase
-        .from('survey_respondents')
-        .update({
-          used: true,
-          submitted_at: now,
-          response_timing: timing,
-          draft_answers: null,
-          draft_saved_at: null,
-        })
-        .eq('id', respondent.id)
+      if (error) throw error
 
       setPhase('complete')
     } catch (e) {
