@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import supabase from '../lib/supabaseClient'
-import { isSurveyAcceptingResponses } from '../features/survey/utils/surveyStatus'
-import { createSurveyAccessId } from '../features/survey/utils/surveyAccess'
+import supabase from '../../../lib/supabaseClient'
+import { isSurveyAcceptingResponses } from '../../survey/utils/surveyStatus'
+import { createSurveyAccessId } from '../../survey/utils/surveyAccess'
 
 function calcTiming(submittedAt, liveStart, liveEnd) {
   const sub = new Date(submittedAt).getTime()
@@ -13,7 +13,7 @@ function calcTiming(submittedAt, liveStart, liveEnd) {
   return 'on_time'
 }
 
-export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId) {
+export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId, trackAccess = true) {
   const accessIdRef = useRef(createSurveyAccessId())
   const [survey,           setSurvey]           = useState(null)
   const [questions,        setQuestions]        = useState([])
@@ -121,7 +121,7 @@ export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId) {
         resp = linkedRespondent
       }
 
-      if (resp?.token) {
+      if (trackAccess && resp?.token) {
         const { data: accessRows, error: accessError } = await supabase.rpc(
           'record_survey_access',
           {
@@ -142,7 +142,7 @@ export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId) {
     } finally {
       setLoading(false)
     }
-  }, [userEmail, userId, orgId, selectedSurveyId])
+  }, [userEmail, userId, orgId, selectedSurveyId, trackAccess])
 
   useEffect(() => { load() }, [load])
 

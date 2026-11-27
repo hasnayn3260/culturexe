@@ -13,11 +13,14 @@ import {
   surveyFileName,
 } from '../features/survey/services/surveyFilesClient'
 import ConsultantSidebar from '../features/navigation/components/ConsultantSidebar'
+import CultureXeMark from '../features/navigation/components/CultureXeMark'
 import OrganisationsPage from '../features/organisations/pages/OrganisationsPage'
 import SurveyManagementPage from '../features/survey/pages/SurveyManagementPage'
 import SurveyTemplatesPage from '../features/survey-templates/pages/SurveyTemplatesPage'
 import SurveyUsersTable, { sortSurveyUsers } from '../features/survey/components/SurveyUsersTable'
 import UsersPage from '../features/users/pages/UsersPage'
+import ProfilePage from '../features/profile/pages/ProfilePage'
+import SettingsPage from '../features/profile/pages/SettingsPage'
 import PercentageBar from '../features/analytics/components/PercentageBar'
 import ScoreBar from '../features/analytics/components/ScoreBar'
 import AnalysisScopeFilter from '../features/analytics/components/AnalysisScopeFilter'
@@ -34,26 +37,6 @@ import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import './consultant.css'
 
 // ── Helpers ────────────────────────────────────────────────
-
-function FluidSVG({ size = 38, id = 'cf' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
-      <defs>
-        <radialGradient id={`${id}-a`} cx="30%" cy="35%" r="65%">
-          <stop offset="0%" stopColor="#C9E8A0" /><stop offset="40%" stopColor="#5BBFB0" /><stop offset="100%" stopColor="#1A6BAA" />
-        </radialGradient>
-        <radialGradient id={`${id}-b`} cx="70%" cy="65%" r="65%">
-          <stop offset="0%" stopColor="#E8D890" /><stop offset="40%" stopColor="#5AB0D0" /><stop offset="100%" stopColor="#1BBFB0" />
-        </radialGradient>
-      </defs>
-      <path d="M50 50 C50 50 20 35 18 20 C16 5 30 2 40 10 C50 18 50 50 50 50Z" fill={`url(#${id}-a)`} opacity="0.92" />
-      <path d="M50 50 C50 50 15 55 12 70 C9 85 22 92 35 85 C48 78 50 50 50 50Z" fill={`url(#${id}-a)`} opacity="0.75" />
-      <path d="M50 50 C50 50 80 35 82 20 C84 5 70 2 60 10 C50 18 50 50 50 50Z" fill={`url(#${id}-b)`} opacity="0.88" />
-      <path d="M50 50 C50 50 85 55 88 70 C91 85 78 92 65 85 C52 78 50 50 50 50Z" fill={`url(#${id}-b)`} opacity="0.72" />
-      <circle cx="50" cy="50" r="7" fill="white" opacity="0.36" />
-    </svg>
-  )
-}
 
 function calcTiming(submittedAt, liveStart, liveEnd) {
   if (!submittedAt) return null
@@ -868,7 +851,7 @@ function QuestionAnalyticsCard({ q, responses }) {
 export default function ConsultantPortal() {
   const { profile, role } = useAuth()
   const { organisationScope, setOrganisationScope } = useOrganisationScope()
-  const { users, createUser, deactivateUser, organisations, loading: usersLoading } = useAdminData()
+  const { users, organisations, loading: usersLoading } = useAdminData()
   const {
     survey, surveys, questions, respondents: rawRespondents, responses: rawResponses, loading, refetch,
     updateSurvey, addQuestion, updateQuestion, deleteQuestion, deleteAllQuestions, moveQuestion,
@@ -889,6 +872,17 @@ export default function ConsultantPortal() {
     direction: 'asc',
   })
   const isSuperAdmin = role === 'superadmin' || role === 'super_admin'
+
+  function changeScreen(nextScreen) {
+    setScreen(nextScreen)
+    if (nextScreen !== 'survey') {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('surveyId')
+      url.searchParams.delete('surveyTab')
+      window.history.replaceState(window.history.state, '', url)
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+  }
 
   useEffect(() => {
     if (
@@ -934,10 +928,6 @@ export default function ConsultantPortal() {
   const [analysisGroupField, setAnalysisGroupField] = useState('')
   const [analysisGroupValue, setAnalysisGroupValue] = useState('')
 
-  // Settings
-  const [showAddUser, setShowAddUser] = useState(false)
-  const [newUser, setNewUser]         = useState({ full_name: '', email: '', password: '', role: 'consultant', org_id: '' })
-  const [savingUser, setSavingUser]   = useState(false)
 
   useEffect(() => {
     if (survey) {
@@ -1312,11 +1302,24 @@ export default function ConsultantPortal() {
 
   const sortedSurveyUserRows = sortSurveyUsers(surveyUserRows, surveyUserSort)
   const selectedOrganisation = organisations.find(({ id }) => id === organisationScope)
+  const profileOrganisation = organisations.find(({ id }) => id === profile?.org_id)
+  const profileManagerOptions = users
+    .filter(user =>
+      user.id !== profile?.id &&
+      user.org_id === profile?.org_id &&
+      user.active !== false &&
+      ['Manager', 'Senior Manager'].includes(user.position),
+    )
+    .map(user => ({
+      id: user.id,
+      label: `${user.full_name || user.email || 'Manager'}${user.position ? ` — ${user.position}` : ''}`,
+    }))
+    .sort((first, second) => first.label.localeCompare(second.label))
   const organisationContext = organisationScope === ALL_ORGANISATIONS
     ? 'All organisations'
     : selectedOrganisation?.name || 'Selected organisation'
   const surveyContext = survey?.title || 'No survey selected'
-  const dashboardExportFilename = `${organisationContext}-${surveyContext}-users`
+  const dashboardExportFilename = `${organisationContext}-${surveyContext}-dashboard`
     .replace(/[^a-z0-9]+/gi, '-')
     .replace(/^-|-$/g, '')
 
@@ -1379,6 +1382,63 @@ export default function ConsultantPortal() {
       Timing:           exportedTiming(row.timing),
       'Submitted At':   row.submittedAt ? new Date(row.submittedAt).toLocaleString('en-ZA') : '',
     }))
+  }
+
+  function buildDashboardSummaryRows() {
+    return [
+      { Metric: 'Organisation', Value: organisationContext },
+      { Metric: 'Survey', Value: surveyContext },
+      { Metric: 'Registered', Value: totalRegistered },
+      { Metric: 'Completed survey', Value: totalCompleted },
+      { Metric: 'Started — not done', Value: totalInProgress },
+      { Metric: 'Incomplete accesses', Value: totalIncompleteAccesses },
+      { Metric: 'Repeat accesses', Value: totalRepeatAccesses },
+      { Metric: 'Participation', Value: `${completionPct}%` },
+      { Metric: 'Questions', Value: questions.length },
+      { Metric: 'Likert average', Value: overallMetrics ? `${overallMetrics.average.toFixed(2)} / 5` : '' },
+      { Metric: 'Overall score', Value: overallScore != null ? `${overallScore}%` : '' },
+    ]
+  }
+
+  function buildDashboardTimingRows() {
+    return [
+      { Timing: 'Early', Responses: timingCounts.early || 0 },
+      { Timing: 'On time', Responses: timingCounts.on_time || 0 },
+      { Timing: 'Late', Responses: timingCounts.late || 0 },
+    ].map(row => ({
+      ...row,
+      Percentage: totalResponded > 0
+        ? `${Math.round((row.Responses / totalResponded) * 100)}%`
+        : '0%',
+    }))
+  }
+
+  function buildDashboardDimensionRows() {
+    return dimensionScores.map(({ dim, score, average, questionCount }) => ({
+      Dimension: dim,
+      Questions: questionCount,
+      Average: average != null ? average.toFixed(2) : '',
+      'Calculated Score': score != null ? `${score}%` : '',
+    }))
+  }
+
+  function calculatedDashboardSheets() {
+    return [
+      { name: 'Dashboard Summary', rows: buildDashboardSummaryRows() },
+      { name: 'Response Timing', rows: buildDashboardTimingRows() },
+      { name: 'Dimension Scores', rows: buildDashboardDimensionRows() },
+    ]
+  }
+
+  async function exportCalculatedDashboardWorkbook(filename) {
+    await downloadWorkbook(calculatedDashboardSheets(), filename)
+  }
+
+  async function exportDashboardWorkbook(filename) {
+    await downloadWorkbook([
+      ...calculatedDashboardSheets(),
+      { name: 'Raw Users and Accesses', rows: buildDashboardRows() },
+    ], filename)
   }
 
   const analyticsExportResponses = analyticsScopeResponses
@@ -1654,24 +1714,51 @@ export default function ConsultantPortal() {
     doc.setTextColor(0)
   }
 
-  function buildDashboardPdf(doc, autoTable) {
-    pdfHeader(doc, `Users — ${organisationContext} — ${surveyContext}`)
+  function drawDashboardPdf(doc, autoTable, includeRawUsers) {
+    pdfHeader(doc, `Dashboard — ${organisationContext} — ${surveyContext}`)
     autoTable(doc, {
       startY: 33,
-      head: [[
-        'Registered', 'Total Accesses', 'Incomplete Accesses', 'Completed-user Accesses',
-        'Unique Users', 'Repeat Accesses', 'Started — Not Done', 'Completed', 'Participation',
-      ]],
-      body: [[
-        String(totalRegistered), String(totalSurveyAccesses), String(totalIncompleteAccesses),
-        String(totalCompletedAccesses), String(totalUniqueAccesses), String(totalRepeatAccesses),
-        String(totalInProgress), String(totalCompleted), `${completionPct}%`,
-      ]],
-      theme: 'grid', headStyles: { fillColor: NAVY }, styles: { halign: 'center', fontSize: 7.5 },
+      head: [['Metric', 'Value']],
+      body: buildDashboardSummaryRows().map(row => [row.Metric, row.Value]),
+      theme: 'grid',
+      headStyles: { fillColor: NAVY },
+      styles: { fontSize: 8, cellPadding: 1.5 },
     })
-    const rows = buildDashboardRows()
+
+    const timingRows = buildDashboardTimingRows()
     autoTable(doc, {
       startY: doc.lastAutoTable.finalY + 8,
+      head: [['Response timing', 'Responses', 'Percentage']],
+      body: timingRows.map(row => [row.Timing, row.Responses, row.Percentage]),
+      styles: { fontSize: 8, cellPadding: 1.5 },
+      headStyles: { fillColor: NAVY },
+      didDrawPage: () => pdfHeaderRepeat(doc),
+    })
+
+    const dimensionRows = buildDashboardDimensionRows()
+    if (dimensionRows.length) {
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 8,
+        head: [['Dimension', 'Questions', 'Average', 'Calculated Score']],
+        body: dimensionRows.map(row => [
+          row.Dimension,
+          row.Questions,
+          row.Average,
+          row['Calculated Score'],
+        ]),
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: NAVY },
+        didDrawPage: () => pdfHeaderRepeat(doc),
+      })
+    }
+
+    if (!includeRawUsers) return
+    const rows = buildDashboardRows()
+    if (!rows.length) return
+    doc.addPage()
+    pdfHeader(doc, `Raw users and accesses — ${organisationContext} — ${surveyContext}`)
+    autoTable(doc, {
+      startY: 33,
       head: [[
         'Organisation', 'Survey', 'First Name', 'Surname', 'Email', 'Source',
         'Department', 'Position', 'Status', 'Accesses', 'Repeats', 'Access Outcome', 'First Accessed',
@@ -1703,6 +1790,14 @@ export default function ConsultantPortal() {
       headStyles: { fillColor: NAVY },
       didDrawPage: () => pdfHeaderRepeat(doc),
     })
+  }
+
+  function buildCalculatedDashboardPdf(doc, autoTable) {
+    drawDashboardPdf(doc, autoTable, false)
+  }
+
+  function buildDashboardPdf(doc, autoTable) {
+    drawDashboardPdf(doc, autoTable, true)
   }
 
   function drawAnalyticsPdf(doc, autoTable, includeRawResponses) {
@@ -1817,6 +1912,53 @@ export default function ConsultantPortal() {
   function buildAnalyticsPdf(doc, autoTable) {
     drawAnalyticsPdf(doc, autoTable, true)
   }
+
+  const dashboardExportOptions = [
+    {
+      k: 'dashboard-raw-excel',
+      group: 'Raw data',
+      label: 'Excel workbook (.xlsx)',
+      action: async baseFilename => {
+        const rows = buildDashboardRows()
+        if (!rows.length) return alert('There are no dashboard user records to export.')
+        await downloadXLSX(rows, `${baseFilename}-raw.xlsx`)
+      },
+    },
+    {
+      k: 'dashboard-raw-csv',
+      group: 'Raw data',
+      label: 'CSV file (.csv)',
+      action: async baseFilename => {
+        const rows = buildDashboardRows()
+        if (!rows.length) return alert('There are no dashboard user records to export.')
+        downloadBlob(`${baseFilename}-raw.csv`, '\ufeff' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
+      },
+    },
+    {
+      k: 'dashboard-calculated-excel',
+      group: 'Calculated dashboard',
+      label: 'Excel workbook (.xlsx)',
+      action: baseFilename => exportCalculatedDashboardWorkbook(`${baseFilename}-calculated.xlsx`),
+    },
+    {
+      k: 'dashboard-calculated-pdf',
+      group: 'Calculated dashboard',
+      label: 'PDF report (.pdf)',
+      action: baseFilename => exportToPDF(buildCalculatedDashboardPdf, `${baseFilename}-calculated.pdf`, 'landscape'),
+    },
+    {
+      k: 'dashboard-complete-excel',
+      group: 'Complete report',
+      label: 'Excel workbook (.xlsx)',
+      action: baseFilename => exportDashboardWorkbook(`${baseFilename}-complete.xlsx`),
+    },
+    {
+      k: 'dashboard-complete-pdf',
+      group: 'Complete report',
+      label: 'PDF report (.pdf)',
+      action: baseFilename => exportToPDF(buildDashboardPdf, `${baseFilename}-complete.pdf`, 'landscape'),
+    },
+  ]
 
   const analyticsExportOptions = [
     {
@@ -1993,17 +2135,6 @@ export default function ConsultantPortal() {
     finally { setReminderSending(false) }
   }
 
-  async function handleCreateUser() {
-    if (!newUser.full_name.trim() || !newUser.email.trim() || !newUser.password.trim()) return
-    setSavingUser(true)
-    try {
-      await createUser(newUser)
-      setShowAddUser(false)
-      setNewUser({ full_name: '', email: '', password: '', role: 'consultant', org_id: '' })
-    } catch (e) { alert('Error: ' + e.message) }
-    finally { setSavingUser(false) }
-  }
-
   // ── Render ────────────────────────────────────────────────
 
   if (loading) {
@@ -2033,8 +2164,8 @@ export default function ConsultantPortal() {
       >
         <ConsultantSidebar
           screen={screen}
-          onScreenChange={setScreen}
-          logo={<span className="fluid-breathe"><FluidSVG size={38} id="cp-logo" /></span>}
+          onScreenChange={changeScreen}
+          logo={<span className="fluid-breathe"><CultureXeMark size={38} id="cp-logo" /></span>}
         />
 
         {/* ── MAIN ────────────────────────────── */}
@@ -2042,9 +2173,9 @@ export default function ConsultantPortal() {
         <div className="consultant-topbar">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
-            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Surveys', 'survey-templates': 'Survey Templates', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', settings: 'Settings' }[screen]}</div>
+            <div className="page-title">{{ dashboard: 'Dashboard', survey: 'Surveys', 'survey-templates': 'Survey Templates', analytics: 'Analytics', organisations: 'Organisations', clients: 'Clients', profile: 'My Profile', settings: 'Settings' }[screen]}</div>
           </div>
-          <div className="topbar-right">
+          {!['profile', 'settings'].includes(screen) && <div className="topbar-right">
             <label className="sr-only" htmlFor="global-organisation-scope">
               Filter dashboard and analytics by organisation
             </label>
@@ -2067,7 +2198,7 @@ export default function ConsultantPortal() {
                 {isLive ? '● Live' : isClosed ? '✓ Closed' : isScheduled ? '◷ Scheduled' : '◷ Draft'}
               </span>
             )}
-          </div>
+          </div>}
         </div>
 
         <div className={`consultant-content ${screen === 'clients' || screen === 'organisations' || screen === 'survey' || screen === 'survey-templates' ? '!p-0' : ''}`}>
@@ -2084,7 +2215,7 @@ export default function ConsultantPortal() {
                       ? `${survey.title} · ${isLive ? 'Survey is live' : isClosed ? 'Survey closed' : isScheduled ? 'Survey scheduled' : 'Draft — not yet live'}`
                       : 'No survey found for this organisation.'}
                 </div>
-                <div className="hero-fluid-pos fluid-spin"><FluidSVG size={88} id="dash-hero" /></div>
+                <div className="hero-fluid-pos fluid-spin"><CultureXeMark size={88} id="dash-hero" /></div>
               </div>
 
               <Tabs value={dashboardTab} onValueChange={setDashboardTab} className="mb-6">
@@ -2100,6 +2231,12 @@ export default function ConsultantPortal() {
 
               {dashboardTab === 'overview' && (
                 <>
+              <div className="export-toolbar" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                <ExportMenu
+                  filename={dashboardExportFilename || 'survey-dashboard'}
+                  options={dashboardExportOptions}
+                />
+              </div>
               <div className="card mb-24" style={{ padding: 14 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}>
                   {[
@@ -2131,10 +2268,7 @@ export default function ConsultantPortal() {
                   { label: 'Registered',          value: totalRegistered,  sub: 'Accounts created on the website',  color: '#1A6BAA' },
                   { label: 'Completed Survey',    value: totalCompleted,   sub: 'Fully submitted',                  color: '#0A8A7E' },
                   { label: 'Started — Not Done',  value: totalInProgress,  sub: 'Opened the survey, not submitted', color: '#C9B882' },
-                  { label: 'Total Accesses',      value: totalSurveyAccesses, sub: 'Every recorded survey click or open', color: '#2479AF' },
                   { label: 'Incomplete Accesses', value: totalIncompleteAccesses, sub: 'Clicks by users who have not submitted', color: '#C0644B' },
-                  { label: 'Completed-user Accesses', value: totalCompletedAccesses, sub: 'Clicks by users who submitted', color: '#0A8A7E' },
-                  { label: 'Unique Users Accessed', value: totalUniqueAccesses, sub: 'People who opened the survey link', color: '#2479AF' },
                   { label: 'Repeat Accesses',     value: totalRepeatAccesses, sub: 'Additional survey-link visits', color: '#7B5AA6' },
                 ].map(c => (
                   <div className="stat-card" key={c.label}>
@@ -2251,7 +2385,7 @@ export default function ConsultantPortal() {
                       </div>
                     </div>
                     <ExportMenu
-                      filename={dashboardExportFilename || 'survey-users'}
+                      filename={`${dashboardExportFilename || 'survey-dashboard'}-users`}
                       getRows={buildDashboardRows}
                       buildPdf={buildDashboardPdf}
                       pdfOrientation="landscape"
@@ -2689,66 +2823,16 @@ export default function ConsultantPortal() {
           {/* ════════ CLIENTS / USER MANAGEMENT ════════ */}
           {screen === 'clients' && <UsersPage />}
 
-          {/* ════════ SETTINGS ════════ */}
-          {screen === 'settings' && (
-            <div>
-              <div className="page-hero">
-                <div className="hero-title">Settings</div>
-                <div className="hero-sub">Manage platform users.</div>
-              </div>
-              <div className="card">
-                <div className="flex-between mb-16">
-                  <div><div className="section-title">User Management</div><div className="section-sub">All platform users — consultants, admins, and clients.</div></div>
-                  <button className="btn btn-teal btn-sm" onClick={() => setShowAddUser(true)}>+ Add User</button>
-                </div>
-                <table>
-                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {usersLoading ? (
-                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--text3)' }}>Loading…</td></tr>
-                    ) : users.map(u => (
-                      <tr key={u.id}>
-                        <td style={{ fontWeight: 600 }}>{u.full_name || '—'}</td>
-                        <td style={{ color: 'var(--text2)' }}>{u.email}</td>
-                        <td><span className="badge badge-slate">{u.role}</span></td>
-                        <td>{u.active !== false ? <span className="tag tag-active">● Active</span> : <span className="tag tag-pending">○ Inactive</span>}</td>
-                        <td>{u.active !== false && <button className="btn btn-outline btn-sm" style={{ fontSize: 11 }} onClick={() => { if (window.confirm(`Deactivate ${u.full_name}?`)) deactivateUser(u.id) }}>Deactivate</button>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {showAddUser && (
-                <div className="modal-overlay" onClick={() => setShowAddUser(false)}>
-                  <div className="modal" onClick={e => e.stopPropagation()}>
-                    <div className="modal-title">Add New User</div>
-                    <div className="modal-sub">Create a new platform user account.</div>
-                    <div className="form-group"><label className="form-label">Full Name</label><input className="form-input" type="text" placeholder="e.g. Sipho Nkosi" value={newUser.full_name} onChange={e => setNewUser(p => ({ ...p, full_name: e.target.value }))} /></div>
-                    <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="user@company.com" value={newUser.email} onChange={e => setNewUser(p => ({ ...p, email: e.target.value }))} /></div>
-                    <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder="Temporary password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} /></div>
-                    <div className="form-row">
-                      <div className="form-group"><label className="form-label">Role</label>
-                        <select className="form-input" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value }))}>
-                          <option value="consultant">Consultant</option><option value="superadmin">Super Admin</option><option value="client">Client</option>
-                        </select>
-                      </div>
-                      <div className="form-group"><label className="form-label">Organisation</label>
-                        <select className="form-input" value={newUser.org_id} onChange={e => setNewUser(p => ({ ...p, org_id: e.target.value }))}>
-                          <option value="">No organisation</option>
-                          {organisations.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
-                      <button className="btn btn-outline" onClick={() => setShowAddUser(false)}>Cancel</button>
-                      <button className="btn btn-teal" onClick={handleCreateUser} disabled={savingUser}>{savingUser ? 'Creating…' : 'Create User'}</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* ════════ PERSONAL PROFILE ════════ */}
+          {screen === 'profile' && (
+            <ProfilePage
+              organisationName={profileOrganisation?.name}
+              managerOptions={profileManagerOptions}
+            />
           )}
+
+          {/* ════════ SECURITY SETTINGS ════════ */}
+          {screen === 'settings' && <SettingsPage />}
 
         </div>
         </SidebarInset>

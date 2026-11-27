@@ -40,33 +40,32 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
-import ProfileDetailsTab, {
-  type ProfileDetails,
-  type ProfileDetailsUpdate,
-} from '@/features/profile/components/ProfileDetailsTab'
-import ProfileDialog from '@/features/profile/components/ProfileDialog'
-import SecurityTab from '@/features/profile/components/SecurityTab'
 import { useAuth } from '@/hooks/useAuth'
 
 export type ConsultantScreen =
+  | 'home'
   | 'dashboard'
   | 'survey'
   | 'survey-templates'
   | 'analytics'
   | 'organisations'
   | 'clients'
+  | 'profile'
   | 'settings'
 
 type ConsultantSidebarProps = {
   screen: ConsultantScreen
   onScreenChange: (screen: ConsultantScreen) => void
   logo: ReactNode
+  variant?: 'consultant' | 'client'
 }
 
 type ConsultantAuth = {
-  profile: (ProfileDetails & { role?: string | null }) | null
+  profile: {
+    full_name?: string | null
+    email?: string | null
+  } | null
   role: string | null
-  updateProfile: (updates: ProfileDetailsUpdate) => Promise<unknown>
   signOut: () => Promise<void>
 }
 
@@ -106,6 +105,17 @@ const NAVIGATION_GROUPS = [
   },
 ] as const
 
+const CLIENT_NAVIGATION_GROUPS = [
+  {
+    key: 'client-portal',
+    label: 'Client Portal',
+    icon: Blocks,
+    items: [
+      { key: 'home', label: 'Home', icon: LayoutDashboard },
+    ],
+  },
+] as const
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: 'Super Admin',
   super_admin: 'Super Admin',
@@ -131,14 +141,15 @@ export default function ConsultantSidebar({
   screen,
   onScreenChange,
   logo,
+  variant = 'consultant',
 }: ConsultantSidebarProps) {
   const { isMobile, state } = useSidebar()
   const auth = useAuth() as unknown as ConsultantAuth
-  const [profileOpen, setProfileOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'consultant-dashboard': true,
     'survey-management': true,
     configuration: true,
+    'client-portal': true,
   })
 
   const fullName = auth.profile?.full_name || 'CultureXe User'
@@ -146,6 +157,7 @@ export default function ConsultantSidebar({
   const roleLabel = auth.role ? ROLE_LABELS[auth.role] || auth.role : ''
   const isSuperAdmin = auth.role === 'superadmin' || auth.role === 'super_admin'
   const isCollapsed = state === 'collapsed' && !isMobile
+  const navigationGroups = variant === 'client' ? CLIENT_NAVIGATION_GROUPS : NAVIGATION_GROUPS
 
   return (
     <>
@@ -172,9 +184,13 @@ export default function ConsultantSidebar({
           </div>
         </SidebarHeader>
 
-        <SidebarContent className={isCollapsed ? 'gap-1 py-3' : 'gap-1 py-4'}>
-          {NAVIGATION_GROUPS.filter(
-            (group) => group.key !== 'configuration' || isSuperAdmin,
+        <SidebarContent
+          className={isCollapsed
+            ? 'w-(--sidebar-width-icon)! min-w-(--sidebar-width-icon)! max-w-(--sidebar-width-icon)! gap-1 py-3'
+            : 'w-(--sidebar-width)! min-w-(--sidebar-width)! max-w-(--sidebar-width)! gap-1 py-4'}
+        >
+          {navigationGroups.filter(
+            (group) => variant === 'client' || group.key !== 'configuration' || isSuperAdmin,
           ).map((group) => {
             const groupOpen = openGroups[group.key] !== false
             const GroupIcon = group.icon
@@ -182,7 +198,9 @@ export default function ConsultantSidebar({
             return (
               <SidebarGroup
                 key={group.key}
-                className={isCollapsed ? 'w-full! px-2 py-1' : 'w-full! px-2 py-1.5'}
+                className={isCollapsed
+                  ? 'w-(--sidebar-width-icon)! min-w-(--sidebar-width-icon)! max-w-(--sidebar-width-icon)! px-2 py-1'
+                  : 'w-(--sidebar-width)! min-w-(--sidebar-width)! max-w-(--sidebar-width)! px-2 py-1.5'}
               >
                 {!isCollapsed && (
                   <button
@@ -219,7 +237,7 @@ export default function ConsultantSidebar({
                     <SidebarMenu className="w-full! gap-1.5">
                       {group.items
                         .filter((item) =>
-                          item.key !== 'survey-templates' || isSuperAdmin)
+                          variant === 'client' || item.key !== 'survey-templates' || isSuperAdmin)
                         .map((item) => {
                           const isExternalLink = 'href' in item
 
@@ -328,19 +346,21 @@ export default function ConsultantSidebar({
 
                   <DropdownMenuGroup>
                     <DropdownMenuItem
-                      onClick={() => setProfileOpen(true)}
+                      onClick={() => onScreenChange('profile')}
                       className="gap-2 rounded-lg px-2 py-2 text-[13px] focus:bg-[#F7F9FC] focus:text-[#0D1F3C]"
                     >
                       <UserRound className="text-[#4A6380]" />
                       My Profile
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => onScreenChange('settings')}
-                      className="gap-2 rounded-lg px-2 py-2 text-[13px] focus:bg-[#F7F9FC] focus:text-[#0D1F3C]"
-                    >
-                      <Settings className="text-[#4A6380]" />
-                      Settings
-                    </DropdownMenuItem>
+                    {variant === 'consultant' && (
+                      <DropdownMenuItem
+                        onClick={() => onScreenChange('settings')}
+                        className="gap-2 rounded-lg px-2 py-2 text-[13px] focus:bg-[#F7F9FC] focus:text-[#0D1F3C]"
+                      >
+                        <Settings className="text-[#4A6380]" />
+                        Settings
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuGroup>
 
                   <DropdownMenuSeparator className="bg-[#E2E8F0]" />
@@ -362,21 +382,6 @@ export default function ConsultantSidebar({
         <SidebarRail />
       </Sidebar>
 
-      <ProfileDialog
-        open={profileOpen}
-        onOpenChange={setProfileOpen}
-        fullName={fullName}
-        email={email}
-        roleLabel={roleLabel}
-        profileDetails={
-          <ProfileDetailsTab
-            profile={auth.profile}
-            onSave={auth.updateProfile}
-            onCancel={() => setProfileOpen(false)}
-          />
-        }
-        security={<SecurityTab />}
-      />
     </>
   )
 }

@@ -4,6 +4,7 @@ import {
   Check,
   Clipboard,
   ExternalLink,
+  ListFilter,
   LoaderCircle,
   MailPlus,
   Plus,
@@ -32,6 +33,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import type {
   SurveyRespondent,
@@ -73,6 +81,7 @@ type StatusFilter = 'all' | 'pending' | 'started' | 'completed'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAGE_SIZE = 20
+const ALL_USER_FILTERS = '__all__'
 let rowSequence = 0
 
 const inputClassName =
@@ -93,6 +102,20 @@ function messageFrom(error: unknown): string {
   return error instanceof Error
     ? error.message
     : 'The respondent change could not be completed.'
+}
+
+function uniqueOptions(values: Array<string | null>): string[] {
+  const options = new Map<string, string>()
+  values.forEach((value) => {
+    const trimmed = value?.trim()
+    if (trimmed) options.set(trimmed.toLocaleLowerCase(), trimmed)
+  })
+  return [...options.values()].sort((first, second) =>
+    first.localeCompare(second, undefined, { sensitivity: 'base' }))
+}
+
+function normaliseFilterValue(value: string | null): string {
+  return value?.trim().toLocaleLowerCase() || ''
 }
 
 function formatDateTime(value: string | null): string {
@@ -220,6 +243,10 @@ export default function SurveyRespondentsPanel({
   const [showUserPicker, setShowUserPicker] = useState(false)
   const [organisationUsers, setOrganisationUsers] = useState<SurveyOrganisationUser[]>([])
   const [userSearch, setUserSearch] = useState('')
+  const [showUserFilters, setShowUserFilters] = useState(false)
+  const [jobTitleFilter, setJobTitleFilter] = useState(ALL_USER_FILTERS)
+  const [branchFilter, setBranchFilter] = useState(ALL_USER_FILTERS)
+  const [employmentLevelFilter, setEmploymentLevelFilter] = useState(ALL_USER_FILTERS)
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [addingUsers, setAddingUsers] = useState(false)
@@ -288,19 +315,45 @@ export default function SurveyRespondentsPanel({
     safePage * PAGE_SIZE,
   )
 
+  const organisationUserFilterOptions = useMemo(() => ({
+    jobTitles: uniqueOptions(organisationUsers.map((user) => user.jobTitle)),
+    branches: uniqueOptions(organisationUsers.map((user) => user.branch)),
+    employmentLevels: uniqueOptions(organisationUsers.map((user) => user.position)),
+  }), [organisationUsers])
+  const activeUserFilterCount = [
+    jobTitleFilter,
+    branchFilter,
+    employmentLevelFilter,
+  ].filter((value) => value !== ALL_USER_FILTERS).length
+
   const filteredOrganisationUsers = useMemo(() => {
     const query = userSearch.trim().toLocaleLowerCase()
-    if (!query) return organisationUsers
-    return organisationUsers.filter((user) => [
-      user.fullName,
-      user.email,
-      user.department,
-      user.jobTitle,
-      user.position,
-      user.branch,
-      user.locationSite,
-    ].some((value) => value?.toLocaleLowerCase().includes(query)))
-  }, [organisationUsers, userSearch])
+    return organisationUsers.filter((user) => {
+      const matchesSearch = !query || [
+        user.fullName,
+        user.email,
+        user.department,
+        user.jobTitle,
+        user.position,
+        user.branch,
+        user.locationSite,
+      ].some((value) => value?.toLocaleLowerCase().includes(query))
+      const matchesJobTitle = jobTitleFilter === ALL_USER_FILTERS ||
+        normaliseFilterValue(user.jobTitle) === normaliseFilterValue(jobTitleFilter)
+      const matchesBranch = branchFilter === ALL_USER_FILTERS ||
+        normaliseFilterValue(user.branch) === normaliseFilterValue(branchFilter)
+      const matchesEmploymentLevel = employmentLevelFilter === ALL_USER_FILTERS ||
+        normaliseFilterValue(user.position) === normaliseFilterValue(employmentLevelFilter)
+
+      return matchesSearch && matchesJobTitle && matchesBranch && matchesEmploymentLevel
+    })
+  }, [
+    branchFilter,
+    employmentLevelFilter,
+    jobTitleFilter,
+    organisationUsers,
+    userSearch,
+  ])
 
   useEffect(() => {
     if (!showUserPicker || !respondentAssignmentEnabled) return
@@ -327,6 +380,20 @@ export default function SurveyRespondentsPanel({
       else next.add(userId)
       return next
     })
+  }
+
+  function clearUserFilters() {
+    setJobTitleFilter(ALL_USER_FILTERS)
+    setBranchFilter(ALL_USER_FILTERS)
+    setEmploymentLevelFilter(ALL_USER_FILTERS)
+  }
+
+  function closeUserPicker() {
+    setShowUserPicker(false)
+    setShowUserFilters(false)
+    setUserSearch('')
+    clearUserFilters()
+    setSelectedUserIds(new Set())
   }
 
   function toggleVisibleUsers() {
@@ -362,8 +429,10 @@ export default function SurveyRespondentsPanel({
       })
       setSelectedUserIds(new Set())
       setShowUserPicker(false)
+      setShowUserFilters(false)
       setOrganisationUsers([])
       setUserSearch('')
+      clearUserFilters()
     } catch (error) {
       setFeedback({ tone: 'error', message: messageFrom(error) })
     } finally {
@@ -532,7 +601,7 @@ export default function SurveyRespondentsPanel({
             type="button"
             onClick={() => {
               setShowInvitationForm(true)
-              setShowUserPicker(false)
+              closeUserPicker()
               setFeedback(null)
             }}
             disabled={!invitationsEnabled || sending}
@@ -564,14 +633,14 @@ export default function SurveyRespondentsPanel({
               <div>
                 <h3 className="font-bold text-[#0D1F3C]">Add company users</h3>
                 <p className="mt-1 text-xs text-[#8A9BB0]">
-                  Select active users from this survey&apos;s organisation. They are added without sending an email.
+                  Select active users from this survey&apos;s organisation. Invitations are sent according to the survey schedule.
                 </p>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => setShowUserPicker(false)}
+                onClick={closeUserPicker}
                 disabled={addingUsers}
                 aria-label="Close company user picker"
               >
@@ -579,8 +648,8 @@ export default function SurveyRespondentsPanel({
               </Button>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="relative w-full sm:max-w-md">
+            <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative w-full lg:max-w-md">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#8A9BB0]" />
                 <Input
                   type="search"
@@ -590,20 +659,92 @@ export default function SurveyRespondentsPanel({
                   className="h-9 rounded-[9px] border-[#DCE4EE] bg-white pr-3 pl-9 text-[13px]"
                 />
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={toggleVisibleUsers}
-                disabled={loadingUsers || filteredOrganisationUsers.length === 0}
-                className="border-[#DCE4EE] text-[#526A88]"
-              >
-                {filteredOrganisationUsers.length > 0 &&
-                filteredOrganisationUsers.every((user) => selectedUserIds.has(user.id))
-                  ? 'Clear visible'
-                  : 'Select visible'}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUserFilters((current) => !current)}
+                  className={activeUserFilterCount > 0
+                    ? 'border-[#A9D8D3] bg-[#EAF8F6] text-[#087C72] hover:bg-[#DDF4F1] hover:text-[#087C72]'
+                    : 'border-[#DCE4EE] text-[#526A88]'}
+                  aria-expanded={showUserFilters}
+                >
+                  <ListFilter />
+                  Filters{activeUserFilterCount > 0 ? ` (${activeUserFilterCount})` : ''}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleVisibleUsers}
+                  disabled={loadingUsers || filteredOrganisationUsers.length === 0}
+                  className="border-[#DCE4EE] text-[#526A88]"
+                >
+                  {filteredOrganisationUsers.length > 0 &&
+                  filteredOrganisationUsers.every((user) => selectedUserIds.has(user.id))
+                    ? 'Clear visible'
+                    : 'Select visible'}
+                </Button>
+              </div>
             </div>
+
+            {showUserFilters && (
+              <div className="mt-3 grid gap-2 rounded-xl border border-[#DFE8EC] bg-white p-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                <Select
+                  value={jobTitleFilter}
+                  onValueChange={(value) => setJobTitleFilter(value ?? ALL_USER_FILTERS)}
+                >
+                  <SelectTrigger aria-label="Filter by job title">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_USER_FILTERS}>All job titles</SelectItem>
+                    {organisationUserFilterOptions.jobTitles.map((jobTitle) => (
+                      <SelectItem key={jobTitle} value={jobTitle}>{jobTitle}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={branchFilter}
+                  onValueChange={(value) => setBranchFilter(value ?? ALL_USER_FILTERS)}
+                >
+                  <SelectTrigger aria-label="Filter by branch">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_USER_FILTERS}>All branches</SelectItem>
+                    {organisationUserFilterOptions.branches.map((branch) => (
+                      <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={employmentLevelFilter}
+                  onValueChange={(value) => setEmploymentLevelFilter(value ?? ALL_USER_FILTERS)}
+                >
+                  <SelectTrigger aria-label="Filter by employment level">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_USER_FILTERS}>All employment levels</SelectItem>
+                    {organisationUserFilterOptions.employmentLevels.map((level) => (
+                      <SelectItem key={level} value={level}>{level}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearUserFilters}
+                  disabled={activeUserFilterCount === 0}
+                  className="text-[#526A88]"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
 
             <div className="mt-3 max-h-80 overflow-y-auto rounded-xl border border-[#DFE8EC] bg-white">
               {loadingUsers ? (
@@ -615,7 +756,7 @@ export default function SurveyRespondentsPanel({
                   <div className="font-semibold text-[#314966]">
                     {organisationUsers.length === 0
                       ? 'All eligible company users are already respondents.'
-                      : 'No company users match this search.'}
+                      : 'No company users match the current search and filters.'}
                   </div>
                   <div className="mt-1 text-xs text-[#8A9BB0]">
                     Only active client accounts from this organisation are shown.

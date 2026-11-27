@@ -17,7 +17,7 @@ import ForgotPassword  from './pages/ForgotPassword'
 import ResetPassword   from './pages/ResetPassword'
 import ChangeTemporaryPassword from './pages/ChangeTemporaryPassword'
 import ConsultantPortal from './portals/ConsultantPortal'
-import ClientPortal     from './portals/ClientPortal'
+import ClientPortal     from './features/client/pages/ClientPortal'
 import HowToGuide      from './pages/HowToGuide'
 
 export default function App() {

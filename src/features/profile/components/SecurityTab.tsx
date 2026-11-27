@@ -141,13 +141,21 @@ export default function SecurityTab({
   }
 
   return (
-    <div className="w-full space-y-5">
-      <Card className="w-full gap-4 rounded-xl bg-white ring-[#E2E8F0]">
-        <CardHeader className="flex! w-full flex-col gap-3">
-          <div className="flex w-full items-start justify-between gap-4">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[#E0F7F5] text-[#0A7A72]">
-              <ShieldCheck className="size-5" />
-            </div>
+    <div className="w-full space-y-5 text-left">
+      <Card className="w-full items-stretch gap-0 rounded-2xl bg-white py-0 ring-[#DCE4EE] shadow-[0_8px_24px_rgba(13,31,60,0.04)]">
+        <CardHeader className="flex! w-full flex-row items-start gap-4 px-6 py-5">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#E0F7F5] text-[#0A7A72]">
+            <ShieldCheck className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CardTitle className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#0D1F3C]">
+              Multi-factor authentication
+            </CardTitle>
+            <CardDescription className="mt-1 max-w-2xl text-sm leading-6 text-[#4A6380]">
+              Protect your account with a six-digit code from an authenticator app after entering your password.
+            </CardDescription>
+          </div>
+          <div className="shrink-0 pt-0.5">
             <Badge
               variant="outline"
               className={
@@ -159,25 +167,17 @@ export default function SecurityTab({
               {mfaEnabled ? 'Enabled' : 'Not set up'}
             </Badge>
           </div>
-          <div className="w-full">
-            <CardTitle className="font-['Plus_Jakarta_Sans'] text-[15px] font-bold text-[#0D1F3C]">
-              Multi-factor authentication
-            </CardTitle>
-            <CardDescription className="mt-1 max-w-xl text-[13px] leading-5 text-[#4A6380]">
-              Protect your account with a six-digit code from an authenticator app after entering your password.
-            </CardDescription>
-          </div>
         </CardHeader>
 
         <Separator className="bg-[#E2E8F0]" />
 
-        <CardContent className="space-y-4">
+        <CardContent className="w-full space-y-4 px-6 py-5">
           {mfaEnabled ? (
             <div className="space-y-3">
               {state.factors.map((factor) => (
                 <div
                   key={factor.id}
-                  className="flex items-center gap-3 rounded-[10px] bg-[#F7F9FC] px-4 py-3"
+                  className="flex w-full items-center gap-3 rounded-xl border border-[#E8EDF3] bg-[#F7F9FC] px-4 py-3"
                 >
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-white text-[#3A8FC4] ring-1 ring-[#E2E8F0]">
                     <Smartphone className="size-4" />

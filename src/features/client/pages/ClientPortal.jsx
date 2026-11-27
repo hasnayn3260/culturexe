@@ -1,21 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../../../hooks/useAuth'
 import { useClientSurvey } from '../hooks/useClientSurvey'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '../../../components/ui/sidebar'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select'
-import { getEffectiveSurveyStatus } from '../features/survey/utils/surveyStatus'
+} from '../../../components/ui/select'
+import { getEffectiveSurveyStatus } from '../../survey/utils/surveyStatus'
+import ProfilePage from '../../profile/pages/ProfilePage'
+import ClientSidebar from '../components/ClientSidebar'
+import ClientHomePage from './ClientHomePage'
+import '../../../portals/consultant.css'
 import {
   SURVEY_FILE_ACCEPT,
   surveyFileName,
   uploadSurveyFile,
-} from '../features/survey/services/surveyFilesClient'
-import supabase from '../lib/supabaseClient'
+} from '../../survey/services/surveyFilesClient'
+import supabase from '../../../lib/supabaseClient'
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -280,94 +285,15 @@ function QuestionInput({ q, value, onChange, respondentToken, showError }) {
   )
 }
 
-// ── Profile screen ─────────────────────────────────────────
-
-function ProfileScreen({ profile, respondent, onSave, onBack }) {
-  const { updateProfile, user } = useAuth()
-  const [form, setForm] = useState({
-    full_name:  profile?.full_name     || '',
-    email:      user?.email            || '',
-    department: respondent?.department || '',
-    job_title:  respondent?.job_title  || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [msg,    setMsg]    = useState(null)
-
-  async function handleSave(e) {
-    e.preventDefault(); setSaving(true); setMsg(null)
-    try {
-      if (form.full_name !== profile?.full_name) await updateProfile({ full_name: form.full_name })
-      if (form.email !== user?.email) {
-        const { error } = await supabase.auth.updateUser({ email: form.email })
-        if (error) throw error
-      }
-      await onSave({ department: form.department, job_title: form.job_title, name: form.full_name })
-      setMsg({ ok: true, text: form.email !== user?.email ? 'Saved. Check your new email address to confirm the change.' : 'Profile updated successfully.' })
-    } catch (err) {
-      setMsg({ ok: false, text: err.message || 'Could not save changes.' })
-    } finally { setSaving(false) }
-  }
-
-  const iStyle = { width: '100%', padding: '11px 14px', borderRadius: 10, border: '1.5px solid #E0E8F0', fontSize: 14, fontFamily: 'inherit', color: '#1A2E44', outline: 'none', transition: 'border-color 0.15s', background: 'white', boxSizing: 'border-box' }
-  const lStyle = { display: 'block', fontSize: 12.5, fontWeight: 600, color: '#4A5E72', marginBottom: 5 }
-
-  return (
-    <div style={{ maxWidth: 680, margin: '0 auto' }}>
-      <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#7A9BB0', cursor: 'pointer', fontSize: 13.5, fontFamily: 'inherit', padding: '0 0 20px', display: 'flex', alignItems: 'center', gap: 6 }}>← Back to survey</button>
-      <div style={{ background: 'white', borderRadius: 16, padding: '32px 28px', boxShadow: '0 2px 20px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 20, fontWeight: 800, color: '#0D1F3C', marginBottom: 4 }}>Your Profile</div>
-        <div style={{ fontSize: 13.5, color: '#7A9BB0', marginBottom: 28 }}>Update your personal details.</div>
-
-        {msg && (
-          <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 20, fontSize: 13.5, background: msg.ok ? '#E8F7F5' : '#FDE8E3', color: msg.ok ? '#0A6B5E' : '#C0392B', border: `1px solid ${msg.ok ? 'rgba(27,191,176,0.3)' : 'rgba(232,86,58,0.25)'}` }}>
-            {msg.ok ? '✓ ' : '⚠ '}{msg.text}
-          </div>
-        )}
-
-        <form onSubmit={handleSave}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={lStyle}>Full Name</label>
-            <input style={iStyle} type="text" value={form.full_name} onChange={e => setForm(p => ({ ...p, full_name: e.target.value }))}
-              onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={lStyle}>Email Address</label>
-            <input style={iStyle} type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-              onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
-            <div style={{ fontSize: 11.5, color: '#A0B0C0', marginTop: 4 }}>Changing your email requires inbox confirmation.</div>
-          </div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 28 }}>
-            <div style={{ flex: 1 }}>
-              <label style={lStyle}>Department</label>
-              <input style={iStyle} type="text" placeholder="e.g. Finance" value={form.department} onChange={e => setForm(p => ({ ...p, department: e.target.value }))}
-                onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={lStyle}>Job Title</label>
-              <input style={iStyle} type="text" placeholder="e.g. Manager" value={form.job_title} onChange={e => setForm(p => ({ ...p, job_title: e.target.value }))}
-                onFocus={e => e.target.style.borderColor = '#1BBFB0'} onBlur={e => e.target.style.borderColor = '#E0E8F0'} />
-            </div>
-          </div>
-          <button type="submit" disabled={saving}
-            style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: saving ? '#8DD4CE' : '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {saving && <Spin size={16} color="white" />}
-            {saving ? 'Saving…' : 'Save Changes'}
-          </button>
-        </form>
-      </div>
-    </div>
-  )
-}
-
 // ── Main portal ────────────────────────────────────────────
 
 export default function ClientPortal() {
   const navigate = useNavigate()
-  const { user, profile, role, signOut } = useAuth()
+  const { user, profile, role } = useAuth()
+  const [screen,      setScreen]      = useState('home')
   const [selectedSurveyId, setSelectedSurveyId] = useState(null)
-  const { survey, availableSurveys, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse, updateRespondentProfile } = useClientSurvey(user?.email, user?.id, profile?.org_id, selectedSurveyId)
+  const { survey, availableSurveys, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse } = useClientSurvey(user?.email, user?.id, profile?.org_id, selectedSurveyId, screen === 'survey')
 
-  const [screen,      setScreen]      = useState('survey')
   const [answers,     setAnswers]     = useState({})
   const [page,        setPage]        = useState(0)
   const [saveState,   setSaveState]   = useState('idle') // idle | saving | saved | error
@@ -377,6 +303,8 @@ export default function ClientPortal() {
   const [showWelcome, setShowWelcome] = useState(true)
   const [triedNext,   setTriedNext]   = useState(false)
   const [showIncomplete, setShowIncomplete] = useState(false)
+  const [profileOrganisationName, setProfileOrganisationName] = useState(null)
+  const [profileManagerOptions, setProfileManagerOptions] = useState([])
   const autoSaveTimer = useRef(null)
 
   const countdown = useCountdown(survey?.live_end)
@@ -387,7 +315,6 @@ export default function ClientPortal() {
 
   useEffect(() => {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    setScreen('survey')
     setAnswers({})
     setPage(0)
     setSaveState('idle')
@@ -399,12 +326,42 @@ export default function ClientPortal() {
     setShowIncomplete(false)
   }, [survey?.id])
 
+  useEffect(() => {
+    let active = true
+
+    async function loadProfileContext() {
+      if (!profile?.org_id) {
+        if (active) {
+          setProfileOrganisationName(null)
+          setProfileManagerOptions([])
+        }
+        return
+      }
+
+      const [organisationResult, managersResult] = await Promise.all([
+        supabase.from('organisations').select('name').eq('id', profile.org_id).maybeSingle(),
+        supabase.rpc('list_my_profile_managers'),
+      ])
+
+      if (!active) return
+      setProfileOrganisationName(organisationResult.data?.name || null)
+      setProfileManagerOptions(
+        managersResult.error
+          ? []
+          : (managersResult.data || []).map((manager) => ({ id: manager.id, label: manager.label })),
+      )
+    }
+
+    loadProfileContext()
+    return () => { active = false }
+  }, [profile?.org_id])
+
   // Record the first open immediately. Saving an answer later must never reset
   // this timestamp because it is the start of the elapsed completion window.
   useEffect(() => {
-    if (!isLive || !respondent || respondent.started_at || existingResponse) return
+    if (screen !== 'survey' || !isLive || !respondent || respondent.started_at || existingResponse) return
     markStarted().catch(() => {})
-  }, [existingResponse, isLive, markStarted, respondent])
+  }, [existingResponse, isLive, markStarted, respondent, screen])
 
   // Seed answers from existing response or draft
   useEffect(() => {
@@ -478,13 +435,18 @@ export default function ClientPortal() {
   }
 
   const displayName = profile?.full_name?.split(' ')[0] || 'there'
-  const initials    = profile?.full_name ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?'
 
   const cardStyle = { background: 'white', borderRadius: 16, padding: '28px', boxShadow: '0 2px 16px rgba(0,0,0,0.05)', marginBottom: 20 }
 
   function switchSurvey(surveyId) {
-    if (!surveyId || surveyId === survey?.id) return
-    setSelectedSurveyId(surveyId)
+    if (!surveyId) return
+    if (surveyId !== survey?.id) setSelectedSurveyId(surveyId)
+    setScreen('survey')
+  }
+
+  function openSurvey(surveyId) {
+    if (surveyId !== survey?.id) setSelectedSurveyId(surveyId)
+    setScreen('survey')
   }
 
   if (loading) {
@@ -497,93 +459,86 @@ export default function ClientPortal() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F2F7FA', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="portal-c">
       <style>{`@keyframes cp-spin { to { transform: rotate(360deg); } } @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
-
-      {/* ── NAV ── */}
-      <nav style={{ background: 'white', borderBottom: '1px solid #E8EFF5', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 8px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.3px' }}>
-            <span style={{ color: '#0D1F3C' }}>Culture</span><span style={{ color: '#1BBFB0' }}>Xe</span>
+      <SidebarProvider
+        style={{
+          '--sidebar-width': '228px', '--sidebar-width-icon': '64px',
+          '--sidebar': '#0D1F3C', '--sidebar-foreground': '#FFFFFF',
+          '--sidebar-accent': 'rgba(27,191,176,0.13)', '--sidebar-accent-foreground': '#FFFFFF',
+          '--sidebar-border': 'rgba(255,255,255,0.10)', '--sidebar-ring': '#1BBFB0',
+        }}
+      >
+        <ClientSidebar
+          screen={screen === 'profile' ? 'profile' : 'home'}
+          onScreenChange={(nextScreen) => setScreen(nextScreen)}
+        />
+        <SidebarInset className="consultant-main bg-[var(--bg)]">
+          <div className="consultant-topbar">
+            <div className="flex min-w-0 items-center gap-3">
+              <SidebarTrigger className="text-[#4A6380] hover:bg-[#EEF5F9] hover:text-[#0D1F3C]" />
+              <div className="shrink-0 text-lg font-extrabold text-[#0D1F3C]">
+                {screen === 'profile' ? 'My Profile' : screen === 'survey' ? 'Survey' : screen === 'complete' ? 'Survey complete' : 'Home'}
+              </div>
+              {availableSurveys.length > 0 && !['home', 'profile', 'complete'].includes(screen) && (
+                <div className="hidden min-w-0 border-l border-[#E8EFF5] pl-3 sm:block sm:w-[320px]">
+                  <Select value={survey?.id || null} onValueChange={switchSurvey}>
+                    <SelectTrigger aria-label="Select survey" className="h-10 w-full border-[#DCE4EE] bg-[#F8FAFC] text-[#0D1F3C] shadow-none">
+                      <SelectValue placeholder="Select a survey">
+                        {(value) => availableSurveys.find((item) => item.id === value)?.title || 'Select a survey'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSurveys.map((item) => {
+                        const assignment = item.clientRespondent
+                        const effectiveStatus = getEffectiveSurveyStatus(item)
+                        const status = assignment?.submitted_at ? 'Completed' : effectiveStatus === 'live' ? 'Open' : effectiveStatus === 'scheduled' ? 'Upcoming' : effectiveStatus === 'closed' ? 'Closed' : 'Not open'
+                        return (
+                          <SelectItem key={item.id} value={item.id}>
+                            <span className="flex min-w-0 items-center justify-between gap-4">
+                              <span className="truncate font-semibold">{item.title}</span>
+                              <span className="shrink-0 text-[11px] font-medium text-[#7C8EA5]">{status}</span>
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {role && role !== 'client' && (
+                <>
+                  <span className="hidden rounded-lg border border-[#1BBFB0]/25 bg-[#F0FAFA] px-3 py-1.5 text-xs font-bold text-[#0A8A7E] md:inline">Client Portal Preview</span>
+                  <button type="button" onClick={() => navigate('/app')} className="rounded-lg border border-[#E0E8F0] bg-white px-3 py-1.5 text-xs font-semibold text-[#1A2E44]">Back to consultant portal</button>
+                </>
+              )}
+              {screen === 'survey' && isLive && timer && (
+                <div className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${timer.urgent ? 'border-[#E8563A]/20 bg-[#FFF0EE] text-[#C0392B]' : 'border-[#1BBFB0]/20 bg-[#F0FAFA] text-[#0A8A7E]'}`}>
+                  {timer.text}
+                </div>
+              )}
+            </div>
           </div>
-          {availableSurveys.length > 0 && (
-            <div style={{ borderLeft: '1px solid #E8EFF5', paddingLeft: 12, width: 'min(340px, 42vw)', minWidth: 0 }}>
-              <Select
-                value={survey?.id || null}
-                onValueChange={switchSurvey}
-                disabled={availableSurveys.length === 1}
-              >
-                <SelectTrigger
-                  aria-label="Select survey"
-                  className="h-10 w-full border-[#DCE4EE] bg-[#F8FAFC] text-[#0D1F3C] shadow-none"
-                >
-                  <SelectValue placeholder="Select a survey">
-                    {(value) => availableSurveys.find((item) => item.id === value)?.title || 'Select a survey'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {availableSurveys.map((item) => {
-                    const assignment = item.clientRespondent
-                    const effectiveStatus = getEffectiveSurveyStatus(item)
-                    const status = assignment?.submitted_at
-                      ? 'Completed'
-                      : effectiveStatus === 'live'
-                        ? 'Open'
-                        : effectiveStatus === 'scheduled'
-                          ? 'Upcoming'
-                          : effectiveStatus === 'closed'
-                            ? 'Closed'
-                            : 'Not open'
-                    return (
-                      <SelectItem key={item.id} value={item.id}>
-                        <span className="flex min-w-0 items-center justify-between gap-4">
-                          <span className="truncate font-semibold">{item.title}</span>
-                          <span className="shrink-0 text-[11px] font-medium text-[#7C8EA5]">{status}</span>
-                        </span>
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {role && role !== 'client' && (
-            <>
-              <span style={{ padding: '6px 11px', borderRadius: 8, border: '1px solid rgba(27,191,176,0.25)', background: '#F0FAFA', color: '#0A8A7E', fontSize: 12.5, fontWeight: 700 }}>
-                Client Portal Preview
-              </span>
-              <button
-                type="button"
-                onClick={() => navigate('/app')}
-                style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #E0E8F0', background: 'white', color: '#1A2E44', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Back to consultant portal
-              </button>
-            </>
-          )}
-          {isLive && timer && (
-            <div style={{ padding: '5px 12px', borderRadius: 20, background: timer.urgent ? '#FFF0EE' : '#F0FAFA', border: `1px solid ${timer.urgent ? 'rgba(232,86,58,0.2)' : 'rgba(27,191,176,0.2)'}`, fontSize: 12.5, fontWeight: 600, color: timer.urgent ? '#C0392B' : '#0A8A7E', display: 'flex', alignItems: 'center', gap: 5 }}>
-              {timer.urgent && <span style={{ animation: 'cp-pulse 1s infinite' }}>●</span>}
-              {timer.text}
-            </div>
-          )}
-          <button onClick={() => setScreen(s => s === 'profile' ? 'survey' : 'profile')} title={screen === 'profile' ? 'Back to survey' : 'Edit profile'}
-            style={{ width: 36, height: 36, borderRadius: '50%', background: '#1BBFB0', border: 'none', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {initials}
-          </button>
-          <button onClick={signOut} style={{ background: 'none', border: '1px solid #E8EFF5', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, color: '#637082', cursor: 'pointer', fontFamily: 'inherit' }}>
-            Sign out
-          </button>
-        </div>
-      </nav>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 32px 80px' }}>
+          <div className="consultant-content">
+
+        {/* ════════ HOME ════════ */}
+        {screen === 'home' && (
+          <ClientHomePage
+            displayName={displayName}
+            surveys={availableSurveys}
+            onOpenSurvey={openSurvey}
+          />
+        )}
 
         {/* ════════ PROFILE ════════ */}
         {screen === 'profile' && (
-          <ProfileScreen profile={profile} respondent={respondent} onSave={updateRespondentProfile} onBack={() => setScreen('survey')} />
+          <ProfilePage
+            organisationName={profileOrganisationName}
+            managerOptions={profileManagerOptions}
+          />
         )}
 
         {/* ════════ COMPLETE ════════ */}
@@ -610,7 +565,7 @@ export default function ClientPortal() {
               <div style={{ height: 1, background: '#EEF2F7', margin: '0 -44px 32px' }} />
 
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => setScreen('home')}
                 style={{ padding: '13px 28px', borderRadius: 10, border: 'none', background: '#1BBFB0', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.2s' }}
                 onMouseEnter={e => e.currentTarget.style.background = '#0A8A7E'}
                 onMouseLeave={e => e.currentTarget.style.background = '#1BBFB0'}
@@ -915,6 +870,8 @@ export default function ClientPortal() {
           </div>
         </div>
       )}
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   )
 }
