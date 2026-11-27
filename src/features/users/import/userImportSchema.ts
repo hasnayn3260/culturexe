@@ -65,6 +65,8 @@ export type UserImportResult = {
   status: UserImportResultStatus
   userId?: string
   message?: string
+  code?: string
+  reference?: string
 }
 
 export const USER_IMPORT_POSITIONS: EmploymentPosition[] = [

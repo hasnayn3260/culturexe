@@ -1,13 +1,19 @@
 import { Component } from 'react'
 
+import { userErrorMessage } from '@/lib/errors/normaliseClientError'
+
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { error: null }
+    this.state = { error: null, displayMessage: '' }
   }
 
   static getDerivedStateFromError(error) {
-    return { error }
+    return { error, displayMessage: userErrorMessage(error) }
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Unhandled application error', error, info)
   }
 
   render() {
@@ -25,10 +31,10 @@ export default class ErrorBoundary extends Component {
           Something went wrong
         </div>
         <div style={{ fontSize: 14, color: '#8A9BB0', maxWidth: 400, lineHeight: 1.7, marginBottom: 28 }}>
-          {this.state.error?.message || 'An unexpected error occurred.'}
+          {this.state.displayMessage}
         </div>
         <button
-          onClick={() => { this.setState({ error: null }); window.location.reload() }}
+          onClick={() => { this.setState({ error: null, displayMessage: '' }); window.location.reload() }}
           style={{
             padding: '11px 28px', borderRadius: 10, border: 'none',
             background: '#1BBFB0', color: 'white', fontWeight: 700,
@@ -37,12 +43,6 @@ export default class ErrorBoundary extends Component {
         >
           Reload page
         </button>
-        <details style={{ marginTop: 20, fontSize: 11, color: '#8A9BB0', maxWidth: 480, textAlign: 'left' }}>
-          <summary style={{ cursor: 'pointer' }}>Technical details</summary>
-          <pre style={{ marginTop: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-            {this.state.error?.stack}
-          </pre>
-        </details>
       </div>
     )
   }

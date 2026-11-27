@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { reportClientError } from '@/lib/errors/normaliseClientError'
+
 import {
   activateManagedUser,
   createManagedUser,
@@ -30,9 +32,7 @@ type PendingMutation = {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'Something went wrong while managing users.'
+  return reportClientError(error, 'Something went wrong while managing users.')
 }
 
 export function useUsers() {

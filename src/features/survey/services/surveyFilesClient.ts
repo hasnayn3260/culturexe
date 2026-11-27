@@ -1,4 +1,8 @@
 import supabase from '@/lib/supabaseClient'
+import {
+  apiClientError,
+  type ApiErrorBody,
+} from '@/lib/errors/normaliseClientError'
 
 export const MAX_SURVEY_FILE_BYTES = 10 * 1024 * 1024
 export const SURVEY_FILE_ACCEPT = [
@@ -31,14 +35,12 @@ type UploadAuthorisation = {
 
 async function responseError(response: Response, fallback: string): Promise<Error> {
   try {
-    const body = await response.json() as { error?: unknown }
-    if (typeof body.error === 'string' && body.error.trim()) {
-      return new Error(body.error.trim())
-    }
+    const body = await response.json() as ApiErrorBody
+    return apiClientError(body, response.status, fallback)
   } catch {
     // Use the caller's stable fallback when the service did not return JSON.
   }
-  return new Error(fallback)
+  return apiClientError(null, response.status, fallback)
 }
 
 export function surveyFilePath(value: unknown): string | null {

@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
+
 type SurveyStatus = 'draft' | 'live' | 'closed'
 type SurveyAssessmentType = 'culture' | 'pulse' | '360' | 'other'
 
@@ -65,7 +67,7 @@ const SURVEY_COLUMNS =
   'id, org_id, title, description, assessment_type, is_full_culture_assessment, status, live_start, live_end, created_at, updated_at, open_link_enabled, open_link_token'
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

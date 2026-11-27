@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { SurveyTemplateSummary } from '@/features/survey/types'
+import { reportClientError } from '@/lib/errors/normaliseClientError'
 
 import { listSurveyTemplates } from '../services/surveyTemplatesClient'
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'The available survey templates could not be loaded.'
+  return reportClientError(error, 'The available survey templates could not be loaded.')
 }
 
 export function useAvailableSurveyTemplates() {

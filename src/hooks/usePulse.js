@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function usePulse(orgId) {
   const [entries, setEntries] = useState([])
@@ -23,7 +24,7 @@ export function usePulse(orgId) {
       if (err) throw err
       setEntries(data || [])
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Pulse entries could not be loaded.'))
     } finally {
       setLoading(false)
     }

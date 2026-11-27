@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import supabase from '../../../lib/supabaseClient'
+import { reportClientError } from '../../../lib/errors/normaliseClientError'
 import { isSurveyAcceptingResponses } from '../../survey/utils/surveyStatus'
 import { createSurveyAccessId } from '../../survey/utils/surveyAccess'
 
@@ -138,7 +139,7 @@ export function useClientSurvey(userEmail, userId, orgId, selectedSurveyId, trac
 
       setRespondent(resp)
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Your assigned survey could not be loaded.'))
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import supabase from '../lib/supabaseClient'
+import { apiClientError, reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useSurvey(orgId) {
   const [survey, setSurvey]           = useState(null)
@@ -76,7 +77,7 @@ export function useSurvey(orgId) {
       setRespondents(rRes.data || [])
       setResponses(respRes.data || [])
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Survey data could not be loaded.'))
     } finally {
       setLoading(false)
     }
@@ -209,7 +210,7 @@ export function useSurvey(orgId) {
     })
     const body = await response.json().catch(() => null)
     if (!response.ok) {
-      throw new Error(body?.error || 'Survey invitations could not be sent.')
+      throw apiClientError(body, response.status, 'Survey invitations could not be sent.')
     }
 
     await refetch()
@@ -248,7 +249,7 @@ export function useSurvey(orgId) {
     })
     const body = await response.json().catch(() => null)
     if (!response.ok) {
-      throw new Error(body?.error || 'Survey reminders could not be sent.')
+      throw apiClientError(body, response.status, 'Survey reminders could not be sent.')
     }
 
     await refetch()

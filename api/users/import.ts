@@ -1,7 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js'
 
 import { sendTemporaryAccessEmail } from '../email/postmark.js'
-import { describeError, stageError } from '../errors.js'
+import { describeError, normaliseApiPayload, stageError } from '../errors.js'
 import { generateTemporaryPassword } from './temporaryPassword.js'
 import { availableUsername } from './username.js'
 
@@ -92,7 +92,7 @@ const UUID_PATTERN =
 const MAX_IMPORT_ROWS = 500
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

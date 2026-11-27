@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useOrganisations() {
   const [organisations, setOrganisations] = useState([])
@@ -17,7 +18,7 @@ export function useOrganisations() {
       if (err) throw err
       setOrganisations(data || [])
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Organisations could not be loaded.'))
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
+
 type ManagerProfile = {
   role: string | null
   active: boolean | null
@@ -38,7 +40,7 @@ const UUID_PATTERN =
 const MAX_USERS = 250
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

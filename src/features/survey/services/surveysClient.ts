@@ -1,4 +1,8 @@
 import supabase from '@/lib/supabaseClient'
+import {
+  CultureXeClientError,
+  type ApiErrorBody,
+} from '@/lib/errors/normaliseClientError'
 
 import type {
   CreateSurveyInput,
@@ -8,11 +12,6 @@ import type {
 } from '../types'
 
 const ADMIN_SURVEYS_ENDPOINT = '/api/surveys'
-
-type ApiErrorBody = {
-  error?: string
-  message?: string
-}
 
 type RequestOptions = {
   method?: 'POST' | 'PATCH' | 'DELETE'
@@ -50,13 +49,10 @@ export type CloneSurveyTemplateInput = {
   templateId: string
 }
 
-export class AdminSurveysApiError extends Error {
-  readonly status: number
-
-  constructor(message: string, status: number) {
-    super(message)
+export class AdminSurveysApiError extends CultureXeClientError {
+  constructor(error: unknown, status: number) {
+    super(error, status, 'Unable to manage surveys.')
     this.name = 'AdminSurveysApiError'
-    this.status = status
   }
 }
 
@@ -66,7 +62,7 @@ async function accessToken(): Promise<string> {
     error,
   } = await supabase.auth.getSession()
 
-  if (error) throw new AdminSurveysApiError(error.message, 401)
+  if (error) throw new AdminSurveysApiError(error, 401)
   if (!session?.access_token) {
     throw new AdminSurveysApiError(
       'Your session has expired. Sign in again.',
@@ -108,7 +104,7 @@ async function surveysRequest<T>({
   if (!response.ok) {
     const errorBody = parsedBody as ApiErrorBody | null
     throw new AdminSurveysApiError(
-      errorBody?.error || errorBody?.message || 'Unable to manage surveys.',
+      errorBody ?? 'Unable to manage surveys.',
       response.status,
     )
   }

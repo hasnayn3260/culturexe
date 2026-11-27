@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { reportClientError } from '@/lib/errors/normaliseClientError'
+
 import {
   createSurveyTemplate,
   deleteSurveyTemplate,
@@ -24,9 +26,7 @@ type PendingMutation = {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'The survey template change could not be completed.'
+  return reportClientError(error, 'The survey template change could not be completed.')
 }
 
 function summaryFrom(

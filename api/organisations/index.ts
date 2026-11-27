@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
 import {
   mapOrganisationRow,
   organisationDatabasePayload,
@@ -28,7 +29,7 @@ const LOGO_BUCKET = 'Company Logos'
 const BANNER_BUCKET = 'Company Banners'
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

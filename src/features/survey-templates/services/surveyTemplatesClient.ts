@@ -1,6 +1,10 @@
 import supabase from '@/lib/supabaseClient'
 
 import type { SurveyTemplateSummary } from '@/features/survey/types'
+import {
+  CultureXeClientError,
+  type ApiErrorBody,
+} from '@/lib/errors/normaliseClientError'
 
 const SURVEY_TEMPLATES_ENDPOINT = '/api/survey-templates'
 
@@ -61,9 +65,7 @@ export type SurveyTemplateListOptions = {
   signal?: AbortSignal
 }
 
-type ApiErrorBody = {
-  error?: string
-  message?: string
+type TemplateApiErrorBody = ApiErrorBody & {
   field?: string | null
 }
 
@@ -91,14 +93,12 @@ type DeleteResponse = {
   action: 'delete'
 }
 
-export class SurveyTemplatesApiError extends Error {
-  readonly status: number
+export class SurveyTemplatesApiError extends CultureXeClientError {
   readonly field: string | null
 
-  constructor(message: string, status: number, field: string | null = null) {
-    super(message)
+  constructor(error: unknown, status: number, field: string | null = null) {
+    super(error, status, 'Unable to manage survey templates.')
     this.name = 'SurveyTemplatesApiError'
-    this.status = status
     this.field = field
   }
 }
@@ -109,7 +109,7 @@ async function accessToken(): Promise<string> {
     error,
   } = await supabase.auth.getSession()
 
-  if (error) throw new SurveyTemplatesApiError(error.message, 401)
+  if (error) throw new SurveyTemplatesApiError(error, 401)
   if (!session?.access_token) {
     throw new SurveyTemplatesApiError(
       'Your session has expired. Sign in again.',
@@ -156,9 +156,9 @@ async function templateRequest<T>(
   const body = await responseBody(response)
 
   if (!response.ok) {
-    const error = body as ApiErrorBody | null
+    const error = body as TemplateApiErrorBody | null
     throw new SurveyTemplatesApiError(
-      error?.error || error?.message || 'Unable to manage survey templates.',
+      error ?? 'Unable to manage survey templates.',
       response.status,
       error?.field || null,
     )

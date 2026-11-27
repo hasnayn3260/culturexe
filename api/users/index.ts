@@ -1,7 +1,7 @@
 import { createClient, type User } from '@supabase/supabase-js'
 
 import { sendTemporaryAccessEmail } from '../email/postmark.js'
-import { describeError } from '../errors.js'
+import { describeError, normaliseApiPayload } from '../errors.js'
 import { generateTemporaryPassword } from './temporaryPassword.js'
 import { availableUsername } from './username.js'
 
@@ -100,7 +100,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, CalendarClock, CheckCircle2, Clock3, ClipboardList } from 'lucide-react'
+import { ArrowDownRight, ArrowRight, ArrowUpRight, CalendarClock, CheckCircle2, Clock3, ClipboardList, Minus, TrendingUp } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getEffectiveSurveyStatus } from '@/features/survey/utils/surveyStatus'
+import type { ClientCultureScore } from '@/features/client/hooks/useClientCultureScoreHistory'
 
 type ClientSurvey = {
   id: string
@@ -17,6 +18,9 @@ type ClientHomePageProps = {
   displayName: string
   surveys: ClientSurvey[]
   onOpenSurvey: (surveyId: string) => void
+  cultureScoreHistory: ClientCultureScore[]
+  cultureScoreLoading: boolean
+  cultureScoreError: string | null
 }
 
 const DAY_MS = 86_400_000
@@ -39,7 +43,14 @@ function formatDate(value?: string | null) {
   }).format(new Date(value))
 }
 
-export default function ClientHomePage({ displayName, surveys, onOpenSurvey }: ClientHomePageProps) {
+export default function ClientHomePage({
+  displayName,
+  surveys,
+  onOpenSurvey,
+  cultureScoreHistory,
+  cultureScoreLoading,
+  cultureScoreError,
+}: ClientHomePageProps) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
@@ -64,6 +75,14 @@ export default function ClientHomePage({ displayName, surveys, onOpenSurvey }: C
   const daysToNext = nextSurvey?.live_start
     ? Math.max(0, Math.ceil((new Date(nextSurvey.live_start).getTime() - now) / DAY_MS))
     : null
+  const latestCultureScore = cultureScoreHistory[0] || null
+  const previousCultureScore = cultureScoreHistory[1] || null
+  const scoreChange = latestCultureScore && previousCultureScore
+    ? latestCultureScore.score - previousCultureScore.score
+    : null
+  const ScoreTrendIcon = scoreChange == null || scoreChange === 0
+    ? Minus
+    : scoreChange > 0 ? ArrowUpRight : ArrowDownRight
 
   return (
     <div className="space-y-6">
@@ -76,6 +95,69 @@ export default function ClientHomePage({ displayName, surveys, onOpenSurvey }: C
           View your current survey, see what is coming next and keep track of your participation.
         </p>
       </section>
+
+      <Card className="overflow-hidden border-[#DCE5EF] shadow-[0_8px_24px_rgba(13,31,60,0.04)]">
+        <CardContent className="p-0">
+          <div className="flex items-center gap-3 border-b border-[#E8EDF3] px-6 py-5">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#E7F7F3] text-[#07877B]">
+              <TrendingUp className="size-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-extrabold text-[#0D1F3C]">Culture score</h2>
+              <p className="mt-0.5 text-xs text-[#8A9BB0]">Full-model culture assessments only</p>
+            </div>
+          </div>
+
+          {cultureScoreLoading ? (
+            <div className="grid gap-4 p-6 sm:grid-cols-2">
+              <div className="h-32 animate-pulse rounded-xl bg-[#EEF3F7]" />
+              <div className="h-32 animate-pulse rounded-xl bg-[#EEF3F7]" />
+            </div>
+          ) : latestCultureScore ? (
+            <div className="grid gap-4 bg-[#F8FBFD] p-6 sm:grid-cols-2">
+              <div className="rounded-xl border border-[#DCE7EC] bg-white p-5">
+                <div className="text-xs font-bold tracking-[0.1em] text-[#6D819A] uppercase">Latest overall score</div>
+                <div className="mt-3 flex items-end gap-2">
+                  <div className="text-5xl font-extrabold tracking-[-0.05em] text-[#0A8A7E]">{latestCultureScore.score}%</div>
+                  <div className="pb-1 text-xs font-semibold text-[#8A9BB0]">normalised</div>
+                </div>
+                <div className="mt-3 text-sm font-bold text-[#314966]">{latestCultureScore.surveyTitle}</div>
+                <div className="mt-1 text-xs text-[#8A9BB0]">{formatDate(latestCultureScore.assessmentDate)} · {latestCultureScore.responseCount} responses</div>
+              </div>
+
+              <div className="rounded-xl border border-[#DCE7EC] bg-white p-5">
+                <div className="text-xs font-bold tracking-[0.1em] text-[#6D819A] uppercase">Historical comparison</div>
+                {previousCultureScore && scoreChange != null ? (
+                  <>
+                    <div className={`mt-3 flex items-center gap-2 ${scoreChange > 0 ? 'text-[#0A8A7E]' : scoreChange < 0 ? 'text-[#B4533C]' : 'text-[#526A88]'}`}>
+                      <ScoreTrendIcon className="size-7" />
+                      <span className="text-3xl font-extrabold">{scoreChange > 0 ? '+' : ''}{scoreChange} pts</span>
+                    </div>
+                    <div className="mt-3 text-sm text-[#526A88]">
+                      Previous score: <span className="font-extrabold text-[#314966]">{previousCultureScore.score}%</span>
+                    </div>
+                    <div className="mt-1 text-xs text-[#8A9BB0]">{previousCultureScore.surveyTitle} · {formatDate(previousCultureScore.assessmentDate)}</div>
+                  </>
+                ) : (
+                  <div className="mt-4">
+                    <div className="text-lg font-extrabold text-[#314966]">First eligible result</div>
+                    <p className="mt-2 text-sm leading-6 text-[#7A8DA5]">A comparison will appear after another assigned full-model culture assessment is completed.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="px-6 py-10 text-center">
+              <div className="mx-auto flex size-11 items-center justify-center rounded-xl bg-[#EEF5FB] text-[#2A78B5]"><TrendingUp /></div>
+              <h3 className="mt-4 font-extrabold text-[#0D1F3C]">No culture score available yet</h3>
+              <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-[#7A8DA5]">
+                Scores appear after an assigned full-model culture assessment closes and has submitted Likert responses.
+              </p>
+              {cultureScoreError && <p className="mt-2 text-xs text-[#B4533C]">The score could not be refreshed.</p>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {liveSurvey && (
         <Card className="border-[#A9E1DB] bg-[#F3FCFB] shadow-[0_8px_24px_rgba(13,31,60,0.04)]">

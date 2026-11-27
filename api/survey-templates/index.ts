@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
 import {
   mapSurveyTemplate,
   mapSurveyTemplateQuestion,
@@ -31,7 +32,7 @@ const QUESTION_COLUMNS =
   'id, template_id, text, hint, question_type, dimension, order_num, options, created_at, updated_at'
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

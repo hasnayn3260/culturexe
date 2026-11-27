@@ -1,4 +1,8 @@
 import supabase from '@/lib/supabaseClient'
+import {
+  CultureXeClientError,
+  type ApiErrorBody,
+} from '@/lib/errors/normaliseClientError'
 
 import type {
   CreateManagedOrganisationInput,
@@ -8,11 +12,6 @@ import type {
 } from '../types'
 
 const ADMIN_ORGANISATIONS_ENDPOINT = '/api/organisations'
-
-type ApiErrorBody = {
-  error?: string
-  message?: string
-}
 
 type OrganisationsResponse = {
   organisations: ManagedOrganisation[]
@@ -33,13 +32,10 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
-export class AdminOrganisationsApiError extends Error {
-  readonly status: number
-
-  constructor(message: string, status: number) {
-    super(message)
+export class AdminOrganisationsApiError extends CultureXeClientError {
+  constructor(error: unknown, status: number) {
+    super(error, status, 'Unable to manage organisations.')
     this.name = 'AdminOrganisationsApiError'
-    this.status = status
   }
 }
 
@@ -49,7 +45,7 @@ async function accessToken(): Promise<string> {
     error,
   } = await supabase.auth.getSession()
 
-  if (error) throw new AdminOrganisationsApiError(error.message, 401)
+  if (error) throw new AdminOrganisationsApiError(error, 401)
   if (!session?.access_token) {
     throw new AdminOrganisationsApiError(
       'Your session has expired. Sign in again.',
@@ -100,7 +96,7 @@ async function organisationsRequest<T>(
   if (!response.ok) {
     const error = body as ApiErrorBody | null
     throw new AdminOrganisationsApiError(
-      error?.error || error?.message || 'Unable to manage organisations.',
+      error ?? 'Unable to manage organisations.',
       response.status,
     )
   }

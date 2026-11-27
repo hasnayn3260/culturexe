@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import supabase from '@/lib/supabaseClient'
+import { reportClientError } from '@/lib/errors/normaliseClientError'
 
 import type {
   SurveyListItem,
@@ -56,9 +57,7 @@ type ResponseReference = {
 const PAGE_SIZE = 1_000
 
 function messageFrom(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : 'The survey list could not be loaded.'
+  return reportClientError(error, 'The survey list could not be loaded.')
 }
 
 function increment(map: Map<string, number>, id: string): void {

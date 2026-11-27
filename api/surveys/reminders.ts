@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyReminderEmail } from '../email/postmark.js'
+import { normaliseApiPayload } from '../errors.js'
 import {
   firstReminderEligibleAt,
   isReminderRecipientEligible,
@@ -54,7 +55,7 @@ const UUID_PATTERN =
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

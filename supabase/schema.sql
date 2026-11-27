@@ -157,36 +157,90 @@ $$;
 ALTER FUNCTION "public"."get_my_role"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select jsonb_build_object(
+    'survey', to_jsonb(survey_record),
+    'questions', coalesce((
+      select jsonb_agg(to_jsonb(question) order by question.order_num)
+      from public.survey_questions as question
+      where question.survey_id = survey_record.id
+    ), '[]'::jsonb)
+  )
+  from public.survey as survey_record
+  where survey_record.open_link_token = p_open_token
+    and survey_record.open_link_enabled
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") IS 'Returns one enabled open-link survey and its questionnaire by unguessable open token.';
+
+
+
+CREATE OR REPLACE FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") RETURNS "jsonb"
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+  select jsonb_build_object(
+    'respondent', to_jsonb(respondent),
+    'survey', to_jsonb(survey_record),
+    'questions', coalesce((
+      select jsonb_agg(to_jsonb(question) order by question.order_num)
+      from public.survey_questions as question
+      where question.survey_id = survey_record.id
+    ), '[]'::jsonb)
+  )
+  from public.survey_respondents as respondent
+  join public.survey as survey_record on survey_record.id = respondent.survey_id
+  where respondent.token = p_token
+  limit 1;
+$$;
+
+
+ALTER FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") IS 'Returns one invitation-token-scoped respondent, survey and questionnaire bundle without exposing other assignments.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."handle_new_user"() RETURNS "trigger"
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $$
-DECLARE
-  requested_role    text := COALESCE(NEW.raw_user_meta_data->>'role', 'client');
-  safe_role         text;
-BEGIN
-  -- Never trust the role from user metadata (self-registrants control it).
-  safe_role := CASE
-    WHEN requested_role IN ('client', 'employee') THEN requested_role
-    ELSE 'client'
-  END;
+declare
+  requested_role text := coalesce(new.raw_user_meta_data->>'role', 'client');
+  safe_role text;
+begin
+  safe_role := case
+    when requested_role in ('client', 'employee') then requested_role
+    else 'client'
+  end;
 
-  INSERT INTO public.profiles (id, email, full_name, role, job_title, username, position, active, created_at)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+  insert into public.profiles (
+    id, email, full_name, role, job_title, username, position, active, created_at
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', ''),
     safe_role,
-    COALESCE(NEW.raw_user_meta_data->>'job_title', ''),
-    NULLIF(TRIM(NEW.raw_user_meta_data->>'username'), ''),
-    NULLIF(TRIM(NEW.raw_user_meta_data->>'position'), ''),
+    coalesce(new.raw_user_meta_data->>'job_title', ''),
+    nullif(trim(new.raw_user_meta_data->>'username'), ''),
+    nullif(trim(new.raw_user_meta_data->>'position'), ''),
     true,
     now()
   )
-  ON CONFLICT (id) DO NOTHING;
+  on conflict (id) do nothing;
 
-  RETURN NEW;
-END;
+  return new;
+end;
 $$;
 
 
@@ -218,6 +272,66 @@ $$;
 
 
 ALTER FUNCTION "public"."is_superadmin"() OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "public"."list_my_culture_score_history"() RETURNS TABLE("survey_id" "uuid", "survey_title" "text", "assessment_date" timestamp with time zone, "score" integer, "response_count" bigint)
+    LANGUAGE "sql" STABLE SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $_$
+  with eligible_surveys as (
+    select survey_record.*
+    from public.survey as survey_record
+    where survey_record.assessment_type = 'culture'
+      and survey_record.is_full_culture_assessment
+      and (
+        survey_record.status = 'closed'
+        or survey_record.live_end <= now()
+      )
+      and exists (
+        select 1
+        from public.survey_respondents as assignment
+        where assignment.survey_id = survey_record.id
+          and (
+            assignment.user_id = auth.uid()
+            or lower(assignment.email) = lower(auth.email())
+          )
+      )
+  ), scored_surveys as (
+    select
+      eligible.id as survey_id,
+      eligible.title as survey_title,
+      coalesce(eligible.live_end, eligible.live_start, eligible.created_at) as assessment_date,
+      round(((avg(answer.value::numeric) - 1) / 4) * 100)::integer as score,
+      count(distinct response.respondent_id)::bigint as response_count
+    from eligible_surveys as eligible
+    join public.survey_questions as question
+      on question.survey_id = eligible.id
+     and lower(question.question_type) = 'likert'
+    join public.survey_responses as response
+      on response.survey_id = eligible.id
+    cross join lateral jsonb_each_text(response.answers) as answer(key, value)
+    where answer.key = question.id::text
+      and answer.value ~ '^[1-5](\.0+)?$'
+    group by eligible.id, eligible.title, eligible.live_end,
+      eligible.live_start, eligible.created_at
+  )
+  select
+    scored.survey_id,
+    scored.survey_title,
+    scored.assessment_date,
+    scored.score,
+    scored.response_count
+  from scored_surveys as scored
+  order by scored.assessment_date desc nulls last
+  limit 2;
+$_$;
+
+
+ALTER FUNCTION "public"."list_my_culture_score_history"() OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."list_my_culture_score_history"() IS 'Returns at most two aggregate full-model culture scores for assessments assigned to the signed-in client. Pulse, 360, other and raw respondent data are excluded.';
+
 
 
 CREATE OR REPLACE FUNCTION "public"."list_my_profile_managers"() RETURNS TABLE("id" "uuid", "label" "text")
@@ -533,6 +647,49 @@ COMMENT ON FUNCTION "public"."start_survey_response"("p_token" "uuid") IS 'Recor
 
 
 
+CREATE OR REPLACE FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") RETURNS "jsonb"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+declare
+  respondent public.survey_respondents%rowtype;
+  saved_response public.survey_responses%rowtype;
+begin
+  select * into respondent
+  from public.survey_respondents
+  where token = p_token;
+
+  if not found then
+    raise exception 'This survey invitation is invalid.' using errcode = 'CX004';
+  end if;
+
+  if respondent.used or respondent.submitted_at is not null then
+    raise exception 'This survey has already been submitted.' using errcode = 'CX005';
+  end if;
+
+  if not public.survey_accepting_responses(respondent.survey_id, respondent.id) then
+    raise exception 'This survey is not currently accepting responses.' using errcode = 'CX006';
+  end if;
+
+  insert into public.survey_responses (
+    survey_id, respondent_id, answers, submitted_at
+  ) values (
+    respondent.survey_id, respondent.id, coalesce(p_answers, '{}'::jsonb), now()
+  )
+  returning * into saved_response;
+
+  return to_jsonb(saved_response);
+end;
+$$;
+
+
+ALTER FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") OWNER TO "postgres";
+
+
+COMMENT ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") IS 'Submits a response through its invitation token while enforcing the survey response window.';
+
+
+
 CREATE OR REPLACE FUNCTION "public"."survey_accepting_responses"("p_survey_id" "uuid", "p_respondent_id" "uuid") RETURNS boolean
     LANGUAGE "sql" STABLE SECURITY DEFINER
     SET "search_path" TO 'public', 'pg_temp'
@@ -702,8 +859,6 @@ CREATE TABLE IF NOT EXISTS "public"."survey" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "title" "text" DEFAULT 'DBN Culture Survey'::"text" NOT NULL,
     "description" "text",
-    "assessment_type" "text" DEFAULT 'culture'::"text" NOT NULL,
-    "is_full_culture_assessment" boolean DEFAULT false NOT NULL,
     "status" "text" DEFAULT 'draft'::"text" NOT NULL,
     "live_start" timestamp with time zone,
     "live_end" timestamp with time zone,
@@ -724,9 +879,11 @@ CREATE TABLE IF NOT EXISTS "public"."survey" (
     "sms_invitations_enabled" boolean DEFAULT false NOT NULL,
     "sms_reminders_enabled" boolean DEFAULT false NOT NULL,
     "sms_receipts_enabled" boolean DEFAULT false NOT NULL,
-    CONSTRAINT "survey_reminder_frequency_days_check" CHECK ((("reminder_frequency_days" >= 1) AND ("reminder_frequency_days" <= 30))),
+    "assessment_type" "text" DEFAULT 'culture'::"text" NOT NULL,
+    "is_full_culture_assessment" boolean DEFAULT false NOT NULL,
     CONSTRAINT "survey_assessment_type_check" CHECK (("assessment_type" = ANY (ARRAY['culture'::"text", 'pulse'::"text", '360'::"text", 'other'::"text"]))),
     CONSTRAINT "survey_full_culture_assessment_check" CHECK (((NOT "is_full_culture_assessment") OR ("assessment_type" = 'culture'::"text"))),
+    CONSTRAINT "survey_reminder_frequency_days_check" CHECK ((("reminder_frequency_days" >= 1) AND ("reminder_frequency_days" <= 30))),
     CONSTRAINT "survey_reminder_max_sends_check" CHECK ((("reminder_max_sends" >= 1) AND ("reminder_max_sends" <= 20))),
     CONSTRAINT "survey_reminder_timezone_check" CHECK ((("length"("btrim"("reminder_timezone")) >= 1) AND ("length"("btrim"("reminder_timezone")) <= 100))),
     CONSTRAINT "survey_schedule_dates_check" CHECK ((("live_start" IS NULL) OR ("live_end" IS NULL) OR ("live_end" > "live_start")))
@@ -757,6 +914,14 @@ COMMENT ON COLUMN "public"."survey"."reminder_timezone" IS 'IANA timezone used t
 
 
 COMMENT ON COLUMN "public"."survey"."reminder_max_sends" IS 'Maximum number of reminders that may be sent to one respondent for this survey.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."assessment_type" IS 'Classifies the assessment so culture, pulse, 360 and other results remain distinct.';
+
+
+
+COMMENT ON COLUMN "public"."survey"."is_full_culture_assessment" IS 'True only when the culture assessment covers the complete culture model and may contribute to the overall culture score.';
 
 
 
@@ -1166,81 +1331,6 @@ ALTER TABLE ONLY "public"."survey_templates"
     ADD CONSTRAINT "survey_templates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "public"."organisations"("id") ON DELETE CASCADE;
 
 
-CREATE OR REPLACE FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") RETURNS "jsonb"
-    LANGUAGE "sql" STABLE SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-  select jsonb_build_object(
-    'respondent', to_jsonb(respondent),
-    'survey', to_jsonb(survey_record),
-    'questions', coalesce((
-      select jsonb_agg(to_jsonb(question) order by question.order_num)
-      from public.survey_questions as question
-      where question.survey_id = survey_record.id
-    ), '[]'::jsonb)
-  )
-  from public.survey_respondents as respondent
-  join public.survey as survey_record on survey_record.id = respondent.survey_id
-  where respondent.token = p_token
-  limit 1;
-$$;
-
-
-CREATE OR REPLACE FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") RETURNS "jsonb"
-    LANGUAGE "sql" STABLE SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-  select jsonb_build_object(
-    'survey', to_jsonb(survey_record),
-    'questions', coalesce((
-      select jsonb_agg(to_jsonb(question) order by question.order_num)
-      from public.survey_questions as question
-      where question.survey_id = survey_record.id
-    ), '[]'::jsonb)
-  )
-  from public.survey as survey_record
-  where survey_record.open_link_token = p_open_token
-    and survey_record.open_link_enabled
-  limit 1;
-$$;
-
-
-CREATE OR REPLACE FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") RETURNS "jsonb"
-    LANGUAGE "plpgsql" SECURITY DEFINER
-    SET "search_path" TO ''
-    AS $$
-declare
-  respondent public.survey_respondents%rowtype;
-  saved_response public.survey_responses%rowtype;
-  survey_record public.survey%rowtype;
-  submitted_time timestamptz := now();
-begin
-  select * into respondent from public.survey_respondents where token = p_token;
-  if not found then raise exception 'This survey invitation is invalid.'; end if;
-  if respondent.used or respondent.submitted_at is not null then
-    raise exception 'This survey has already been submitted.';
-  end if;
-  if not public.survey_accepting_responses(respondent.survey_id, respondent.id) then
-    raise exception 'This survey is not currently accepting responses.';
-  end if;
-  select * into survey_record from public.survey where id = respondent.survey_id;
-  insert into public.survey_responses (survey_id, respondent_id, answers, submitted_at)
-  values (respondent.survey_id, respondent.id, coalesce(p_answers, '{}'::jsonb), submitted_time)
-  returning * into saved_response;
-  update public.survey_respondents
-  set response_timing = case
-    when survey_record.live_end is not null and submitted_time > survey_record.live_end then 'late'
-    when survey_record.live_start is not null and survey_record.live_end is not null
-      and submitted_time < survey_record.live_start + ((survey_record.live_end - survey_record.live_start) / 2)
-      then 'early'
-    else 'on_time'
-  end
-  where id = respondent.id;
-  return to_jsonb(saved_response);
-end;
-$$;
-
-
 
 ALTER TABLE "public"."organisations" ENABLE ROW LEVEL SECURITY;
 
@@ -1276,12 +1366,13 @@ CREATE POLICY "sq_admin_write" ON "public"."survey_questions" TO "authenticated"
 
 
 
-CREATE POLICY "sq_staff_read" ON "public"."survey_questions" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
-
-
 CREATE POLICY "sq_assigned_read" ON "public"."survey_questions" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."survey_respondents" "assignment"
-  WHERE (("assignment"."survey_id" = "survey_questions"."survey_id") AND (("assignment"."user_id" = "auth"."uid"()) OR (lower("assignment"."email") = lower("auth"."email"())))))));
+  WHERE (("assignment"."survey_id" = "survey_questions"."survey_id") AND (("assignment"."user_id" = "auth"."uid"()) OR ("lower"("assignment"."email") = "lower"("auth"."email"())))))));
+
+
+
+CREATE POLICY "sq_staff_read" ON "public"."survey_questions" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
 
 
 
@@ -1335,22 +1426,23 @@ CREATE POLICY "survey_admin_write" ON "public"."survey" TO "authenticated" USING
 
 
 
-ALTER TABLE "public"."survey_questions" ENABLE ROW LEVEL SECURITY;
-
-
-CREATE POLICY "survey_staff_read" ON "public"."survey" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
-
-
 CREATE POLICY "survey_assigned_read" ON "public"."survey" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."survey_respondents" "assignment"
-  WHERE (("assignment"."survey_id" = "survey"."id") AND (("assignment"."user_id" = "auth"."uid"()) OR (lower("assignment"."email") = lower("auth"."email"())))))));
+  WHERE (("assignment"."survey_id" = "survey"."id") AND (("assignment"."user_id" = "auth"."uid"()) OR ("lower"("assignment"."email") = "lower"("auth"."email"())))))));
 
+
+
+ALTER TABLE "public"."survey_questions" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."survey_respondents" ENABLE ROW LEVEL SECURITY;
 
 
 ALTER TABLE "public"."survey_responses" ENABLE ROW LEVEL SECURITY;
+
+
+CREATE POLICY "survey_staff_read" ON "public"."survey" FOR SELECT TO "authenticated" USING ("public"."is_admin"());
+
 
 
 ALTER TABLE "public"."survey_template_questions" ENABLE ROW LEVEL SECURITY;
@@ -1392,21 +1484,6 @@ GRANT ALL ON FUNCTION "public"."get_email_by_username"("p_username" "text") TO "
 GRANT ALL ON FUNCTION "public"."get_email_by_username"("p_username" "text") TO "service_role";
 
 
-REVOKE ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "anon";
-GRANT EXECUTE ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "authenticated";
-
-
-REVOKE ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "anon";
-GRANT EXECUTE ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "authenticated";
-
-
-REVOKE ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "anon";
-GRANT EXECUTE ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "authenticated";
-
-
 
 GRANT ALL ON FUNCTION "public"."get_my_org"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_my_org"() TO "authenticated";
@@ -1417,6 +1494,20 @@ GRANT ALL ON FUNCTION "public"."get_my_org"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."get_my_role"() TO "anon";
 GRANT ALL ON FUNCTION "public"."get_my_role"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."get_my_role"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_open_survey_bundle"("p_open_token" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "anon";
+GRANT ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."get_survey_assignment_bundle"("p_token" "uuid") TO "service_role";
 
 
 
@@ -1435,6 +1526,12 @@ GRANT ALL ON FUNCTION "public"."is_admin"() TO "service_role";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "anon";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "authenticated";
 GRANT ALL ON FUNCTION "public"."is_superadmin"() TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."list_my_culture_score_history"() FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."list_my_culture_score_history"() TO "authenticated";
+GRANT ALL ON FUNCTION "public"."list_my_culture_score_history"() TO "service_role";
 
 
 
@@ -1476,6 +1573,13 @@ REVOKE ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") FROM P
 GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "public"."start_survey_response"("p_token" "uuid") TO "service_role";
+
+
+
+REVOKE ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") FROM PUBLIC;
+GRANT ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "anon";
+GRANT ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."submit_survey_response"("p_token" "uuid", "p_answers" "jsonb") TO "service_role";
 
 
 

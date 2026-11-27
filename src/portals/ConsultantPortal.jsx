@@ -35,6 +35,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '../components/ui/
 import { Badge } from '../components/ui/badge'
 import { Card } from '../components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
+import { showErrorToast } from '../lib/errors/normaliseClientError'
 import './consultant.css'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -168,7 +169,7 @@ function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = '
     try {
       setBusy(true)
       if (kind === 'pdf') {
-        if (!buildPdf) { alert('Nothing to export yet.'); return }
+        if (!buildPdf) { showErrorToast('Nothing to export yet.'); return }
         await exportToPDF(buildPdf, `${filename}-${date}.pdf`, pdfOrientation)
         return
       }
@@ -177,11 +178,11 @@ function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = '
         return
       }
       const rows = getRows ? getRows() : []
-      if (!rows.length) { alert('Nothing to export yet.'); return }
+      if (!rows.length) { showErrorToast('Nothing to export yet.'); return }
       if (kind === 'csv')   downloadBlob(`${filename}-${date}.csv`, '﻿' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
       if (kind === 'excel') await downloadXLSX(rows, `${filename}-${date}.xlsx`)
     } catch (e) {
-      console.error('Export error:', e); alert('Export failed: ' + (e.message || e))
+      console.error('Export error:', e); showErrorToast(e)
     } finally { setBusy(false) }
   }
 
@@ -192,7 +193,7 @@ function ExportMenu({ filename = 'export', getRows, buildPdf, pdfOrientation = '
       await option.action(`${filename}-${date}`)
     } catch (error) {
       console.error('Export error:', error)
-      alert('Export failed: ' + (error.message || error))
+      showErrorToast(error)
     } finally {
       setBusy(false)
     }
@@ -1946,7 +1947,7 @@ export default function ConsultantPortal() {
       label: 'Excel workbook (.xlsx)',
       action: async baseFilename => {
         const rows = buildDashboardRows()
-        if (!rows.length) return alert('There are no dashboard user records to export.')
+        if (!rows.length) return showErrorToast('There are no dashboard user records to export.')
         await downloadXLSX(rows, `${baseFilename}-raw.xlsx`)
       },
     },
@@ -1956,7 +1957,7 @@ export default function ConsultantPortal() {
       label: 'CSV file (.csv)',
       action: async baseFilename => {
         const rows = buildDashboardRows()
-        if (!rows.length) return alert('There are no dashboard user records to export.')
+        if (!rows.length) return showErrorToast('There are no dashboard user records to export.')
         downloadBlob(`${baseFilename}-raw.csv`, '\ufeff' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
       },
     },
@@ -1993,7 +1994,7 @@ export default function ConsultantPortal() {
       label: 'Excel workbook (.xlsx)',
       action: async baseFilename => {
         const rows = buildAnalyticsRows()
-        if (!rows.length) return alert('There are no submitted responses to export.')
+        if (!rows.length) return showErrorToast('There are no submitted responses to export.')
         await downloadXLSX(rows, `${baseFilename}-raw-responses.xlsx`)
       },
     },
@@ -2003,7 +2004,7 @@ export default function ConsultantPortal() {
       label: 'CSV file (.csv)',
       action: async baseFilename => {
         const rows = buildAnalyticsRows()
-        if (!rows.length) return alert('There are no submitted responses to export.')
+        if (!rows.length) return showErrorToast('There are no submitted responses to export.')
         downloadBlob(`${baseFilename}-raw-responses.csv`, '\ufeff' + rowsToCSV(rows), 'text/csv;charset=utf-8;')
       },
     },
@@ -2047,31 +2048,31 @@ export default function ConsultantPortal() {
     setSavingSurvey(true)
     try {
       await updateSurvey({ title: surveyForm.title, description: surveyForm.description, live_start: surveyForm.live_start || null, live_end: surveyForm.live_end || null })
-    } catch (e) { alert('Error: ' + e.message) }
+    } catch (e) { showErrorToast(e) }
     finally { setSavingSurvey(false) }
   }
 
   async function handleLaunch() {
     if (survey?.live_end && new Date(survey.live_end).getTime() <= Date.now()) {
-      alert('Choose a closing date in the future before launching the survey.')
+      showErrorToast('Choose a closing date in the future before launching the survey.')
       return
     }
     if (!window.confirm('Make this survey live? Respondents can now access it.')) return
-    try { await updateSurvey({ status: 'live' }) } catch (e) { alert('Error: ' + e.message) }
+    try { await updateSurvey({ status: 'live' }) } catch (e) { showErrorToast(e) }
   }
 
   async function handleStop() {
     if (!window.confirm('Stop the survey now? This closes it immediately, replaces the scheduled closing time with the current time, and prevents further responses.')) return
-    try { await updateSurvey({ status: 'closed', live_end: new Date().toISOString() }) } catch (e) { alert('Error: ' + e.message) }
+    try { await updateSurvey({ status: 'closed', live_end: new Date().toISOString() }) } catch (e) { showErrorToast(e) }
   }
 
   async function handleReopen() {
     if (!window.confirm('Reopen the survey as draft for editing?')) return
-    try { await updateSurvey({ status: 'draft' }) } catch (e) { alert('Error: ' + e.message) }
+    try { await updateSurvey({ status: 'draft' }) } catch (e) { showErrorToast(e) }
   }
 
   async function handleToggleOpenLink() {
-    try { await updateSurvey({ open_link_enabled: !survey?.open_link_enabled }) } catch (e) { alert('Error: ' + e.message) }
+    try { await updateSurvey({ open_link_enabled: !survey?.open_link_enabled }) } catch (e) { showErrorToast(e) }
   }
 
   function handleCopyOpenLink() {
@@ -2082,21 +2083,21 @@ export default function ConsultantPortal() {
   }
 
   async function handleAddQuestion(form) {
-    try { await addQuestion(form); setAddingQ(false) } catch (e) { alert('Error: ' + e.message) }
+    try { await addQuestion(form); setAddingQ(false) } catch (e) { showErrorToast(e) }
   }
 
   async function handleUpdateQuestion(id, form) {
-    try { await updateQuestion(id, form); setEditingQId(null) } catch (e) { alert('Error: ' + e.message) }
+    try { await updateQuestion(id, form); setEditingQId(null) } catch (e) { showErrorToast(e) }
   }
 
   async function handleDeleteQuestion(id) {
     if (!window.confirm('Delete this question?')) return
-    try { await deleteQuestion(id) } catch (e) { alert('Error: ' + e.message) }
+    try { await deleteQuestion(id) } catch (e) { showErrorToast(e) }
   }
 
   async function handleDeleteAllQuestions() {
     if (!window.confirm(`Delete all ${questions.length} questions? This cannot be undone.`)) return
-    try { await deleteAllQuestions() } catch (e) { alert('Error: ' + e.message) }
+    try { await deleteAllQuestions() } catch (e) { showErrorToast(e) }
   }
 
   async function handleCSVImport(parsedQuestions) {
@@ -2106,7 +2107,7 @@ export default function ConsultantPortal() {
         await addQuestion(q)
       }
       setShowCSV(false)
-    } catch (e) { alert('Import error: ' + e.message) }
+    } catch (e) { showErrorToast(e) }
     finally { setCsvImporting(false) }
   }
 

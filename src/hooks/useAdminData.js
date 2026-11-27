@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useAdminData() {
   const [users, setUsers]       = useState([])
@@ -47,7 +48,9 @@ export function useAdminData() {
     setError(null)
 
     Promise.all([fetchUsers(), fetchOrgs()])
-      .catch(e => { if (!cancelled) setError(e.message) })
+      .catch(e => {
+        if (!cancelled) setError(reportClientError(e, 'Administration data could not be loaded.'))
+      })
       .finally(() => { if (!cancelled) setLoading(false) })
 
     return () => { cancelled = true }

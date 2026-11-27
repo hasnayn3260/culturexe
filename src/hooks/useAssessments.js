@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useAssessments() {
   const [assessments, setAssessments] = useState([])
@@ -17,7 +18,7 @@ export function useAssessments() {
       if (err) throw err
       setAssessments(data || [])
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Assessments could not be loaded.'))
     } finally {
       setLoading(false)
     }

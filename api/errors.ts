@@ -65,3 +65,81 @@ export function stageError(
 ): Error {
   return new Error(`${stage}: ${describeError(error, fallback)}`)
 }
+import {
+  classifyError,
+  type NormalisedError,
+} from '../shared/errorCatalog.ts'
+
+
+export type ApiErrorPayload = {
+  error: string
+  message: string
+  code: NormalisedError['code']
+  reference: string
+  [key: string]: unknown
+}
+
+function sourceError(data: Record<string, unknown>): unknown {
+  const error = data.error ?? data.message
+  return typeof error === 'string' ? error : describeError(error, '')
+}
+
+function normaliseResultRows(value: unknown): unknown {
+  if (!Array.isArray(value)) return value
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') return item
+    const row = item as Record<string, unknown>
+    if (row.status !== 'failed' || (!row.error && !row.message)) return item
+    const normalised = classifyError({
+      message: row.error ?? row.message,
+      code: row.code,
+      reference: row.reference,
+      status: 400,
+    })
+    if (normalised.technicalMessage && normalised.message !== normalised.technicalMessage) {
+      console.error(`[${normalised.reference}] ${normalised.code}`, {
+        rowNumber: row.rowNumber,
+        technicalMessage: normalised.technicalMessage,
+      })
+    }
+    return {
+      ...row,
+      message: normalised.message,
+      code: normalised.code,
+      reference: normalised.reference,
+    }
+  })
+}
+
+/** Adds a stable code and support reference while keeping the legacy `error` field. */
+export function normaliseApiPayload(data: unknown, status: number): unknown {
+  if (!data || typeof data !== 'object') return data
+  const record = data as Record<string, unknown>
+  const results = normaliseResultRows(record.results)
+  if (!('error' in record) && status < 400) {
+    return results === record.results ? data : { ...record, results }
+  }
+
+  const normalised = classifyError({
+    message: sourceError(record),
+    code: record.code,
+    reference: record.reference,
+    status,
+  })
+
+  if (normalised.technicalMessage && normalised.message !== normalised.technicalMessage) {
+    console.error(`[${normalised.reference}] ${normalised.code}`, {
+      status,
+      technicalMessage: normalised.technicalMessage,
+    })
+  }
+
+  return {
+    ...record,
+    error: normalised.message,
+    message: normalised.message,
+    code: normalised.code,
+    reference: normalised.reference,
+    ...(results === undefined ? {} : { results }),
+  } satisfies ApiErrorPayload
+}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useClientData(orgId) {
   const [org, setOrg]               = useState(null)
@@ -65,7 +66,7 @@ export function useClientData(orgId) {
         setReports([])
       }
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Client data could not be loaded.'))
     } finally {
       setLoading(false)
     }

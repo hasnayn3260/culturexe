@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
 import {
   buildSurveyFilePath,
   fileReference,
@@ -34,7 +35,7 @@ type FileRequestBody = {
 }
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

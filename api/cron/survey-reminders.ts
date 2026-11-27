@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 
 import { createClient } from '@supabase/supabase-js'
 
+import { normaliseApiPayload } from '../errors.js'
 import { route as sendSurveyInvitations } from '../surveys/invitations.js'
 import { route as sendSurveyReminders } from '../surveys/reminders.js'
 import { isAutomaticReminderScheduleDue } from '../surveys/reminderPolicy.js'
@@ -24,7 +25,7 @@ type CronResult = {
 }
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

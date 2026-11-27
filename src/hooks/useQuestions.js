@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useQuestions() {
   const [questions, setQuestions] = useState([])
@@ -18,7 +19,7 @@ export function useQuestions() {
         if (err) throw err
         setQuestions(data || [])
       } catch (e) {
-        setError(e.message)
+        setError(reportClientError(e, 'Questions could not be loaded.'))
       } finally {
         setLoading(false)
       }

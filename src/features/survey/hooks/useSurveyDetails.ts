@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import supabase from '@/lib/supabaseClient'
+import { reportClientError } from '@/lib/errors/normaliseClientError'
 
 import {
   getEffectiveSurveyStatus,
@@ -141,7 +142,7 @@ type RefetchOptions = {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'The survey could not be loaded.'
+  return reportClientError(error, 'The survey could not be loaded.')
 }
 
 export function useSurveyDetails(surveyId?: string | null) {

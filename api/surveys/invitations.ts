@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 
 import { sendSurveyInvitationEmail } from '../email/postmark.js'
+import { normaliseApiPayload } from '../errors.js'
 import { isPendingSurveyInvitation } from './invitationPolicy.js'
 
 type InvitationRowInput = {
@@ -56,7 +57,7 @@ const UUID_PATTERN =
 const MAX_INVITATIONS = 250
 
 function json(data: unknown, status = 200): Response {
-  return Response.json(data, {
+  return Response.json(normaliseApiPayload(data, status), {
     status,
     headers: { 'Cache-Control': 'no-store' },
   })

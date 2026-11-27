@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useYSWH(orgId) {
   const [items, setItems] = useState([])
@@ -19,7 +20,7 @@ export function useYSWH(orgId) {
       if (err) throw err
       setItems(data || [])
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Survey data could not be loaded.'))
     } finally {
       setLoading(false)
     }

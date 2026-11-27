@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../hooks/useAuth'
 import { useClientSurvey } from '../hooks/useClientSurvey'
+import { useClientCultureScoreHistory } from '../hooks/useClientCultureScoreHistory'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../../../components/ui/sidebar'
 import {
   Select,
@@ -294,6 +295,11 @@ export default function ClientPortal() {
   const [screen,      setScreen]      = useState('home')
   const [selectedSurveyId, setSelectedSurveyId] = useState(null)
   const { survey, availableSurveys, questions, respondent, existingResponse, loading, error, saveDraft, markStarted, submitResponse } = useClientSurvey(user?.email, user?.id, profile?.org_id, selectedSurveyId, screen === 'survey')
+  const {
+    history: cultureScoreHistory,
+    loading: cultureScoreLoading,
+    error: cultureScoreError,
+  } = useClientCultureScoreHistory(Boolean(user?.id && profile?.org_id))
 
   const [answers,     setAnswers]     = useState({})
   const [page,        setPage]        = useState(0)
@@ -531,6 +537,9 @@ export default function ClientPortal() {
             displayName={displayName}
             surveys={availableSurveys}
             onOpenSurvey={openSurvey}
+            cultureScoreHistory={cultureScoreHistory}
+            cultureScoreLoading={cultureScoreLoading}
+            cultureScoreError={cultureScoreError}
           />
         )}
 

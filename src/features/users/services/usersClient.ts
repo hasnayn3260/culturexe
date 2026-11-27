@@ -1,4 +1,8 @@
 import supabase from '@/lib/supabaseClient'
+import {
+  CultureXeClientError,
+  type ApiErrorBody,
+} from '@/lib/errors/normaliseClientError'
 
 import type {
   CreateManagedUserInput,
@@ -14,9 +18,7 @@ import type {
 const ADMIN_USERS_ENDPOINT = '/api/users'
 const ADMIN_USERS_IMPORT_ENDPOINT = '/api/users/import'
 
-type ApiErrorBody = {
-  error?: string
-  message?: string
+type UsersApiErrorBody = ApiErrorBody & {
   results?: unknown
 }
 
@@ -48,18 +50,16 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
-export class AdminUsersApiError extends Error {
-  readonly status: number
+export class AdminUsersApiError extends CultureXeClientError {
   readonly results: UserImportResult[]
 
   constructor(
-    message: string,
+    error: unknown,
     status: number,
     results: UserImportResult[] = [],
   ) {
-    super(message)
+    super(error, status, 'Unable to manage users.')
     this.name = 'AdminUsersApiError'
-    this.status = status
     this.results = results
   }
 }
@@ -86,7 +86,7 @@ async function getAccessToken(): Promise<string> {
     error,
   } = await supabase.auth.getSession()
 
-  if (error) throw new AdminUsersApiError(error.message, 401)
+  if (error) throw new AdminUsersApiError(error, 401)
   if (!session?.access_token) {
     throw new AdminUsersApiError('Your session has expired. Sign in again.', 401)
   }
@@ -127,9 +127,9 @@ async function adminUsersRequest<T>(
   const body = await readResponseBody(response)
 
   if (!response.ok) {
-    const errorBody = body as ApiErrorBody | null
+    const errorBody = body as UsersApiErrorBody | null
     throw new AdminUsersApiError(
-      errorBody?.error || errorBody?.message || 'Unable to manage users.',
+      errorBody ?? 'Unable to manage users.',
       response.status,
       readImportResults(errorBody?.results),
     )

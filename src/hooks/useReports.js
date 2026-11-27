@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import supabase from '../lib/supabaseClient'
+import { reportClientError } from '../lib/errors/normaliseClientError'
 
 export function useReports() {
   const [reports, setReports] = useState([])
@@ -23,7 +24,7 @@ export function useReports() {
         }))
       )
     } catch (e) {
-      setError(e.message)
+      setError(reportClientError(e, 'Reports could not be loaded.'))
     } finally {
       setLoading(false)
     }

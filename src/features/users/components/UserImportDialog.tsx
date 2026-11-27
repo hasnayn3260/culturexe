@@ -162,9 +162,13 @@ export default function UserImportDialog({
         setError(message)
         setServerFailures(failures)
         showToast(
-          `Row ${firstFailure.rowNumber} · ${firstFailure.email || 'unknown email'} — ${
-            firstFailure.message || 'Import failed without further details.'
-          }${failures.length > 1 ? ` (+${failures.length - 1} more)` : ''}`,
+          {
+            message: `Row ${firstFailure.rowNumber} · ${firstFailure.email || 'unknown email'} — ${
+              firstFailure.message || 'Import failed without further details.'
+            }${failures.length > 1 ? ` (+${failures.length - 1} more)` : ''}`,
+            code: firstFailure.code,
+            reference: firstFailure.reference,
+          },
           'error',
         )
         return
